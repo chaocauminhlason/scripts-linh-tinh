@@ -1,0 +1,15 @@
+-- Khởi tạo UI
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local Window = Rayfield:CreateWindow({
+    Name = "R-Client Pro Tool",
+    LoadingTitle = "Đang tải hệ thống...",
+    KeySystem = false
+})
+
+-- 1. Load file Utilities.txt
+local Utils = loadstring(game:HttpGet('LINK_RAW_CỦA_FILE_UTILITIES.TXT_TRÊN_GITHUB'))()
+
+-- 2. Load file logic Dungeon
+loadstring(game:HttpGet('LINK_RAW_CỦA_FILE_DUNGEON_AUTO.TXT_TRÊN_GITHUB'))()(Window, Utils)
+
+Rayfield:Notify({ Title = "Thành Công", Content = "Đã load các file .txt thành công!", Duration = 3 })

@@ -1,0 +1,7 @@
+local Utils = {}
+
+function Utils.TestKetNoi()
+    print("✅ Đã kết nối thành công với thư viện Utilities.txt!")
+end
+
+return Utils

@@ -1,0 +1,12 @@
+return function(Window, Utils)
+    -- Gọi thử hàm từ Utils để kiểm tra
+    Utils.TestKetNoi()
+    
+    local Tab = Window:CreateTab("Hầm Ngục Test", 4483362458)
+    Tab:CreateButton({
+        Name = "Bấm thử nút này",
+        Callback = function()
+            print("Nút trong Dungeon Auto đã hoạt động!")
+        end
+    })
+end
