@@ -1,5 +1,5 @@
 -- ====================================================================
--- MAIN SCRIPT: Khởi chạy và điều phối hệ thống R-Client Pro
+-- MAIN SCRIPT: Khởi chạy R-Client Pro
 -- ====================================================================
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
@@ -11,29 +11,17 @@ local Window = Rayfield:CreateWindow({
     KeySystem = false
 })
 
--- 1. Load các thư viện nền (Utilities & Webhook)
-local Utils = loadstring(game:HttpGet('LINK_RAW_CỦA_UTILITIES.TXT'))()
-local WebhookModule = loadstring(game:HttpGet('LINK_RAW_CỦA_WEBHOOK.TXT'))()
+-- Kéo các file từ GitHub của bạn về và chạy ngầm
+local Utils = loadstring(game:HttpGet('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/core/utilities.txt'))()
+local WebhookModule = loadstring(game:HttpGet('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/core/webhook.txt'))()
 
--- 2. Tự khởi tạo Tab Webhook
 WebhookModule.InitTab(Window, Rayfield)
 
--- 3. Gọi các Module Tính Năng Chính
--- Module Theo dõi (Tab 1 cũ)
-loadstring(game:HttpGet('LINK_RAW_CỦA_TRACKER.TXT'))()(Window, Utils)
+loadstring(game:HttpGet('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/features/tracker.txt'))()(Window, Utils)
+loadstring(game:HttpGet('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/features/rgame_farm.txt'))()(Window, Utils)
+loadstring(game:HttpGet('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/features/boss_hunt.txt'))()(Window, Utils)
+loadstring(game:HttpGet('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/features/dungeon_auto.txt'))()(Window, Utils, WebhookModule)
+loadstring(game:HttpGet('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/features/optimization.txt'))()(Window, Utils)
 
--- Module Bắt Quái (Tab 2 cũ)
-loadstring(game:HttpGet('LINK_RAW_CỦA_RGAME_FARM.TXT'))()(Window, Utils)
-
--- Module Săn Boss & Server Hop (Tab 3 & 5 cũ)
-loadstring(game:HttpGet('LINK_RAW_CỦA_BOSS_HUNT.TXT'))()(Window, Utils)
-
--- Module Hầm Ngục & Tối ưu Phím M (Tab 3 cũ)
-loadstring(game:HttpGet('LINK_RAW_CỦA_DUNGEON_AUTO.TXT'))()(Window, Utils, WebhookModule)
-
--- Module Giảm Lag & Chống AFK (Tab 4 cũ)
-loadstring(game:HttpGet('LINK_RAW_CỦA_OPTIMIZATION.TXT'))()(Window, Utils)
-
--- 4. Load cấu hình đã lưu & Hoàn tất
 Rayfield:LoadConfiguration()
 Rayfield:Notify({ Title = "Thành Công!", Content = "Hệ thống R-Client Pro đã nạp đầy đủ Modules!", Duration = 5 })
