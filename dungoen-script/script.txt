@@ -177,7 +177,7 @@ end
 -- ====================================================================
 -- HỆ THỐNG THÔNG BÁO DISCORD (WEBHOOK)
 -- ====================================================================
-local WebhookURL = "https://webhook.lewisakura.moe/api/webhooks/1511955372863258634/1IVjXRLOsSa4b0po7o8mMT9IR3CGE35peTnAfZVT3j3YQRxdJcVel-oOVfUP2E8EwFNl" 
+local WebhookURL = "" 
 
 local function SendDiscordNotification(message)
     local req = (syn and syn.request) or (http and http.request) or http_request or fluxus and fluxus.request or request
