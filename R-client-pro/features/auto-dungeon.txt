@@ -1,0 +1,165 @@
+-- ====================================================================
+-- MODULE: DUNGEON AUTO (TÍCH HỢP TỐI ƯU PHÍM M & AUTO EXIT)
+-- ====================================================================
+return function(Window, Utils, WebhookModule)
+    local Players = game:GetService("Players")
+    local Workspace = game:GetService("Workspace")
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local VirtualInputManager = game:GetService("VirtualInputManager")
+    
+    local LocalPlayer = Players.LocalPlayer
+    local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+    local myUserId = LocalPlayer.UserId
+
+    -- Biến trạng thái
+    local autoExitEnabled = false
+    local autoExitTriggered = false
+    local stage20ClockStarted = false
+    local autoAttackEnabled = false
+    local autoJoinOthersEnabled = false
+    
+    local dungeonStuckTimer = 0
+    local dungeonLastPosition = nil
+
+    -- API Game
+    local MonsterSystem = nil
+    pcall(function() MonsterSystem = require(ReplicatedStorage.CommonLogic.Monster.MonsterSystem) end)
+
+    -- TẠO GIAO DIỆN
+    local DungeonTab = Window:CreateTab("Hầm Ngục", 4483362458)
+    local DungeonStatus = DungeonTab:CreateLabel("Trạng thái Auto Exit: Đang tắt")
+
+    DungeonTab:CreateToggle({ 
+        Name = "Tự Động Tìm & Đánh Quái (Tối Ưu Phím M)", 
+        CurrentValue = false, 
+        Flag = "AutoAttack_V2", 
+        Callback = function(Value) 
+            autoAttackEnabled = Value 
+            if not Value then
+                pcall(function()
+                    local char = LocalPlayer.Character
+                    if char and char:FindFirstChild("Humanoid") then
+                        char.Humanoid:MoveTo(char.HumanoidRootPart.Position)
+                    end
+                end)
+            end
+        end 
+    })
+
+    DungeonTab:CreateToggle({ 
+        Name = "Tự Động Thoát Khi Xong Màn 20", 
+        CurrentValue = false, 
+        Flag = "AutoExitDungeon", 
+        Callback = function(Value) 
+            autoExitEnabled = Value 
+            if Value then 
+                DungeonStatus:Set("Trạng thái Auto Exit: ĐANG BẬT VÀ QUÉT...") 
+            else 
+                DungeonStatus:Set("Trạng thái Auto Exit: Đang tắt")
+                autoExitTriggered = false
+                stage20ClockStarted = false 
+            end 
+        end 
+    })
+
+    DungeonTab:CreateToggle({ 
+        Name = "Tự Động Nhảy Vào Phòng Người Khác", 
+        CurrentValue = false, 
+        Flag = "AutoJoinOthers", 
+        Callback = function(Value) autoJoinOthersEnabled = Value end 
+    })
+
+    -- LOGIC QUÉT UI THOÁT
+    local function SafeExitRoutine()
+        local exitBtn = Utils.FindUIElementByName(playerGui, "BgLeave")
+        if exitBtn and exitBtn.AbsoluteSize.X > 0 then Utils.ClickButtonExact(exitBtn, "Nút Thoát") else autoExitTriggered = false return end
+        
+        task.wait(1.5)
+        local mainGui = playerGui:FindFirstChild("MainGui")
+        if mainGui and mainGui:FindFirstChild("ScreenGui") and mainGui.ScreenGui:FindFirstChild("ConfirmView") then
+            local fmBottom = mainGui.ScreenGui.ConfirmView:FindFirstChild("FmBottom")
+            if fmBottom and fmBottom:FindFirstChild("BtOk") and fmBottom.BtOk.AbsoluteSize.X > 0 then
+                for i = 1, 3 do Utils.ClickButtonExact(fmBottom.BtOk, "Nút Yes") task.wait(0.2) end
+            else autoExitTriggered = false return end
+        else autoExitTriggered = false return end
+        
+        task.wait(2.5)
+        local checkLabStage = Utils.FindUIElementByName(playerGui, "LabStage")
+        local currentStageText = checkLabStage and checkLabStage.Text or "Unknown"
+        if currentStageText == "Unknown" or not string.match(currentStageText, "20/20") then 
+            autoExitTriggered = false; stage20ClockStarted = false 
+        else autoExitTriggered = false end
+    end
+
+    -- VÒNG LẶP CORE
+    task.spawn(function()
+        while task.wait(0.5) do
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local humanoid = char and char:FindFirstChild("Humanoid")
+            
+            if not (hrp and humanoid and humanoid.Health > 0) then continue end
+            local labStage = Utils.FindUIElementByName(playerGui, "LabStage")
+            
+            -- [1] LOGIC AUTO ATTACK (TRICK PHÍM M)
+            if autoAttackEnabled and labStage and labStage.Text ~= "Unknown" and labStage.Text ~= "" then
+                local monstersFolder = Workspace:FindFirstChild("Monsters")
+                local closestDist = math.huge
+                local bestTarget = nil
+
+                if monstersFolder then
+                    for _, monster in pairs(monstersFolder:GetChildren()) do
+                        if monster:IsA("Model") or monster:IsA("BasePart") then
+                            local hum = monster:FindFirstChildOfClass("Humanoid")
+                            if (not hum) or (hum and hum.Health > 0) then
+                                local pos = monster:IsA("Model") and monster.PrimaryPart and monster.PrimaryPart.Position or monster.Position
+                                local dist = (hrp.Position - pos).Magnitude
+                                if dist < closestDist then closestDist = dist; bestTarget = monster end
+                            end
+                        end
+                    end
+                end
+
+                if bestTarget then
+                    local targetPos = bestTarget:IsA("Model") and bestTarget.PrimaryPart and bestTarget.PrimaryPart.Position or bestTarget.Position
+                    if closestDist > 40 then
+                        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.M, false, game) task.wait() VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.M, false, game) task.wait(0.4)
+                        hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 0, 4)) task.wait(0.2)
+                        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.M, false, game) task.wait() VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.M, false, game) task.wait(0.4)
+                        humanoid:MoveTo(hrp.Position) dungeonLastPosition = hrp.Position dungeonStuckTimer = 0
+                    elseif closestDist > 12 then
+                        humanoid:MoveTo(targetPos)
+                        if dungeonLastPosition and (hrp.Position - dungeonLastPosition).Magnitude < 1 then
+                            dungeonStuckTimer = dungeonStuckTimer + 0.5
+                            if dungeonStuckTimer >= 3 then hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 0, 3)) dungeonStuckTimer = 0 end
+                        else dungeonStuckTimer = 0 end
+                        dungeonLastPosition = hrp.Position
+                    else
+                        humanoid:MoveTo(hrp.Position) dungeonStuckTimer = 0
+                        local id = tonumber(bestTarget.Name:match("Monster_(%d+)"))
+                        if id and MonsterSystem then MonsterSystem.ClientAttackMonster(id) end
+                    end
+                else dungeonStuckTimer = 0 end
+            end
+
+            -- [2] LOGIC AUTO EXIT
+            if autoExitEnabled and not autoExitTriggered and labStage then
+                local fmTimeFrame = nil
+                pcall(function() fmTimeFrame = playerGui.MainGui.ScreenGui.ArenaMainRightTopView.FmTime end)
+                local currentStage, maxStage = string.match(labStage.Text, "(%d+)/(%d+)")
+                
+                if currentStage and maxStage and tonumber(currentStage) == tonumber(maxStage) then
+                    if fmTimeFrame and fmTimeFrame.Visible == true then
+                        if not stage20ClockStarted then stage20ClockStarted = true; DungeonStatus:Set("Trạng thái Auto Exit: Đồng hồ màn 20 đã chạy...") end
+                    end
+                    if stage20ClockStarted and (not fmTimeFrame or fmTimeFrame.Visible == false) then
+                        autoExitTriggered = true
+                        DungeonStatus:Set("Trạng thái Auto Exit: Boss đã gục, chuẩn bị click thoát...")
+                        task.spawn(function() WebhookModule.SendNotification("**" .. LocalPlayer.Name .. "** vừa hoàn thành vòng Dungeon 20/20!") end)
+                        task.spawn(SafeExitRoutine)
+                    end
+                else stage20ClockStarted = false; autoExitTriggered = false end
+            end
+        end
+    end)
+end

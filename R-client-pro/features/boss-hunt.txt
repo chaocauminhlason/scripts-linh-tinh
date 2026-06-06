@@ -1,0 +1,89 @@
+-- ====================================================================
+-- MODULE: SĂN BOSS & QUẢN LÝ SERVER
+-- ====================================================================
+return function(Window, Utils)
+    local Players = game:GetService("Players")
+    local TeleportService = game:GetService("TeleportService")
+    local HttpService = game:GetService("HttpService")
+    local LocalPlayer = Players.LocalPlayer
+
+    local BossTab = Window:CreateTab("Săn Boss & Server", 4483345998)
+
+    -- ==========================================
+    -- LOGIC TÌM & DỊCH CHUYỂN BOSS
+    -- ==========================================
+    local function IsBoss(model)
+        if not model:IsA("Model") then return false end
+        local hum = model:FindFirstChildOfClass("Humanoid")
+        local hrp = model:FindFirstChild("HumanoidRootPart")
+        if not hum or not hrp then return false end
+        if hum.MaxHealth and hum.MaxHealth >= 100000 then return true end
+        return false
+    end
+
+    local function FindBossByName(keywords)
+        for _,v in pairs(workspace:GetDescendants()) do
+            if v:IsA("Model") and IsBoss(v) then
+                local n = v.Name:lower()
+                for _,k in pairs(keywords) do
+                    if n:find(k) then return v:FindFirstChild("HumanoidRootPart") end
+                end
+            end
+        end
+        return nil
+    end
+
+    local function TeleToBoss(bossHRP, fallbackPos)
+        local char = LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+        
+        if bossHRP then
+            hrp.CFrame = bossHRP.CFrame * CFrame.new(0, 0, 10)
+            -- Lấy Rayfield từ Window UI Parent (Trick để dùng chung Notify)
+            game.StarterGui:SetCore("SendNotification", {Title = "Thành Công", Text = "Đã bay tới ngay trước mặt Boss!", Duration = 3})
+        else
+            hrp.CFrame = CFrame.new(fallbackPos + Vector3.new(0, 5, 0))
+            game.StarterGui:SetCore("SendNotification", {Title = "Thông Báo", Text = "Không tìm thấy Boss! Bay tới tọa độ chờ...", Duration = 3})
+        end
+    end
+
+    local FlaragonPos    = Vector3.new(-5.1, -116.4, -1492.8)
+    local GodzillaPos    = Vector3.new(-2322.0, 36.8, -1382.1)
+    local ShakeKnightPos = Vector3.new(2942.0, -44.5, 1865.9)
+
+    -- ==========================================
+    -- GIAO DIỆN UI
+    -- ==========================================
+    BossTab:CreateSection("--- DỊCH CHUYỂN BOSS ---")
+
+    BossTab:CreateButton({ Name = "🐉 TELE FLARAGON", Callback = function() TeleToBoss(FindBossByName({"flaragon","dragon","flare"}), FlaragonPos) end })
+    BossTab:CreateButton({ Name = "🦖 TELE GODZILLA", Callback = function() TeleToBoss(FindBossByName({"godzilla","glaza","mount"}), GodzillaPos) end })
+    BossTab:CreateButton({ Name = "⚔️ TELE SHAKEKNIGHT", Callback = function() TeleToBoss(FindBossByName({"shake","knight"}), ShakeKnightPos) end })
+
+    BossTab:CreateSection("--- QUẢN LÝ SERVER ---")
+
+    BossTab:CreateButton({
+        Name = "🌐 JOIN SERVER ÍT NGƯỜI (SERVER HOP)",
+        Callback = function()
+            game.StarterGui:SetCore("SendNotification", {Title = "Đang tìm kiếm...", Text = "Đang quét server trống...", Duration = 5})
+            local PlaceId = game.PlaceId
+            local success, data = pcall(function() return game:HttpGet("https://games.roblox.com/v1/games/"..PlaceId.."/servers/Public?sortOrder=Asc&limit=100") end)
+            
+            if success and data then
+                local json = HttpService:JSONDecode(data)
+                if json and json.data then
+                    for _,v in pairs(json.data) do
+                        if v.id and (v.playing or 0) < (v.maxPlayers or 0) then
+                            TeleportService:TeleportToPlaceInstance(PlaceId, v.id, LocalPlayer)
+                            break
+                        end
+                    end
+                end
+            end
+        end,
+    })
+
+    BossTab:CreateButton({ Name = "🔄 Rejoin Server Khác", Callback = function() TeleportService:Teleport(game.PlaceId, LocalPlayer) end })
+    BossTab:CreateButton({ Name = "🔄 Rejoin Đúng Server Này", Callback = function() TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer) end })
+end

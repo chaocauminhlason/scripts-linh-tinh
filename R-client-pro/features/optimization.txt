@@ -1,0 +1,76 @@
+-- ====================================================================
+-- MODULE: TỐI ƯU HÓA & CHỐNG AFK
+-- ====================================================================
+return function(Window, Utils)
+    local Players = game:GetService("Players")
+    local Lighting = game:GetService("Lighting")
+    local Workspace = game:GetService("Workspace")
+    local RunService = game:GetService("RunService")
+    local VirtualUser = game:GetService("VirtualUser")
+
+    local LocalPlayer = Players.LocalPlayer
+    local originalFPS = 60
+    local antiAfkEnabled = false
+
+    -- LOGIC CHỐNG AFK NGẦM
+    LocalPlayer.Idled:Connect(function() 
+        if antiAfkEnabled then 
+            VirtualUser:CaptureController() 
+            VirtualUser:ClickButton2(Vector2.new()) 
+        end 
+    end)
+
+    -- TẠO GIAO DIỆN
+    local OptimizationTab = Window:CreateTab("Tối Ưu", 4483345998)
+
+    OptimizationTab:CreateToggle({ 
+        Name = "Chống AFK (Anti-Kick)", 
+        CurrentValue = false, 
+        Flag = "AntiAfk", 
+        Callback = function(Value) antiAfkEnabled = Value end 
+    })
+
+    OptimizationTab:CreateButton({ 
+        Name = "Kích hoạt Đồ Họa Siêu Thấp (Potato Mode)", 
+        Callback = function()
+            Lighting.GlobalShadows = false 
+            Lighting.FogEnd = 9e9 
+            Lighting.ShadowSoftness = 0
+            if Lighting:FindFirstChildOfClass("Atmosphere") then Lighting:FindFirstChildOfClass("Atmosphere"):Destroy() end
+            
+            for _, v in ipairs(Workspace:GetDescendants()) do 
+                if v:IsA("BasePart") and not v:IsA("MeshPart") then 
+                    v.Material = Enum.Material.SmoothPlastic 
+                    v.Reflectance = 0 
+                elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") then 
+                    v:Destroy() 
+                end 
+            end
+            
+            Workspace.Terrain.WaterWaveSize = 0 
+            Workspace.Terrain.WaterWaveSpeed = 0 
+            Workspace.Terrain.WaterReflectance = 0 
+            Workspace.Terrain.WaterTransparency = 1
+            
+            game.StarterGui:SetCore("SendNotification", {Title = "Tối ưu hóa", Text = "Đã chuyển về Potato Mode.", Duration = 3})
+        end 
+    })
+
+    OptimizationTab:CreateToggle({ 
+        Name = "Giới Hạn 15 FPS", 
+        CurrentValue = false, 
+        Flag = "FpsLimiter", 
+        Callback = function(Value) 
+            if setfpscap then setfpscap(Value and 15 or originalFPS) end 
+        end 
+    })
+
+    OptimizationTab:CreateToggle({ 
+        Name = "Tắt Render 3D (Đen màn hình)", 
+        CurrentValue = false, 
+        Flag = "Disable3D", 
+        Callback = function(Value) 
+            pcall(function() RunService:Set3dRenderingEnabled(not Value) end) 
+        end 
+    })
+end

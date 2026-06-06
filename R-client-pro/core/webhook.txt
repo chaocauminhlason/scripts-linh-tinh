@@ -1,0 +1,79 @@
+-- ====================================================================
+-- MODULE: WEBHOOK & THÔNG BÁO DISCORD
+-- ====================================================================
+local WebhookModule = {}
+
+local HttpService = game:GetService("HttpService")
+local currentWebhookURL = ""
+local webhookEnabled = false
+
+-- 1. HÀM GỬI THÔNG BÁO (Để các file khác gọi lại)
+function WebhookModule.SendNotification(message)
+    if not webhookEnabled or currentWebhookURL == "" or not string.find(currentWebhookURL, "api/webhooks") then 
+        return 
+    end
+
+    local req = (syn and syn.request) or (http and http.request) or http_request or fluxus and fluxus.request or request
+    
+    if req then
+        local data = {
+            ["content"] = "",
+            ["embeds"] = {
+                {
+                    ["title"] = "🎉 Cập nhật Auto-Farm",
+                    ["description"] = message,
+                    ["type"] = "rich",
+                    ["color"] = tonumber(0x00FF00),
+                    ["timestamp"] = DateTime.now():ToIsoDate()
+                }
+            }
+        }
+        
+        req({ 
+            Url = currentWebhookURL, 
+            Method = "POST", 
+            Headers = { ["Content-Type"] = "application/json" }, 
+            Body = HttpService:JSONEncode(data) 
+        })
+    end
+end
+
+-- 2. HÀM TẠO GIAO DIỆN (Được gọi từ main.txt)
+function WebhookModule.InitTab(Window, Rayfield)
+    local WebhookTab = Window:CreateTab("Webhook", 4483362458)
+
+    WebhookTab:CreateSection("--- THIẾT LẬP DISCORD WEBHOOK ---")
+
+    WebhookTab:CreateToggle({
+        Name = "Bật/Tắt Thông Báo Discord",
+        CurrentValue = false,
+        Flag = "WebhookToggleConfig",
+        Callback = function(Value)
+            webhookEnabled = Value
+        end,
+    })
+
+    WebhookTab:CreateInput({
+        Name = "Link Discord Webhook",
+        PlaceholderText = "Dán link Webhook của bạn vào đây...",
+        RemoveTextAfterFocusLost = false,
+        Flag = "WebhookUrlConfig",
+        Callback = function(Text)
+            currentWebhookURL = Text
+        end,
+    })
+
+    WebhookTab:CreateButton({
+        Name = "Gửi Thông Báo Test (Kiểm tra)",
+        Callback = function()
+            if currentWebhookURL == "" or not string.find(currentWebhookURL, "api/webhooks") then
+                Rayfield:Notify({Title = "Lỗi", Content = "Link Webhook không hợp lệ!", Duration = 3})
+            else
+                WebhookModule.SendNotification("🛠️ Test Webhook thành công! Hệ thống R-Client Pro đang hoạt động tốt.")
+                Rayfield:Notify({Title = "Thành công", Content = "Đã gửi thông báo test qua Discord!", Duration = 3})
+            end
+        end,
+    })
+end
+
+return WebhookModule

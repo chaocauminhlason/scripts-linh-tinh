@@ -1,0 +1,81 @@
+-- ====================================================================
+-- MODULE: UTILITIES (CÁC HÀM TIỆN ÍCH DÙNG CHUNG)
+-- ====================================================================
+local Utils = {}
+
+-- Khai báo các Services cần thiết nội bộ trong module
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local GuiService = game:GetService("GuiService")
+local Workspace = game:GetService("Workspace")
+
+-- Hàm test kết nối (để check xem loadstring có thành công không)
+function Utils.TestKetNoi()
+    print("✅ Đã load thành công Module Utilities!")
+end
+
+-- ==========================================
+-- 1. HÀM QUÉT UI ĐỆ QUY (Tuyệt đối)
+-- ==========================================
+function Utils.FindUIElementByName(parent, name)
+    if not parent then return nil end
+    for _, child in ipairs(parent:GetDescendants()) do
+        if child.Name == name then 
+            return child 
+        end
+    end
+    return nil
+end
+
+-- ==========================================
+-- 2. HÀM CLICK CHUỘT ẢO (Bù trừ GuiInset chống trượt)
+-- ==========================================
+function Utils.ClickButtonExact(button, debugName)
+    if not button then return end
+    
+    local absPos = button.AbsolutePosition
+    local absSize = button.AbsoluteSize
+    
+    local centerX = absPos.X + (absSize.X / 2)
+    local finalY = absPos.Y + (absSize.Y / 2)
+    
+    local screenGui = button:FindFirstAncestorOfClass("ScreenGui")
+    if screenGui and not screenGui.IgnoreGuiInset then 
+        finalY = finalY + GuiService:GetGuiInset().Y 
+    end
+    
+    VirtualInputManager:SendMouseButtonEvent(centerX, finalY, 0, true, game, 1)
+    task.wait(0.1)
+    VirtualInputManager:SendMouseButtonEvent(centerX, finalY, 0, false, game, 1)
+    
+    if debugName then
+        print("🖱️ [Utils] Đã click ảo vào: " .. debugName)
+    end
+end
+
+-- ==========================================
+-- 3. HÀM LẤY ID NGƯỜI CHƠI (Hệ thống R-Game)
+-- ==========================================
+local cachedPlayerId = nil
+function Utils.GetPlayerId()
+    if cachedPlayerId then 
+        return cachedPlayerId 
+    end
+    
+    local petsFolder = Workspace:FindFirstChild("Pets")
+    if not petsFolder then return nil end
+    
+    for _, pet in pairs(petsFolder:GetChildren()) do
+        if pet:IsA("BasePart") then
+            local playerId = pet:GetAttribute("PlayerId")
+            if playerId then
+                cachedPlayerId = playerId
+                return playerId
+            end
+        end
+    end
+    
+    return nil
+end
+
+-- Trả về bảng Utils chứa tất cả các hàm trên để các file khác gọi lại
+return Utils

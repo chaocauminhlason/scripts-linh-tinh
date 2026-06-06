@@ -1,0 +1,100 @@
+-- ====================================================================
+-- MODULE: THEO DÕI NGƯỜI CHƠI & LIVE GPS
+-- ====================================================================
+return function(Window, Utils)
+    local Players = game:GetService("Players")
+    local RunService = game:GetService("RunService")
+    local UserInputService = game:GetService("UserInputService")
+    local LocalPlayer = Players.LocalPlayer
+
+    local following = false
+    local targetPlayer = nil
+    local missingTime = 0
+
+    -- ==========================================
+    -- GIAO DIỆN THEO DÕI
+    -- ==========================================
+    local MainTab = Window:CreateTab("Theo Dõi", 4483362458)
+    local StatusLabel = MainTab:CreateLabel("Trạng thái: Đang nghỉ")
+
+    local function GetPlayerNames()
+        local names = {}
+        for _, p in ipairs(Players:GetPlayers()) do 
+            if p ~= LocalPlayer then table.insert(names, p.Name) end 
+        end
+        return names
+    end
+
+    local PlayerDropdown = MainTab:CreateDropdown({ 
+        Name = "Chọn người đi theo", 
+        Options = GetPlayerNames(), 
+        CurrentOption = "", 
+        MultipleOptions = false, 
+        Flag = "PlayerDropdown", 
+        Callback = function(Option)
+            targetPlayer = Players:FindFirstChild(Option[1])
+            if targetPlayer then 
+                following = true
+                StatusLabel:Set("Trạng thái: Đang theo dõi " .. targetPlayer.Name) 
+            end
+        end 
+    })
+
+    MainTab:CreateButton({ Name = "Làm mới danh sách", Callback = function() PlayerDropdown:Refresh(GetPlayerNames()) end })
+    MainTab:CreateToggle({ 
+        Name = "Bật/Tắt Theo Dõi", 
+        CurrentValue = false, 
+        Flag = "FollowToggle", 
+        Callback = function(Value) 
+            following = Value 
+            if not Value then StatusLabel:Set("Trạng thái: Đã dừng") end 
+        end 
+    })
+    MainTab:CreateSection("Chat '!f' để kích hoạt follow từ xa.")
+
+    -- ==========================================
+    -- LOGIC FOLLOW & LỆNH CHAT
+    -- ==========================================
+    local function SetupChat(p) 
+        p.Chatted:Connect(function(msg) 
+            if msg == "!f" then 
+                targetPlayer = p 
+                following = true 
+                StatusLabel:Set("Trạng thái: Đang theo dõi " .. p.Name) 
+            end 
+        end) 
+    end
+    for _, p in ipairs(Players:GetPlayers()) do if p ~= LocalPlayer then SetupChat(p) end end
+    Players.PlayerAdded:Connect(SetupChat)
+
+    task.spawn(function()
+        while task.wait(0.5) do
+            if following and targetPlayer then
+                pcall(function()
+                    local char = LocalPlayer.Character
+                    local tChar = targetPlayer.Character
+                    if char and tChar and tChar:FindFirstChild("HumanoidRootPart") then
+                        missingTime = 0
+                        char.Humanoid:MoveTo(tChar.HumanoidRootPart.Position)
+                    else
+                        if missingTime == 0 then missingTime = os.time() end
+                        if os.time() - missingTime >= 30 and tChar and tChar:FindFirstChild("HumanoidRootPart") then
+                            char.HumanoidRootPart.CFrame = tChar.HumanoidRootPart.CFrame
+                            missingTime = 0
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+
+    -- ==========================================
+    -- LỚP PHỦ TỌA ĐỘ LIVE (GPS) KÉO THẢ ĐƯỢC
+    -- ==========================================
+    local coordGui = Instance.new("ScreenGui", game.CoreGui)
+    coordGui.Name = "CoordLiveGUI"
+
+    local coordText = Instance.new("TextLabel", coordGui)
+    coordText.Size = UDim2.new(0, 160, 0, 26)
+    coordText.Position = UDim2.new(0.78, 0, 0.05, 0)
+    coordText.BackgroundTransparency = 1
