@@ -1,5 +1,5 @@
 -- ====================================================================
--- MAIN SCRIPT: Khởi chạy R-Client Pro
+-- MAIN SCRIPT: Khởi chạy R-Client Pro (Bản Check Lỗi Chuyên Sâu)
 -- ====================================================================
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
@@ -11,20 +11,40 @@ local Window = Rayfield:CreateWindow({
     KeySystem = false
 })
 
--- Hàm tải file an toàn (Chống trắng màn hình khi link lỗi)
+-- HÀM TẢI FILE SIÊU CẤP (BẮT LỖI TẬN GỐC)
 local function LoadModuleSafe(url)
-    local success, module = pcall(function()
-        return loadstring(game:HttpGet(url))()
-    end)
+    local success, response = pcall(function() return game:HttpGet(url) end)
+    
     if not success then
-        warn("❌ Lỗi tải module: " .. url)
-        Rayfield:Notify({Title = "Lỗi Link Tải", Content = "Không tìm thấy: " .. string.match(url, "([^/]+)$"), Duration = 5})
+        warn("❌ Không kết nối được mạng tới: " .. url)
         return nil
     end
+    
+    -- Nếu GitHub báo 404 (Do sai link hoặc Repo Private)
+    if string.find(response, "404: Not Found") then
+        warn("❌ LỖI 404 (Không tìm thấy file): " .. url)
+        warn("-> Nguyên nhân: Tên file sai HOẶC Repo GitHub đang bị khóa (Private).")
+        Rayfield:Notify({Title = "LỖI 404", Content = "Bật F9 để xem chi tiết! Repo đang Private?", Duration = 5})
+        return nil
+    end
+
+    local chunk, err = loadstring(response)
+    if not chunk then
+        warn("❌ LỖI CÚ PHÁP (Syntax Error) ở file: " .. url .. "\nChi tiết: " .. tostring(err))
+        Rayfield:Notify({Title = "LỖI CODE", Content = "File bị lỗi dấu phẩy/ngoặc, check F9!", Duration = 5})
+        return nil
+    end
+
+    local runSuccess, module = pcall(chunk)
+    if not runSuccess then
+        warn("❌ LỖI KHI CHẠY (Runtime Error) ở file: " .. url .. "\nChi tiết: " .. tostring(module))
+        return nil
+    end
+
     return module
 end
 
--- 1. Kéo các file Core về trước
+-- 1. TẢI CORE MODULES
 local Utils = LoadModuleSafe('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/core/utilities.txt')
 local WebhookModule = LoadModuleSafe('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/core/webhook.txt')
 
@@ -32,23 +52,25 @@ if WebhookModule then
     WebhookModule.InitTab(Window, Rayfield)
 end
 
--- 2. Kéo các Features (Đã sửa lại link chuẩn)
+-- 2. TẢI TÍNH NĂNG (Chỉ chạy khi Utils không bị lỗi 404)
 if Utils then
-    local tracker = loadstring(game:HttpGet('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/tracker.txt'))
-    if tracker then tracker()(Window, Utils) end
+    local tracker = LoadModuleSafe('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/tracker.txt')
+    if tracker then tracker(Window, Utils) end
 
-    local rgame = loadstring(game:HttpGet('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/rgame_farm.txt'))
-    if rgame then rgame()(Window, Utils) end
+    local rgame = LoadModuleSafe('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/rgame_farm.txt')
+    if rgame then rgame(Window, Utils) end
 
-    local boss = loadstring(game:HttpGet('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/boss_hunt.txt'))
-    if boss then boss()(Window, Utils) end
+    local boss = LoadModuleSafe('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/boss_hunt.txt')
+    if boss then boss(Window, Utils) end
 
-    local dungeon = loadstring(game:HttpGet('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/auto_dungeon.txt'))
-    if dungeon and WebhookModule then dungeon()(Window, Utils, WebhookModule) end
+    local dungeon = LoadModuleSafe('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/auto_dungeon.txt')
+    if dungeon and WebhookModule then dungeon(Window, Utils, WebhookModule) end
 
-    local optimize = loadstring(game:HttpGet('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/optimization.txt'))
-    if optimize then optimize()(Window, Utils) end
+    local optimize = LoadModuleSafe('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/optimization.txt')
+    if optimize then optimize(Window, Utils) end
+else
+    Rayfield:Notify({Title = "LỖI NGHIÊM TRỌNG", Content = "Không tải được Utils. Tool bị hủy! Bật F9 xem lỗi.", Duration = 10})
 end
 
 Rayfield:LoadConfiguration()
-Rayfield:Notify({ Title = "Thành Công!", Content = "Hệ thống R-Client Pro đã nạp đầy đủ Modules!", Duration = 5 })
+Rayfield:Notify({ Title = "Trạng Thái", Content = "Đã quét xong trình nạp script!", Duration = 3 })
