@@ -251,4 +251,93 @@ return function(Window, Utils, WebhookModule)
                     if fmTimeFrame and fmTimeFrame.Visible == true then
                         if not stage20ClockStarted then stage20ClockStarted = true; DungeonStatus:Set("Trạng thái Auto Exit: Đồng hồ màn 20 đã chạy...") end
                     end
-                    if stage20ClockStarted
+                    if stage20ClockStarted and (not fmTimeFrame or fmTimeFrame.Visible == false) then
+                        autoExitTriggered = true
+                        DungeonStatus:Set("Trạng thái Auto Exit: Boss đã gục, chuẩn bị click thoát...")
+                        task.spawn(function() WebhookModule.SendNotification("**" .. LocalPlayer.Name .. "** vừa hoàn thành vòng Dungeon 20/20!") end)
+                        task.spawn(SafeExitRoutine)
+                    end
+                else stage20ClockStarted = false; autoExitTriggered = false end
+            end
+
+            -- [3] LOGIC AUTO JOIN OTHERS (Giữ nguyên)
+            if autoJoinOthersEnabled and (not labStage or labStage.Text == "Unknown" or labStage.Text == "") then
+                pcall(function()
+                    local wArea = Workspace:FindFirstChild("Area")
+                    local center = wArea and wArea:FindFirstChild("center")
+                    local innerArea = center and center:FindFirstChild("Area")
+                    local abyssFolder = innerArea and innerArea:FindFirstChild("Abyss")
+                    
+                    if abyssFolder then
+                        local alreadyInSomeoneRoom = false
+                        local shouldJumpOut = false
+                        local jumpOutTarget = nil
+                        local roomToJoin = nil
+                        
+                        for _, room in ipairs(abyssFolder:GetChildren()) do
+                            if string.match(room.Name, "Abyss_") then
+                                local platform = room:FindFirstChild("Platform")
+                                local board = platform and platform:FindFirstChild("Board")
+                                local surfaceGui = board and board:FindFirstChild("SurfaceGui")
+                                
+                                if surfaceGui and surfaceGui:FindFirstChild("FmEmpty") and surfaceGui:FindFirstChild("FmPrepare") and surfaceGui:FindFirstChild("FmInfo") and surfaceGui:FindFirstChild("FmPlayer") then
+                                    if (not surfaceGui.FmEmpty.Visible) and (not surfaceGui.FmPrepare.Visible) and surfaceGui.FmInfo.Visible and surfaceGui.FmPlayer.Visible then
+                                        
+                                        local isOtherPlayer = false
+                                        local isMyRoom = false
+                                        
+                                        for _, desc in ipairs(surfaceGui.FmPlayer:GetDescendants()) do
+                                            if desc:IsA("ImageLabel") and string.find(desc.Image, "AvatarHeadShot") then
+                                                local extractedId = string.match(desc.Image, "id=(%d+)")
+                                                if extractedId then 
+                                                    if tonumber(extractedId) ~= myUserId then 
+                                                        isOtherPlayer = true 
+                                                    else 
+                                                        isMyRoom = true 
+                                                    end 
+                                                    break 
+                                                end
+                                            end
+                                        end
+                                        
+                                        local targetPos = (room:IsA("Model") and room:GetPivot().Position) or (room:IsA("BasePart") and room.Position)
+                                        
+                                        if targetPos then
+                                            local dist = (hrp.Position - targetPos).Magnitude
+                                            
+                                            if isMyRoom and dist < 25 then
+                                                shouldJumpOut = true
+                                                local leaveAth = room:FindFirstChild("LeaveAth")
+                                                if leaveAth and leaveAth:IsA("Attachment") then 
+                                                    jumpOutTarget = leaveAth.WorldPosition 
+                                                end
+                                            elseif isOtherPlayer then
+                                                if dist < 15 then 
+                                                    alreadyInSomeoneRoom = true 
+                                                elseif not roomToJoin then 
+                                                    roomToJoin = targetPos + Vector3.new(0, 5, 0) 
+                                                end
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                        
+                        if shouldJumpOut then
+                            if jumpOutTarget then 
+                                hrp.CFrame = CFrame.new(jumpOutTarget + Vector3.new(0, 3, 0)) 
+                            else 
+                                hrp.CFrame = hrp.CFrame * CFrame.new(0, 0, 20) 
+                            end
+                            task.wait(2)
+                        elseif roomToJoin and not alreadyInSomeoneRoom then
+                            hrp.CFrame = CFrame.new(roomToJoin)
+                            task.wait(3)
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+end
