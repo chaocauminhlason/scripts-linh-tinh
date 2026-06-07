@@ -1,5 +1,6 @@
 -- ====================================================================
--- MODULE: DUNGEON AUTO (TÍCH HỢP TỐI ƯU PHÍM M, AUTO EXIT, JOIN & ĐIỀU HƯỚNG BẰNG X-RAY)
+-- MODULE: DUNGEON AUTO (TÍCH HỢP TỐI ƯU PHÍM M, AUTO EXIT, JOIN & ĐIỀU HƯỚNG X-RAY V3)
+-- BẢN FIX: ĐỨNG ĐỢI Ở CỘT BUFF 1.5 GIÂY RỒI MỚI CHẠY RA CỔNG
 -- ====================================================================
 return function(Window, Utils, WebhookModule)
     local Players = game:GetService("Players")
@@ -41,7 +42,6 @@ return function(Window, Utils, WebhookModule)
         
         local char = LocalPlayer.Character
         local petsFolder = Workspace:FindFirstChild("Pets")
-        -- Quét xuyên qua nhân vật và thú cưỡi
         raycastParams.FilterDescendantsInstances = {char, petsFolder} 
 
         local raycastResult = Workspace:Raycast(rayOrigin, rayDirection, raycastParams)
@@ -219,14 +219,21 @@ return function(Window, Utils, WebhookModule)
                         -- Điều hướng nhân vật chạy tới
                         humanoid:MoveTo(safeTalentPos)
                         
-                        -- Nếu đã đến gần Cột Buff
+                        -- Nếu đã đến sát Cột Buff
                         if (hrp.Position - safeTalentPos).Magnitude < 7 then
-                            -- Spam phím E để mở bảng
+                            -- Ép dừng di chuyển hoàn toàn để đứng im
+                            humanoid:MoveTo(hrp.Position)
+                            task.wait(0.1)
+                            
+                            -- Kích hoạt phím E để mở bảng nhận buff
                             VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
                             task.wait(0.1)
                             VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
                             
-                            -- Đánh dấu là đã lấy xong để vòng lặp sau tự chuyển sang đi tìm Cửa
+                            -- ĐỨNG IM ĐỢI ĐÚNG 1.5 GIÂY THEO YÊU CẦU
+                            task.wait(1.5)
+                            
+                            -- Sau khi hết 1.5 giây, đổi trạng thái sang true để vòng sau chạy ra cửa
                             hasClaimedBuff = true 
                         end
                         
@@ -254,11 +261,11 @@ return function(Window, Utils, WebhookModule)
                     if stage20ClockStarted and (not fmTimeFrame or fmTimeFrame.Visible == false) then
                         autoExitTriggered = true
                         DungeonStatus:Set("Trạng thái Auto Exit: Boss đã gục, chuẩn bị click thoát...")
-task.spawn(function() 
-    if WebhookModule and WebhookModule.SendNotification then 
-        WebhookModule.SendNotification("**" .. LocalPlayer.Name .. "** vừa hoàn thành vòng Dungeon 20/20!") 
-    end 
-end)
+                        task.spawn(function() 
+                            if WebhookModule and WebhookModule.SendNotification then 
+                                WebhookModule.SendNotification("**" .. LocalPlayer.Name .. "** vừa hoàn thành vòng Dungeon 20/20!") 
+                            end 
+                        end)
                         task.spawn(SafeExitRoutine)
                     end
                 else stage20ClockStarted = false; autoExitTriggered = false end
