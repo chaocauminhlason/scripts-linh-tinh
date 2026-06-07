@@ -1,992 +1,206 @@
 -- ====================================================================
--- ROBLOX PRO TOOL - BẢN HOÀN CHỈNH TỐI ƯU HÓA (ĐƯỜNG DẪN TUYỆT ĐỐI)
--- Tích hợp Dungeon Auto & (RGame) Logic
+-- MODULE: DUNGEON AUTO (TÍCH HỢP TỐI ƯU PHÍM M, AUTO EXIT & JOIN GỐC)
+-- BẢN FIX CUỐI: TẬN DỤNG CƠ CHẾ CLICK QUÁI TỰ ĐÁP ĐẤT CỦA GAME
 -- ====================================================================
--- ở lần update sau sẽ không nhắc thẳng từ bắt quái và roblox 
--- [[ TẢI THƯ VIỆN UI ]]
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-
-local Window = Rayfield:CreateWindow({
-    Name = "protool v2.0.0 Dev by Sondeptrai",
-    LoadingTitle = "Đang tải Script...",
-    LoadingSubtitle = "Bởi Sơn",
-    ConfigurationSaving = {
-       Enabled = true,
-       FolderName = nil,
-       FileName = "AutoFarmConfig"
-    },
-    Discord = { 
-        Enabled = false, 
-        Invite = "", 
-        RememberJoins = true 
-    },
-    KeySystem = false,
-    DisableRayfieldPrompts = true,
-    DisableBuildWarnings = true 
-})
-
--- [[ BIẾN TOÀN CỤC & SERVICES ]]
-local Players = game:GetService("Players")
-local TeleportService = game:GetService("TeleportService")
-local HttpService = game:GetService("HttpService")
-local VirtualUser = game:GetService("VirtualUser")
-local VirtualInputManager = game:GetService("VirtualInputManager")
-local GuiService = game:GetService("GuiService")
-local RunService = game:GetService("RunService")
-local Lighting = game:GetService("Lighting")
-local Workspace = game:GetService("Workspace")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
-local LocalPlayer = Players.LocalPlayer
-local myUserId = LocalPlayer.UserId
-local playerGui = LocalPlayer:WaitForChild("PlayerGui")
--- ====================================================================
--- HỆ THỐNG R-Game (CORE MODULES & BIẾN)
--- ====================================================================
--- Gọi Module Quản lý quái của game
-local MgrMonsterClient = nil
-pcall(function()
-    MgrMonsterClient = require(game:GetService("ReplicatedStorage").ClientLogic.Monster.MgrMonsterClient)
-end)
-
--- KHAI BÁO BỘ NHỚ LƯU TRỮ (Phải đặt trước khi vẽ UI)
-local camSettings = {
-    autoAttack = false,
-    autoCatch = false,
-    autoHeal = false,
-    isHealing = false,
-    savedPosition = nil,
-    targetMonsterNames = {} -- Kho chứa tên quái VIP lấy từ Dropdown
-}
--- Biến cho Dungeon Tool
-local following = false
-local targetPlayer = nil
-local missingTime = 0
-
-local antiAfkEnabled = false
-local rejoinTimer = 0
-
-local autoExitEnabled = false
-local autoExitTriggered = false
-local stage20ClockStarted = false
-
-local autoAttackEnabled = false
-local autoJoinOthersEnabled = false
-local originalFPS = 60
-
--- ====================================================================
--- HỆ THỐNG R-Game (CORE MODULES & BIẾN)
--- ====================================================================
-local AreaSystem = nil
-local MonsterSystem = nil
-local TowerSystem = nil
-
-pcall(function()
-    AreaSystem = require(ReplicatedStorage.CommonLogic.Area.AreaSystem)
-    MonsterSystem = require(ReplicatedStorage.CommonLogic.Monster.MonsterSystem)
-    TowerSystem = require(ReplicatedStorage.CommonLogic.Tower.TowerSystem)
-end)
-
-local RGameSettings = {
-    autoAttack = false,
-    autoCatch = false,
-    autoHeal = false,
-    isHealing = false,
-    savedPosition = nil
-}
-
-local cachedPlayerId = nil
-
-local function getPlayerId()
-    if cachedPlayerId then 
-        return cachedPlayerId 
-    end
+return function(Window, Utils, WebhookModule)
+    local Players = game:GetService("Players")
+    local Workspace = game:GetService("Workspace")
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local VirtualInputManager = game:GetService("VirtualInputManager")
     
-    local petsFolder = Workspace:FindFirstChild("Pets")
-    if not petsFolder then 
-        return nil 
-    end
+    local LocalPlayer = Players.LocalPlayer
+    local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+    local myUserId = LocalPlayer.UserId
+
+    -- Biến trạng thái
+    local autoExitEnabled = false
+    local autoExitTriggered = false
+    local stage20ClockStarted = false
+    local autoAttackEnabled = false
+    local autoJoinOthersEnabled = false
     
-    for _, pet in pairs(petsFolder:GetChildren()) do
-        if pet:IsA("BasePart") then
-            local playerId = pet:GetAttribute("PlayerId")
-            if playerId then
-                cachedPlayerId = playerId
-                return playerId
+    local dungeonStuckTimer = 0
+    local dungeonLastPosition = nil
+
+    -- API Game
+    local MonsterSystem = nil
+    pcall(function() MonsterSystem = require(ReplicatedStorage.CommonLogic.Monster.MonsterSystem) end)
+
+    -- TẠO GIAO DIỆN
+    local DungeonTab = Window:CreateTab("Hầm Ngục", 4483362458)
+    local DungeonStatus = DungeonTab:CreateLabel("Trạng thái Auto Exit: Đang tắt")
+
+    DungeonTab:CreateToggle({ 
+        Name = "Tự Động Tìm & Đánh Quái (Tối Ưu Phím M)", 
+        CurrentValue = false, 
+        Flag = "AutoAttack_V2", 
+        Callback = function(Value) 
+            autoAttackEnabled = Value 
+            if not Value then
+                pcall(function()
+                    local char = LocalPlayer.Character
+                    if char and char:FindFirstChild("Humanoid") then
+                        char.Humanoid:MoveTo(char.HumanoidRootPart.Position)
+                    end
+                end)
             end
-        end
-    end
-    
-    return nil
-end
+        end 
+    })
 
-local function hasDeadPet()
-    local petsFolder = Workspace:FindFirstChild("Pets")
-    if not petsFolder then 
-        return false 
-    end
-    
-    local playerId = getPlayerId()
-    if not playerId then 
-        return false 
-    end
-    
-    local deadCount = 0
-    local totalCount = 0
-    
-    for _, pet in pairs(petsFolder:GetChildren()) do
-        if pet:GetAttribute("PlayerId") == playerId then
-            totalCount = totalCount + 1
-            local healthPart = pet:FindFirstChild("Health")
-            if healthPart then
-                local health = tonumber(healthPart.Value) or 0
-                if health <= 0 then 
-                    deadCount = deadCount + 1 
-                end
-            end
-        end
-    end
-    
-    return deadCount > 0 and totalCount > 0
-end
-
-local function getRecoverPosition()
-    local area = Workspace:FindFirstChild("Area")
-    if not area then 
-        return nil 
-    end
-    
-    for _, zone in pairs(area:GetChildren()) do
-        local serverZone = zone:FindFirstChild("ServerZone")
-        if serverZone then
-            local recover = serverZone:FindFirstChild("Recover")
-            if recover then
-                if recover:IsA("Model") then
-                    local root = recover.PrimaryPart or recover:FindFirstChildOfClass("Part")
-                    return root and root.Position
-                elseif recover:IsA("BasePart") then
-                    return recover.Position
-                end
-            end
-        end
-    end
-    
-    return nil
-end
-
--- ====================================================================
--- HỆ THỐNG THÔNG BÁO DISCORD (WEBHOOK TỰ ĐỘNG LƯU SESSION)
--- ====================================================================
-local currentWebhookURL = ""
-local webhookEnabled = false
-
-local function SendDiscordNotification(message)
-    -- Kiểm tra nếu tính năng tắt hoặc URL không hợp lệ thì hủy gửi
-    if not webhookEnabled or currentWebhookURL == "" or not string.find(currentWebhookURL, "api/webhooks") then 
-        return 
-    end
-
-    local req = (syn and syn.request) or (http and http.request) or http_request or fluxus and fluxus.request or request
-    
-    if req then
-        local data = {
-            ["content"] = "",
-            ["embeds"] = {
-                {
-                    ["title"] = "🎉 Cập nhật Auto-Farm",
-                    ["description"] = message,
-                    ["type"] = "rich",
-                    ["color"] = tonumber(0x00FF00),
-                    ["timestamp"] = DateTime.now():ToIsoDate()
-                }
-            }
-        }
-        
-        req({ 
-            Url = currentWebhookURL, 
-            Method = "POST", 
-            Headers = { ["Content-Type"] = "application/json" }, 
-            Body = HttpService:JSONEncode(data) 
-        })
-    end
-end
-
--- ====================================================================
--- [[ HỆ THỐNG CLICK & TÌM KIẾM UI DUNGEON ]]
--- ====================================================================
-local function findUIElementByName(parent, name)
-    if not parent then return nil end
-    for _, child in ipairs(parent:GetDescendants()) do
-        if child.Name == name then 
-            return child 
-        end
-    end
-    return nil
-end
-
-local function ClickButtonExact(button, debugName)
-    if not button then return end
-    
-    local absPos = button.AbsolutePosition
-    local absSize = button.AbsoluteSize
-    
-    local centerX = absPos.X + (absSize.X / 2)
-    local finalY = absPos.Y + (absSize.Y / 2)
-    
-    local screenGui = button:FindFirstAncestorOfClass("ScreenGui")
-    if screenGui and not screenGui.IgnoreGuiInset then 
-        finalY = finalY + GuiService:GetGuiInset().Y 
-    end
-    
-    VirtualInputManager:SendMouseButtonEvent(centerX, finalY, 0, true, game, 1)
-    task.wait(0.1)
-    VirtualInputManager:SendMouseButtonEvent(centerX, finalY, 0, false, game, 1)
-end
-
-local function SafeExitRoutine()
-    local exitBtn = findUIElementByName(playerGui, "BgLeave")
-    
-    if exitBtn and exitBtn.AbsoluteSize.X > 0 then 
-        ClickButtonExact(exitBtn, "Nút Thoát") 
-    else 
-        autoExitTriggered = false 
-        return 
-    end
-    
-    task.wait(1.5)
-    
-    local mainGui = playerGui:FindFirstChild("MainGui")
-    if mainGui then
-        local screenGui = mainGui:FindFirstChild("ScreenGui")
-        if screenGui and screenGui:FindFirstChild("ConfirmView") and screenGui.ConfirmView.Visible then
-            local fmBottom = screenGui.ConfirmView:FindFirstChild("FmBottom")
-            if fmBottom and fmBottom:FindFirstChild("BtOk") and fmBottom.BtOk.AbsoluteSize.X > 0 then
-                for i = 1, 3 do 
-                    ClickButtonExact(fmBottom.BtOk, "Nút Yes") 
-                    task.wait(0.2) 
-                end
+    DungeonTab:CreateToggle({ 
+        Name = "Tự Động Thoát Khi Xong Màn 20", 
+        CurrentValue = false, 
+        Flag = "AutoExitDungeon", 
+        Callback = function(Value) 
+            autoExitEnabled = Value 
+            if Value then 
+                DungeonStatus:Set("Trạng thái Auto Exit: ĐANG BẬT VÀ QUÉT...") 
             else 
-                autoExitTriggered = false 
-                return 
-            end
-        else 
-            autoExitTriggered = false 
-            return 
-        end
-    end
-    
-    task.wait(2.5)
-    
-    local checkLabStage = findUIElementByName(playerGui, "LabStage")
-    local currentStageText = checkLabStage and checkLabStage.Text or "Unknown"
-    
-    if currentStageText == "Unknown" or not string.match(currentStageText, "20/20") then 
-        autoExitTriggered = false
-        stage20ClockStarted = false 
-    else 
-        autoExitTriggered = false 
-    end
-end
-
--- ==========================================
--- [[ KHỞI TẠO CÁC TAB GIAO DIỆN (UI) ]]
--- ==========================================
-
--- TAB 1: THEO DÕI
-local MainTab = Window:CreateTab("Theo Dõi", 4483362458)
-local StatusLabel = MainTab:CreateLabel("Trạng thái: Đang nghỉ")
-
-local function GetPlayerNames()
-    local names = {}
-    for _, p in ipairs(Players:GetPlayers()) do 
-        if p ~= LocalPlayer then 
-            table.insert(names, p.Name) 
-        end 
-    end
-    return names
-end
-
-local PlayerDropdown = MainTab:CreateDropdown({ 
-    Name = "Chọn người đi theo", 
-    Options = GetPlayerNames(), 
-    CurrentOption = "", 
-    MultipleOptions = false, 
-    Flag = "PlayerDropdown", 
-    Callback = function(Option)
-        targetPlayer = Players:FindFirstChild(Option[1])
-        if targetPlayer then 
-            following = true
-            StatusLabel:Set("Trạng thái: Đang theo dõi " .. targetPlayer.Name) 
-        end
-    end 
-})
-
-MainTab:CreateButton({ 
-    Name = "Làm mới danh sách", 
-    Callback = function() 
-        PlayerDropdown:Refresh(GetPlayerNames()) 
-    end 
-})
-
-MainTab:CreateToggle({ 
-    Name = "Bật/Tắt Theo Dõi", 
-    CurrentValue = false, 
-    Flag = "FollowToggle", 
-    Callback = function(Value) 
-        following = Value 
-        if not Value then 
-            StatusLabel:Set("Trạng thái: Đã dừng") 
-        end 
-    end 
-})
-
-MainTab:CreateSection("Chat '!f' để kích hoạt follow từ xa.")
-
--- TAB 2: R-Game (TÍCH HỢP MỚI & LỌC VIP)
-local CamTab = Window:CreateTab("auto catch", 4483345998)
-
-CamTab:CreateSection("--- THIẾT LẬP CƠ BẢN ---")
-
-CamTab:CreateToggle({
-    Name = "Tự Động Đánh Quái (Auto Attack Module)",
-    CurrentValue = false,
-    Flag = "CamAutoAttack",
-    Callback = function(Value) 
-        camSettings.autoAttack = Value 
-    end
-})
-
-CamTab:CreateToggle({
-    Name = "Tự Động Bắt Quái (Auto Catch & TP)",
-    CurrentValue = false,
-    Flag = "CamAutoCatch",
-    Callback = function(Value) 
-        camSettings.autoCatch = Value 
-    end
-})
-
-CamTab:CreateToggle({
-    Name = "Tự Động Hồi Máu Pet (Auto Heal)",
-    CurrentValue = false,
-    Flag = "CamAutoHeal",
-    Callback = function(Value) 
-        camSettings.autoHeal = Value 
-    end
-})
-
--- ====================================================================
--- GIAO DIỆN LỌC QUÁI THEO TÊN (Dropdown UI)
--- ====================================================================
-CamTab:CreateSection("--- THỢ SĂN TIỀN THƯỞNG ---")
-
-local CommonConfig = game:GetService("ReplicatedStorage"):FindFirstChild("CommonConfig")
-local MonsterConfigFolder = CommonConfig and CommonConfig:FindFirstChild("Monster")
-local ScrapedMonsters = {} 
-
-local MonsterDropdown = CamTab:CreateDropdown({
-    Name = "Chọn Quái Để Ưu Tiên Bắt",
-    Options = {"(Trống) Hãy bấm nút Quét trước..."},
-    CurrentOption = {""},
-    MultipleOptions = true, 
-    Flag = "TargetMonstersDropdown",
-    Callback = function(Options)
-        camSettings.targetMonsterNames = Options
-        print("🎯 Đã chốt mục tiêu săn: " .. table.concat(Options, ", "))
-    end,
-})
-
-CamTab:CreateButton({
-    Name = "🔄 Quét Quái Đang Có Trên Map",
-    Callback = function()
-        local monstersFolder = Workspace:FindFirstChild("Monsters")
-        if not monstersFolder or not MonsterConfigFolder then
-            Rayfield:Notify({Title = "Lỗi", Content = "Không tìm thấy quái hoặc thư mục Config!", Duration = 3})
-            return
-        end
-        
-        Rayfield:Notify({Title = "Đang Quét...", Content = "Đang đọc trí nhớ máy chủ, vui lòng đợi...", Duration = 2})
-        local foundNames = {}
-        local dict = {} 
-        
-        for _, monster in pairs(monstersFolder:GetChildren()) do
-            if monster:IsA("Model") or monster:IsA("BasePart") then
-                local tmplId = monster:GetAttribute("TmplId")
-                
-                if tmplId then
-                    local configName = "Monster" .. tostring(tmplId)
-                    local configFile = MonsterConfigFolder:FindFirstChild(configName)
-                    
-                    if configFile and configFile:IsA("ModuleScript") then
-                        local success, configData = pcall(require, configFile)
-                        if success and type(configData) == "table" then
-                            local realName = configData.Name or monster.Name
-                            
-                            if not dict[realName] then
-                                dict[realName] = true
-                                table.insert(foundNames, realName)
-                            end
-                        end
-                    end
-                end
-            end
-        end
-        
-        if #foundNames > 0 then
-            ScrapedMonsters = foundNames
-            MonsterDropdown:Refresh(ScrapedMonsters) 
-            Rayfield:Notify({Title = "Thành Công!", Content = "Đã tìm thấy " .. #foundNames .. " loài quái!", Duration = 3})
-        else
-            Rayfield:Notify({Title = "Cảnh Báo", Content = "Không có quái ở gần. Hãy ra bãi farm!", Duration = 3})
-        end
-    end,
-})
--- ====================================================================
--- TAB 3: SĂN BOSS & SERVER HOP
--- ====================================================================
-local BossTab = Window:CreateTab("Săn Boss (BOSS)", 4483345998)
-
-BossTab:CreateSection("--- DỊCH CHUYỂN BOSS ---")
-
--- Hàm xử lý tìm Boss
-local function IsBoss(model)
-    if not model:IsA("Model") then return false end
-    local hum = model:FindFirstChildOfClass("Humanoid")
-    local hrp = model:FindFirstChild("HumanoidRootPart")
-    if not hum or not hrp then return false end
-    if hum.MaxHealth and hum.MaxHealth >= 100000 then
-        return true
-    end
-    return false
-end
-
-local function FindBossByName(keywords)
-    for _,v in pairs(workspace:GetDescendants()) do
-        if v:IsA("Model") and IsBoss(v) then
-            local n = v.Name:lower()
-            for _,k in pairs(keywords) do
-                if n:find(k) then
-                    return v:FindFirstChild("HumanoidRootPart")
-                end
-            end
-        end
-    end
-    return nil
-end
-
-local function TeleToBoss(bossHRP, fallbackPos)
-    local char = Players.LocalPlayer.Character
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-    
-    if bossHRP then
-        hrp.CFrame = bossHRP.CFrame * CFrame.new(0, 0, 10)
-        Rayfield:Notify({Title = "Thành Công", Content = "Đã bay tới ngay trước mặt Boss!", Duration = 3})
-    else
-        hrp.CFrame = CFrame.new(fallbackPos + Vector3.new(0, 5, 0))
-        Rayfield:Notify({Title = "Thông Báo", Content = "Không tìm thấy Boss! Bay tới tọa độ chờ...", Duration = 3})
-    end
-end
-
--- Tọa độ dự phòng
-local FlaragonPos    = Vector3.new(-5.1, -116.4, -1492.8)
-local GodzillaPos    = Vector3.new(-2322.0, 36.8, -1382.1)
-local ShakeKnightPos = Vector3.new(2942.0, -44.5, 1865.9)
-
--- Nút bấm săn Boss
-BossTab:CreateButton({
-    Name = "🐉 TELE FLARAGON",
-    Callback = function()
-        TeleToBoss(FindBossByName({"flaragon","dragon","flare"}), FlaragonPos)
-    end,
-})
-
-BossTab:CreateButton({
-    Name = "🦖 TELE GODZILLA",
-    Callback = function()
-        TeleToBoss(FindBossByName({"godzilla","glaza","mount"}), GodzillaPos)
-    end,
-})
-
-BossTab:CreateButton({
-    Name = "⚔️ TELE SHAKEKNIGHT",
-    Callback = function()
-        TeleToBoss(FindBossByName({"shake","knight"}), ShakeKnightPos)
-    end,
-})
-
-BossTab:CreateSection("--- TIỆN ÍCH ---")
-
-BossTab:CreateButton({
-    Name = "🌐 JOIN SERVER ÍT NGƯỜI (SERVER HOP)",
-    Callback = function()
-        Rayfield:Notify({Title = "Đang tìm kiếm...", Content = "Đang quét các server trống, vui lòng đợi!", Duration = 5})
-        local PlaceId = game.PlaceId
-        local success, data = pcall(function()
-            -- Sửa lỗi: Executor dùng game:HttpGet thay vì HttpService:HttpGet
-            return game:HttpGet("https://games.roblox.com/v1/games/"..PlaceId.."/servers/Public?sortOrder=Asc&limit=100")
-        end)
-        
-        if success and data then
-            local HttpService = game:GetService("HttpService")
-            local json = HttpService:JSONDecode(data)
-            if json and json.data then
-                for _,v in pairs(json.data) do
-                    local maxPlayers = v.maxPlayers or 0
-                    local playing = v.playing or 0
-                    local id = v.id
-                    if id and playing < maxPlayers then
-                        game:GetService("TeleportService"):TeleportToPlaceInstance(PlaceId, id, Players.LocalPlayer)
-                        break
-                    end
-                end
-            end
-        else
-            Rayfield:Notify({Title = "Lỗi", Content = "Không thể lấy danh sách Server!", Duration = 3})
-        end
-    end,
-})
--- TAB 4: AUTO EXIT HẦM NGỤC
-local DungeonTab = Window:CreateTab("Hầm Ngục", 4483362458)
-local DungeonStatus = DungeonTab:CreateLabel("Trạng thái Auto Exit: Đang tắt")
-
-DungeonTab:CreateToggle({ 
-    Name = "Tự Động Thoát Khi Xong Màn 20", 
-    CurrentValue = false, 
-    Flag = "AutoExitDungeon", 
-    Callback = function(Value) 
-        autoExitEnabled = Value 
-        if Value then 
-            DungeonStatus:Set("Trạng thái Auto Exit: ĐANG BẬT VÀ QUÉT...") 
-        else 
-            DungeonStatus:Set("Trạng thái Auto Exit: Đang tắt")
-            autoExitTriggered = false
-            stage20ClockStarted = false 
-        end 
-    end 
-})
-
-DungeonTab:CreateToggle({ 
-    Name = "Luôn Bật Tự Động Đánh (UI Click)", 
-    CurrentValue = false, 
-    Flag = "AutoAttack", 
-    Callback = function(Value) 
-        autoAttackEnabled = Value 
-    end 
-})
-
-DungeonTab:CreateToggle({ 
-    Name = "Tự Động Nhảy Vào Phòng Người Khác", 
-    CurrentValue = false, 
-    Flag = "AutoJoinOthers", 
-    Callback = function(Value) 
-        autoJoinOthersEnabled = Value 
-    end 
-})
-
--- TAB 5: TIỆN ÍCH & TỐI ƯU
-local OptimizationTab = Window:CreateTab("Tối Ưu", 4483345998)
-
-OptimizationTab:CreateToggle({ 
-    Name = "Chống AFK (Anti-Kick)", 
-    CurrentValue = false, 
-    Flag = "AntiAfk", 
-    Callback = function(Value) 
-        antiAfkEnabled = Value 
-    end 
-})
-
-OptimizationTab:CreateButton({ 
-    Name = "Kích hoạt Đồ Họa Siêu Thấp", 
-    Callback = function()
-        Lighting.GlobalShadows = false 
-        Lighting.FogEnd = 9e9 
-        Lighting.ShadowSoftness = 0
-        
-        if Lighting:FindFirstChildOfClass("Atmosphere") then 
-            Lighting:FindFirstChildOfClass("Atmosphere"):Destroy() 
-        end
-        
-        for _, v in ipairs(Workspace:GetDescendants()) do 
-            if v:IsA("BasePart") and not v:IsA("MeshPart") then 
-                v.Material = Enum.Material.SmoothPlastic 
-                v.Reflectance = 0 
-            elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") then 
-                v:Destroy() 
+                DungeonStatus:Set("Trạng thái Auto Exit: Đang tắt")
+                autoExitTriggered = false
+                stage20ClockStarted = false 
             end 
-        end
-        
-        Workspace.Terrain.WaterWaveSize = 0 
-        Workspace.Terrain.WaterWaveSpeed = 0 
-        Workspace.Terrain.WaterReflectance = 0 
-        Workspace.Terrain.WaterTransparency = 1
-        
-        Rayfield:Notify({ Title = "Tối ưu hóa", Content = "Đã chuyển về Potato Mode.", Duration = 3 })
-    end 
-})
-
-OptimizationTab:CreateToggle({ 
-    Name = "Giới Hạn 15 FPS", 
-    CurrentValue = false, 
-    Flag = "FpsLimiter", 
-    Callback = function(Value) 
-        if setfpscap then 
-            setfpscap(Value and 15 or originalFPS) 
         end 
-    end 
-})
+    })
 
-OptimizationTab:CreateToggle({ 
-    Name = "Tắt Render 3D", 
-    CurrentValue = false, 
-    Flag = "Disable3D", 
-    Callback = function(Value) 
-        pcall(function() 
-            RunService:Set3dRenderingEnabled(not Value) 
-        end) 
-    end 
-})
+    DungeonTab:CreateToggle({ 
+        Name = "Tự Động Nhảy Vào Phòng Người Khác", 
+        CurrentValue = false, 
+        Flag = "AutoJoinOthers", 
+        Callback = function(Value) autoJoinOthersEnabled = Value end 
+    })
 
--- TAB 5: SERVER
-local ServerTab = Window:CreateTab("Server", 4483362458)
-
-ServerTab:CreateButton({ 
-    Name = "Rejoin Server", 
-    Callback = function() 
-        TeleportService:Teleport(game.PlaceId, LocalPlayer) 
-    end 
-})
-
-ServerTab:CreateButton({ 
-    Name = "Rejoin Same Server", 
-    Callback = function() 
-        TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer) 
-    end 
-})
-
--- ====================================================================
--- TAB 6: WEBHOOK & THÔNG BÁO
--- ====================================================================
-local WebhookTab = Window:CreateTab("Webhook", 4483362458)
-
-WebhookTab:CreateSection("--- THIẾT LẬP DISCORD WEBHOOK ---")
-
-WebhookTab:CreateToggle({
-    Name = "Bật/Tắt Thông Báo Discord",
-    CurrentValue = false,
-    Flag = "WebhookToggleConfig", -- ĐẶT FLAG ĐỂ LƯU SESSION
-    Callback = function(Value)
-        webhookEnabled = Value
-    end,
-})
-
-WebhookTab:CreateInput({
-    Name = "Link Discord Webhook",
-    PlaceholderText = "Dán link Webhook của bạn vào đây...",
-    RemoveTextAfterFocusLost = false,
-    Flag = "WebhookUrlConfig", -- ĐẶT FLAG ĐỂ LƯU SESSION
-    Callback = function(Text)
-        currentWebhookURL = Text
-    end,
-})
-
-WebhookTab:CreateButton({
-    Name = "Gửi Thông Báo Test (Kiểm tra)",
-    Callback = function()
-        if currentWebhookURL == "" then
-            Rayfield:Notify({Title = "Lỗi", Content = "Vui lòng nhập Link Webhook trước!", Duration = 3})
-        elseif not string.find(currentWebhookURL, "api/webhooks") then
-            Rayfield:Notify({Title = "Lỗi", Content = "Link Webhook không hợp lệ!", Duration = 3})
-        else
-            SendDiscordNotification("🛠️ Test Webhook thành công! Hệ thống R-Client Pro đang hoạt động tốt.")
-            Rayfield:Notify({Title = "Thành công", Content = "Đã gửi thông báo test qua Discord!", Duration = 3})
-        end
-    end,
-})
-
--- ==========================================
--- [[ LOGIC CHẠY NGẦM R-Game (RGame) ]]
--- ==========================================
-
--- RGame: Auto Attack
-task.spawn(function()
-    local monstersFolder = Workspace:WaitForChild("Monsters", 10)
-    
-    while task.wait(0.2) do
-        if RGameSettings.autoAttack and not RGameSettings.isHealing and monstersFolder then
-            for _, monster in pairs(monstersFolder:GetChildren()) do
-                local id = tonumber(monster.Name:match("Monster_(%d+)"))
-                if id and MonsterSystem then 
-                    pcall(MonsterSystem.ClientAttackMonster, id) 
-                end
-            end
-        end
+    -- LOGIC QUÉT UI THOÁT
+    local function SafeExitRoutine()
+        local exitBtn = Utils.FindUIElementByName(playerGui, "BgLeave")
+        if exitBtn and exitBtn.AbsoluteSize.X > 0 then Utils.ClickButtonExact(exitBtn, "Nút Thoát") else autoExitTriggered = false return end
+        
+        task.wait(1.5)
+        local mainGui = playerGui:FindFirstChild("MainGui")
+        if mainGui and mainGui:FindFirstChild("ScreenGui") and mainGui.ScreenGui:FindFirstChild("ConfirmView") then
+            local fmBottom = mainGui.ScreenGui.ConfirmView:FindFirstChild("FmBottom")
+            if fmBottom and fmBottom:FindFirstChild("BtOk") and fmBottom.BtOk.AbsoluteSize.X > 0 then
+                for i = 1, 3 do Utils.ClickButtonExact(fmBottom.BtOk, "Nút Yes") task.wait(0.2) end
+            else autoExitTriggered = false return end
+        else autoExitTriggered = false return end
+        
+        task.wait(2.5)
+        local checkLabStage = Utils.FindUIElementByName(playerGui, "LabStage")
+        local currentStageText = checkLabStage and checkLabStage.Text or "Unknown"
+        if currentStageText == "Unknown" or not string.match(currentStageText, "20/20") then 
+            autoExitTriggered = false; stage20ClockStarted = false 
+        else autoExitTriggered = false end
     end
-end)
 
--- ====================================================================
--- R-Game: Auto Catch (Phiên bản Chuẩn Giao Thức Máy Chủ - Tích hợp Complete)
--- ====================================================================
-task.spawn(function()
-    while task.wait(0.5) do
-        if camSettings.autoCatch and not camSettings.isHealing then
+    -- VÒNG LẶP CORE
+    task.spawn(function()
+        while task.wait(0.5) do
             local char = LocalPlayer.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local humanoid = char and char:FindFirstChild("Humanoid")
             
-            if hrp then
-                local playerId = getPlayerId()
+            if not (hrp and humanoid and humanoid.Health > 0) then continue end
+            local labStage = Utils.FindUIElementByName(playerGui, "LabStage")
+            
+            -- [1] LOGIC AUTO ATTACK (TRICK PHÍM M)
+            if autoAttackEnabled and labStage and labStage.Text ~= "Unknown" and labStage.Text ~= "" then
                 local monstersFolder = Workspace:FindFirstChild("Monsters")
-                
+                local closestDist2D = math.huge
+                local bestTarget = nil
+
                 if monstersFolder then
-                    local targetCatch = nil
-                    local closestDist = math.huge
-                    
-                    -- BƯỚC 1: TÌM QUÁI (Đã bao gồm bộ lọc VIP nếu bạn đang dùng)
                     for _, monster in pairs(monstersFolder:GetChildren()) do
-                        if monster:IsA("BasePart") or monster:IsA("Model") then
-                            local id = tonumber(monster.Name:match("Monster_(%d+)"))
-                            if id then
-                                local catchTaken = monster:GetAttribute("CatchTakenPlayerId")
-                                -- Kiểm tra xem quái có bị người khác lấy chưa
-                                if not catchTaken or catchTaken == playerId then
-                                    local pos = monster:IsA("Model") and monster.PrimaryPart and monster.PrimaryPart.Position or monster.Position
-                                    local dist = (pos - hrp.Position).Magnitude
-                                    
-                                    if dist < closestDist then 
-                                        closestDist = dist
-                                        targetCatch = monster 
-                                    end
+                        if monster:IsA("Model") or monster:IsA("BasePart") then
+                            local hum = monster:FindFirstChildOfClass("Humanoid")
+                            if (not hum) or (hum and hum.Health > 0) then
+                                local pos = monster:IsA("Model") and monster.PrimaryPart and monster.PrimaryPart.Position or monster.Position
+                                
+                                -- TÍNH KHOẢNG CÁCH 2D ĐỂ KHÔNG BỊ LỪA KHI BAY CAO
+                                local dist2D = math.sqrt((hrp.Position.X - pos.X)^2 + (hrp.Position.Z - pos.Z)^2)
+                                
+                                if dist2D < closestDist2D then 
+                                    closestDist2D = dist2D
+                                    bestTarget = monster 
                                 end
                             end
                         end
                     end
+                end
+
+                if bestTarget then
+                    local targetPos = bestTarget:IsA("Model") and bestTarget.PrimaryPart and bestTarget.PrimaryPart.Position or bestTarget.Position
                     
-                    -- BƯỚC 2: TIẾN HÀNH BẮT CHUẨN GIAO THỨC
-                    if targetCatch and MonsterSystem then
-                        local targetId = tonumber(targetCatch.Name:match("Monster_(%d+)"))
-                        local targetPos = targetCatch:IsA("Model") and targetCatch.PrimaryPart and targetCatch.PrimaryPart.Position or targetCatch.Position
+                    if closestDist2D > 40 then
+                        -- TỐC BIẾN KHI Ở XA (Chỉ bấm M lên thú, dịch chuyển, KHÔNG bấm xuống nữa)
+                        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.M, false, game) task.wait() VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.M, false, game) task.wait(0.4)
+                        hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 0, 4)) task.wait(0.2)
+                        humanoid:MoveTo(hrp.Position) dungeonLastPosition = hrp.Position dungeonStuckTimer = 0
                         
-                        -- 2.1 Bay tới trên đầu quái
-                        hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0))
+                    elseif closestDist2D > 12 then
+                        -- CHẠY/BAY LẠI GẦN
+                        humanoid:MoveTo(targetPos)
+                        if dungeonLastPosition and (hrp.Position - dungeonLastPosition).Magnitude < 1 then
+                            dungeonStuckTimer = dungeonStuckTimer + 0.5
+                            if dungeonStuckTimer >= 3 then hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 0, 3)) dungeonStuckTimer = 0 end
+                        else dungeonStuckTimer = 0 end
+                        dungeonLastPosition = hrp.Position
                         
-                        -- 2.2 Gửi tín hiệu BẮT ĐẦU (Start)
-                        local success, isStarted, errData = pcall(MonsterSystem.ClientCatchMonsterStart, targetId)
+                    else
+                        -- ĐỦ TẦM ĐÁNH (< 12)
+                        humanoid:MoveTo(hrp.Position)
+                        dungeonStuckTimer = 0
                         
-                        -- Nếu túi đồ đầy, game sẽ trả về isStarted = false
-                        if success and isStarted == false then
-                            print("⚠️ TÚI ĐỒ CỦA BẠN ĐÃ ĐẦY! Hãy dọn dẹp hành trang.")
-                            -- Tạm dừng Auto Catch 5 giây để tránh spam server
-                            task.wait(5) 
-                        elseif success then
-                            -- Chờ 1.5 giây để game chạy hiệu ứng ném bóng
-                            task.wait(1.5)
-                            
-                            -- 2.3 Gửi tín hiệu KẾT THÚC (Complete) ĐỂ CHỐT ĐƠN!
-                            -- Đây là bước quan trọng nhất mà bản cũ còn thiếu
-                            pcall(MonsterSystem.ClientCatchMonsterComplete, targetId)
+                        -- FIX TUYỆT ĐỐI: Lợi dụng cơ chế gọi lệnh Attack để game tự động ép nhân vật đáp đất!
+                        -- Không cần dùng bất kỳ lệnh M hay Jump nào gây lỗi khóa phím ở đây nữa.
+                        local id = tonumber(bestTarget.Name:match("Monster_(%d+)"))
+                        if id and MonsterSystem then 
+                            MonsterSystem.ClientAttackMonster(id) 
                         end
+                    end
+                else 
+                    -- PHÒNG TRỐNG (Nơi duy nhất cần ép xuống thú thủ công vì không có quái để click)
+                    dungeonStuckTimer = 0 
+                    
+                    if humanoid.Sit then
+                        humanoid.Sit = false
+                        task.wait(0.1)
+                        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.M, false, game) 
+                        task.wait() 
+                        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.M, false, game)
+                        task.wait(0.2)
+                        humanoid.Jump = true 
                     end
                 end
             end
-        end
-    end
-end)
 
--- ====================================================================
--- R-Game: AUTO HEAL (BẢN CHUẨN - TRANG BỊ LOG F9 VÀ CHỐNG KẸT)
--- ====================================================================
-task.spawn(function()
-    while task.wait(1) do
-        if camSettings.autoHeal and not camSettings.isHealing then
-            pcall(function()
-                local petsFolder = Workspace:FindFirstChild("Pets")
-                if not petsFolder then return end
+            -- [2] LOGIC AUTO EXIT (Giữ nguyên)
+            if autoExitEnabled and not autoExitTriggered and labStage then
+                local fmTimeFrame = nil
+                pcall(function() fmTimeFrame = playerGui.MainGui.ScreenGui.ArenaMainRightTopView.FmTime end)
+                local currentStage, maxStage = string.match(labStage.Text, "(%d+)/(%d+)")
                 
-                local myId = tostring(LocalPlayer.UserId)
-                local hasDead = false
-                
-                -- BƯỚC 1: KIỂM TRA TÌNH TRẠNG PET
-                for _, pet in pairs(petsFolder:GetChildren()) do
-                    if string.find(pet.Name, myId) then
-                        local hpPart = pet:FindFirstChild("Health")
-                        if hpPart then
-                            local hpStr = tostring(hpPart.Value)
-                            local currentHp = tonumber(string.split(hpStr, ",")[1])
-                            
-                            if currentHp and currentHp <= 0 then
-                                hasDead = true
-                                break
-                            end
-                        end
+                if currentStage and maxStage and tonumber(currentStage) == tonumber(maxStage) then
+                    if fmTimeFrame and fmTimeFrame.Visible == true then
+                        if not stage20ClockStarted then stage20ClockStarted = true; DungeonStatus:Set("Trạng thái Auto Exit: Đồng hồ màn 20 đã chạy...") end
                     end
-                end
-
-                -- BƯỚC 2: TIẾN HÀNH HỒI MÁU NẾU PET CHẾT
-                if hasDead then
-                    camSettings.isHealing = true
-                    print("🚑 [Auto Heal] Phát hiện Pet chết! Bắt đầu quy trình hồi máu...")
-                    
-                    local char = LocalPlayer.Character
-                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                    
-                    if hrp then
-                        -- Lưu lại bãi Farm
-                        camSettings.savedPosition = hrp.CFrame
-                        
-                        -- Dò trạm Recover trên map hiện tại
-                        local bestRecoverPos = nil
-                        local minDist = math.huge
-                        local areaFolder = Workspace:FindFirstChild("Area")
-                        
-                        if areaFolder then
-                            for _, mapFolder in ipairs(areaFolder:GetChildren()) do
-                                local serverZone = mapFolder:FindFirstChild("ServerZone")
-                                local recoverFolder = serverZone and serverZone:FindFirstChild("Recover")
-                                
-                                if recoverFolder then
-                                    for _, recPart in ipairs(recoverFolder:GetDescendants()) do
-                                        if recPart:IsA("BasePart") then
-                                            local dist = (hrp.Position - recPart.Position).Magnitude
-                                            if dist < minDist then
-                                                minDist = dist
-                                                bestRecoverPos = recPart.Position
-                                            end
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                        
-                        if bestRecoverPos then
-                            print("🚀 [Auto Heal] Đang bay đến trạm hồi máu gần nhất...")
-                            hrp.CFrame = CFrame.new(bestRecoverPos + Vector3.new(0, 3, 0))
-                            task.wait(1)
-                            
-                            print("⏳ [Auto Heal] Đang chờ Pet hồi sinh (Tối đa 30s)...")
-                            task.wait(8) -- Chờ 8s mặc định để game xử lý
-                            
-                            -- Vòng lặp chờ chắc chắn Pet đã sống lại
-                            local startTime = os.time()
-                            local isStillDead = true
-                            
-                            while (os.time() - startTime < 30) and camSettings.autoHeal do
-                                isStillDead = false
-                                for _, pet in pairs(petsFolder:GetChildren()) do
-                                    if string.find(pet.Name, myId) then
-                                        local hpP = pet:FindFirstChild("Health")
-                                        if hpP then
-                                            local cHp = tonumber(string.split(tostring(hpP.Value), ",")[1])
-                                            if cHp and cHp <= 0 then
-                                                isStillDead = true
-                                                break
-                                            end
-                                        end
-                                    end
-                                end
-                                
-                                if not isStillDead then break end
-                                task.wait(0.5)
-                            end
-                            
-                            print("✅ [Auto Heal] Đã hồi máu xong! Bay về bãi farm...")
-                            if camSettings.savedPosition then
-                                hrp.CFrame = camSettings.savedPosition
-                            end
-                        else
-                            print("⚠️ [Auto Heal] Không tìm thấy bục Recover trên map hiện tại!")
-                        end
+                    if stage20ClockStarted and (not fmTimeFrame or fmTimeFrame.Visible == false) then
+                        autoExitTriggered = true
+                        DungeonStatus:Set("Trạng thái Auto Exit: Boss đã gục, chuẩn bị click thoát...")
+                        task.spawn(function() WebhookModule.SendNotification("**" .. LocalPlayer.Name .. "** vừa hoàn thành vòng Dungeon 20/20!") end)
+                        task.spawn(SafeExitRoutine)
                     end
-                    
-                    -- Reset trạng thái để tiếp tục farm
-                    camSettings.isHealing = false
-                    camSettings.savedPosition = nil
-                    print("🔄 [Auto Heal] Hoàn tất chu trình.")
-                end
-            end)
-            
-            -- Lớp phòng thủ cuối cùng: Nếu lỡ lỗi văng ra ngoài pcall, tự động gỡ kẹt
-            if camSettings.isHealing and not hasDead then
-                camSettings.isHealing = false
+                else stage20ClockStarted = false; autoExitTriggered = false end
             end
-        end
-    end
-end)
 
--- ==========================================
--- [[ LOGIC CHẠY NGẦM DUNGEON THỜI GIAN THỰC ]]
--- ==========================================
-local function SetupChat(p) 
-    p.Chatted:Connect(function(msg) 
-        if msg == "!f" then 
-            targetPlayer = p 
-            following = true 
-            StatusLabel:Set("Trạng thái: Đang theo dõi " .. p.Name) 
-        end 
-    end) 
-end
-
-for _, p in ipairs(Players:GetPlayers()) do 
-    if p ~= LocalPlayer then 
-        SetupChat(p) 
-    end 
-end
-Players.PlayerAdded:Connect(SetupChat)
-
-local mainCoroutine = coroutine.create(function()
-    while task.wait(0.5) do
-        -- 1. Logic Follow
-        if following and targetPlayer then
-            pcall(function()
-                local char = LocalPlayer.Character
-                local tChar = targetPlayer.Character
-                
-                if char and tChar and tChar:FindFirstChild("HumanoidRootPart") then
-                    missingTime = 0
-                    char.Humanoid:MoveTo(tChar.HumanoidRootPart.Position)
-                else
-                    if missingTime == 0 then 
-                        missingTime = os.time() 
-                    end
+            -- [3] LOGIC AUTO JOIN OTHERS (Giữ nguyên)
+            if autoJoinOthersEnabled and (not labStage or labStage.Text == "Unknown" or labStage.Text == "") then
+                pcall(function()
+                    local wArea = Workspace:FindFirstChild("Area")
+                    local center = wArea and wArea:FindFirstChild("center")
+                    local innerArea = center and center:FindFirstChild("Area")
+                    local abyssFolder = innerArea and innerArea:FindFirstChild("Abyss")
                     
-                    if os.time() - missingTime >= 30 and tChar and tChar:FindFirstChild("HumanoidRootPart") then
-                        char.HumanoidRootPart.CFrame = tChar.HumanoidRootPart.CFrame
-                        missingTime = 0
-                    end
-                end
-            end)
-        end
-
-        -- 2. Logic Auto Attack Dungeon (Bằng click UI)
-        if autoAttackEnabled then
-            pcall(function()
-                local mainGui = playerGui:FindFirstChild("MainGui")
-                if mainGui then
-                    local screenGui = mainGui:FindFirstChild("ScreenGui")
-                    if screenGui and screenGui:FindFirstChild("MainBottomView") then
-                        local fmAutoAttack = screenGui.MainBottomView:FindFirstChild("FmAutoAttack")
-                        if fmAutoAttack and fmAutoAttack:FindFirstChild("BtAutoOn") and fmAutoAttack.BtAutoOn.Visible and fmAutoAttack.BtAutoOn.AbsoluteSize.X > 0 then
-                            ClickButtonExact(fmAutoAttack.BtAutoOn, "Nút Bật Đánh")
-                        end
-                    end
-                end
-            end)
-        end
-
-        -- 3. Logic Auto Join & LeaveAth
-        local labStage = findUIElementByName(playerGui, "LabStage")
-        
-        if autoJoinOthersEnabled and (not labStage or labStage.Text == "Unknown") then
-            pcall(function()
-                local wArea = workspace:FindFirstChild("Area")
-                local center = wArea and wArea:FindFirstChild("center")
-                local innerArea = center and center:FindFirstChild("Area")
-                local abyssFolder = innerArea and innerArea:FindFirstChild("Abyss")
-                
-                if abyssFolder then
-                    local char = LocalPlayer.Character
-                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                    local humanoid = char and char:FindFirstChild("Humanoid")
-                    
-                    if hrp and humanoid and humanoid.Health > 0 then
+                    if abyssFolder then
                         local alreadyInSomeoneRoom = false
                         local shouldJumpOut = false
                         local jumpOutTarget = nil
@@ -1054,117 +268,8 @@ local mainCoroutine = coroutine.create(function()
                             task.wait(3)
                         end
                     end
-                end
-            end)
-        end
-
-        -- 4. Logic Auto-Exit Hầm Ngục
-        if autoExitEnabled and not autoExitTriggered then
-            local fmTimeFrame = nil
-            pcall(function() 
-                fmTimeFrame = playerGui.MainGui.ScreenGui.ArenaMainRightTopView.FmTime 
-            end)
-            
-            if labStage then
-                local currentStage, maxStage = string.match(labStage.Text, "(%d+)/(%d+)")
-                
-                if currentStage and maxStage and tonumber(currentStage) == tonumber(maxStage) then
-                    
-                    if fmTimeFrame and fmTimeFrame.Visible == true then
-                        if not stage20ClockStarted then 
-                            stage20ClockStarted = true 
-                            DungeonStatus:Set("Trạng thái Auto Exit: Đồng hồ màn 20 đã chạy...") 
-                        end
-                    end
-                    
-                    if stage20ClockStarted and (not fmTimeFrame or fmTimeFrame.Visible == false) then
-                        autoExitTriggered = true
-                        DungeonStatus:Set("Trạng thái Auto Exit: Boss đã gục, chuẩn bị click thoát...")
-                        
-                        task.spawn(function() 
-                            SendDiscordNotification("**" .. LocalPlayer.Name .. "** vừa hoàn thành một vòng Dungeon 20/20!") 
-                        end)
-                        
-                        task.spawn(SafeExitRoutine)
-                    end
-                else
-                    stage20ClockStarted = false
-                    autoExitTriggered = false
-                end
+                end)
             end
         end
-    end
-end)
-coroutine.resume(mainCoroutine)
-
--- Logic Anti-AFK
-LocalPlayer.Idled:Connect(function() 
-    if antiAfkEnabled then 
-        VirtualUser:CaptureController() 
-        VirtualUser:ClickButton2(Vector2.new()) 
-    end 
-end)
-
--- ====================================================================
--- LỚP PHỦ TỌA ĐỘ LIVE (KÉO THẢ ĐƯỢC)
--- ====================================================================
-local coordGui = Instance.new("ScreenGui", game.CoreGui)
-coordGui.Name = "CoordLiveGUI"
-
-local coordText = Instance.new("TextLabel", coordGui)
-coordText.Size = UDim2.new(0, 160, 0, 26)
-coordText.Position = UDim2.new(0.78, 0, 0.05, 0) -- Góc phải trên
-coordText.BackgroundTransparency = 1
-coordText.TextColor3 = Color3.fromRGB(0, 255, 0) -- Đổi sang màu xanh lá cho dễ nhìn
-coordText.Font = Enum.Font.Code
-coordText.TextSize = 16
-coordText.TextXAlignment = Enum.TextXAlignment.Left
-coordText.TextYAlignment = Enum.TextYAlignment.Top
-coordText.Text = "0 / 0 / 0"
-coordText.Active = true
-
--- Cập nhật tọa độ liên tục
-local RunService = game:GetService("RunService")
-RunService.RenderStepped:Connect(function()
-    local char = game.Players.LocalPlayer.Character
-    if char and char:FindFirstChild("HumanoidRootPart") then
-        local p = char.HumanoidRootPart.Position
-        coordText.Text = string.format("📍 %.1f / %.1f / %.1f", p.X, p.Y, p.Z)
-    end
-end)
-
--- Xử lý Kéo thả (Drag)
-local UserInputService = game:GetService("UserInputService")
-local dragging = false
-local dragStart = nil
-local startPos = nil
-
-coordText.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = true
-        dragStart = input.Position
-        startPos = coordText.Position
-    end
-end)
-
-coordText.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = false
-    end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
-        local delta = input.Position - dragStart
-        coordText.Position = UDim2.new(
-            startPos.X.Scale,
-            startPos.X.Offset + delta.X,
-            startPos.Y.Scale,
-            startPos.Y.Offset + delta.Y
-        )
-    end
-end)
-
-Rayfield:Notify({ Title = "Thành Công!", Content = "Bản Tool v2.0.0 (Tích hợp RGame) đã sẵn sàng!", Duration = 5 })
--- Load toàn bộ cấu hình đã lưu (Bao gồm Link Webhook, trạng thái Toggle, v.v.)
-Rayfield:LoadConfiguration()
+    end)
+end
