@@ -1,0 +1,254 @@
+-- ====================================================================
+-- R-CLIENT PRO: AUTO DUNGEON (ARRAYFIELD UI VERSION + FULL AUTO BUFF)
+-- ====================================================================
+local ArrayField = loadstring(game:HttpGet('https://raw.githubusercontent.com/UI-Interface/ArrayField/main/source.lua'))()
+
+local Window = ArrayField:CreateWindow({
+   Name = "R-Client Pro Tool",
+   LoadingTitle = "Đang tải hệ thống Farm...",
+   LoadingSubtitle = "Phiên bản Arrayfield",
+   ConfigurationSaving = { Enabled = true, FolderName = "RClientPro", FileName = "DungeonPrio" },
+   KeySystem = false
+})
+
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local player = Players.LocalPlayer
+
+-- ==========================================
+-- 1. BẢNG DỮ LIỆU & ĐỘ ƯU TIÊN
+-- ==========================================
+local ITEM_DATA = {
+    ["87744905975972"]  = "Thẻ Chọn Lại",
+    ["113200215489277"] = "Xu Shop",
+    ["109706574020670"] = "Quả EXP",
+    ["90131951298636"]  = "Đá Pet Xanh Lá",
+    ["128699832318992"] = "Đá Pet Xanh Dương",
+    ["112621630251036"] = "Xu Vàng",
+    ["113790583258911"] = "Đá Nguyên Tố"
+}
+
+local PrioritySettings = {
+    ["Thẻ Chọn Lại"] = 1,
+    ["Xu Vàng"] = 2,
+    ["Quả EXP"] = 3,
+    ["Xu Shop"] = 4,
+    ["Đá Pet Xanh Dương"] = 5,
+    ["Đá Pet Xanh Lá"] = 5,
+    ["Đá Nguyên Tố"] = 6
+}
+
+local isAutoEnabled = false
+
+-- ==========================================
+-- 2. XÂY DỰNG GIAO DIỆN ARRAYFIELD
+-- ==========================================
+local MainTab = Window:CreateTab("Hầm Ngục", 4483362458)
+local FilterTab = Window:CreateTab("Bộ Lọc Ưu Tiên", 4483362458)
+
+local StatusLog = MainTab:CreateLabel("Trạng thái: Đang chờ...")
+local DoorLog = MainTab:CreateLabel("Cửa: Chưa có dữ liệu")
+local TalentLog = MainTab:CreateLabel("Buff: Chưa có dữ liệu")
+
+MainTab:CreateToggle({
+    Name = "Bật Auto Hầm Ngục",
+    CurrentValue = false,
+    Flag = "AutoDungeonMain",
+    Callback = function(Value)
+        isAutoEnabled = Value
+        if not Value then StatusLog:Set("Trạng thái: Đã TẮT") end
+    end
+})
+
+FilterTab:CreateParagraph({Title = "Hướng dẫn", Content = "Kéo số càng NHỎ (1) thì độ ưu tiên càng CAO. Nếu 2 cửa bằng điểm nhau, hệ thống sẽ bỏ qua để game tự random."})
+
+local function CreatePrioSlider(name, default)
+    FilterTab:CreateSlider({
+        Name = "Ưu tiên: " .. name,
+        Range = {1, 10},
+        Increment = 1,
+        Suffix = "Hạng",
+        CurrentValue = default,
+        Flag = "Slider_" .. name,
+        Callback = function(Value) PrioritySettings[name] = Value end
+    })
+end
+
+for name, defVal in pairs(PrioritySettings) do
+    CreatePrioSlider(name, defVal)
+end
+
+-- ==========================================
+-- 3. HÀM ĐỌC VÀ CHỌN BUFF (TỪ LOGIC CŨ)
+-- ==========================================
+local function AutoPickBuff()
+    local mainGui = player.PlayerGui:FindFirstChild("MainGui")
+    local tViewOuter = mainGui and mainGui:FindFirstChild("AbyssSelectTalentView")
+    local tViewInner = tViewOuter and tViewOuter:FindFirstChild("AbyssSelectTalentView")
+    local fmContent = tViewInner and tViewInner:FindFirstChild("FmContent")
+    
+    if not fmContent then return false end
+    
+    local priorityKeywords = {
+        "sát thương chí mạng", "critical damage", "crit",
+        "chí mạng", "critical",
+        "sát thương", "attack", "damage",
+        "tấn công", 
+        "hp", "bandage", "heal", "shield"
+    }
+    
+    local bestItemCell = nil
+    local bestScore = 999 
+    
+    for _, itemCell in pairs(fmContent:GetChildren()) do
+        if itemCell:IsA("GuiObject") and itemCell.Name == "ItemCell" and itemCell.Visible == true then
+            local buffText = ""
+            for _, child in pairs(itemCell:GetDescendants()) do
+                if child:IsA("TextLabel") and child.Text ~= "" and string.len(child.Text) > 2 then
+                    buffText = buffText .. " " .. string.lower(child.Text)
+                end
+            end
+            for score, keyword in ipairs(priorityKeywords) do
+                if string.find(buffText, keyword) then
+                    if score < bestScore then
+                        bestScore = score
+                        bestItemCell = itemCell
+                    end
+                    break 
+                end
+            end
+        end
+    end
+    
+    if not bestItemCell then
+        for _, itemCell in pairs(fmContent:GetChildren()) do
+            if itemCell:IsA("GuiObject") and itemCell.Name == "ItemCell" and itemCell.Visible == true then
+                bestItemCell = itemCell; break
+            end
+        end
+    end
+    
+    if bestItemCell then
+        local btSelect = bestItemCell:FindFirstChild("BtSelect")
+        if btSelect and btSelect.AbsoluteSize.X > 0 then
+            local targetX = btSelect.AbsolutePosition.X + (btSelect.AbsoluteSize.X / 2)
+            local targetY = btSelect.AbsolutePosition.Y + (btSelect.AbsoluteSize.Y / 2) + 36 
+            VirtualInputManager:SendMouseButtonEvent(targetX, targetY, 0, true, game, 1)
+            task.wait(0.1)
+            VirtualInputManager:SendMouseButtonEvent(targetX, targetY, 0, false, game, 1)
+            return true
+        end
+    end
+    return false
+end
+
+-- ==========================================
+-- 4. VÒNG LẶP CORE (XỬ LÝ CỬA VÀ BUFF)
+-- ==========================================
+task.spawn(function()
+    local lastPosition = nil
+    local hasHandledTalentThisRoom = false
+    local isProcessing = false
+
+    while task.wait(0.5) do
+        if not isAutoEnabled then continue end
+
+        local char = player.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        
+        if not hrp or not hum or hum.Health <= 0 then continue end
+
+        -- KIỂM TRA CHUYỂN TẦNG (RESET)
+        if lastPosition and (hrp.Position - lastPosition).Magnitude > 20 then
+            hasHandledTalentThisRoom = false
+            isProcessing = false
+            StatusLog:Set("Trạng thái: Vừa qua tầng mới!")
+            DoorLog:Set("Cửa: Đang quét...")
+            TalentLog:Set("Buff: Đang quét...")
+            task.wait(1)
+        end
+        lastPosition = hrp.Position
+
+        if isProcessing then continue end
+
+        -- BƯỚC 1: QUÉT CỬA
+        local foundDoors = {}
+        for _, obj in pairs(Workspace:GetDescendants()) do
+            if obj:IsA("BillboardGui") and obj.Name == "AbyssDoorInfo" then
+                local icon = obj:FindFirstChild("ImgIcon", true)
+                local imgId = icon and string.match(icon.Image, "id=(%d+)")
+                local doorName = imgId and ITEM_DATA[imgId] or "Ảnh Lạ"
+                local doorPart = obj.Parent
+                
+                if doorPart and doorPart:IsA("BasePart") then
+                    table.insert(foundDoors, {
+                        name = doorName, 
+                        part = doorPart, 
+                        score = PrioritySettings[doorName] or 10 -- Lấy điểm từ UI
+                    })
+                end
+            end
+        end
+
+        local chosenDoor = nil
+        if #foundDoors == 2 then
+            if foundDoors[1].score < foundDoors[2].score then
+                chosenDoor = foundDoors[1]
+            elseif foundDoors[2].score < foundDoors[1].score then
+                chosenDoor = foundDoors[2]
+            else
+                -- 2 Cửa điểm bằng nhau -> Skip
+                chosenDoor = nil
+            end
+        elseif #foundDoors == 1 then
+            chosenDoor = foundDoors[1]
+        end
+
+        if not chosenDoor then
+            DoorLog:Set("Cửa: GIỐNG NHAU HOẶC KHÔNG TỐT -> BỎ QUA")
+            continue 
+        else
+            DoorLog:Set("Cửa Đã Chọn: " .. chosenDoor.name .. " (Hạng " .. chosenDoor.score .. ")")
+        end
+
+        -- BƯỚC 2: XỬ LÝ BUFF VÀ ĐI RA CỬA
+        if not hasHandledTalentThisRoom then
+            isProcessing = true
+            
+            local abyssTalent = Workspace:FindFirstChild("AbyssTalent")
+            
+            if abyssTalent then
+                TalentLog:Set("Buff: Đang chạy đến lấy...")
+                
+                local talentPos = abyssTalent:IsA("Model") and abyssTalent.PrimaryPart and abyssTalent.PrimaryPart.Position or abyssTalent.Position
+                hum:MoveTo(talentPos)
+                
+                local timeout = tick() + 3
+                repeat task.wait(0.1) until (hrp.Position - talentPos).Magnitude < 7 or tick() > timeout
+                hum:MoveTo(hrp.Position)
+                
+                local prompt = abyssTalent:FindFirstChildWhichIsA("ProximityPrompt", true)
+                if prompt then
+                    fireproximityprompt(prompt)
+                else
+                    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                    task.wait(0.1)
+                    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                end
+                
+                task.wait(0.5)
+                AutoPickBuff()
+                TalentLog:Set("Buff: Đã lấy xong. Chạy ra Cửa!")
+            else
+                TalentLog:Set("Buff: Không thấy ở tầng này.")
+            end
+
+            -- BƯỚC 3: CHẠY RA CỬA VÀ ĐỨNG CHỜ
+            StatusLog:Set("Trạng thái: Đang đứng trên bục Cửa...")
+            hum:MoveTo(chosenDoor.part.Position)
+            hasHandledTalentThisRoom = true
+        end
+    end
+end)
