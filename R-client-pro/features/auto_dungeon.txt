@@ -133,7 +133,8 @@ return function(Window, Utils, WebhookModule)
             if not (hrp and humanoid and humanoid.Health > 0) then continue end
             local labStage = Utils.FindUIElementByName(playerGui, "LabStage")
             
-if autoAttackEnabled and labStage and labStage.Text ~= "Unknown" and labStage.Text ~= "" then
+-- [1] LOGIC AUTO ATTACK (TRICK PHÍM M)
+            if autoAttackEnabled and labStage and labStage.Text ~= "Unknown" and labStage.Text ~= "" then
                 local monstersFolder = Workspace:FindFirstChild("Monsters")
                 local closestDist2D = math.huge
                 local bestTarget = nil
@@ -188,9 +189,9 @@ if autoAttackEnabled and labStage and labStage.Text ~= "Unknown" and labStage.Te
                     end
                 else 
                     -- KHÔNG TÌM THẤY QUÁI (PHÒNG TRỐNG)
-                    dungeonStuckTimer = 0
+                    dungeonStuckTimer = 0 
                     
-                    -- 1. Ép xuống thú nếu đang cưỡi
+                    -- Chỉ giữ lại logic ép xuống thú nếu đang cưỡi để tránh lỗi di chuyển
                     if humanoid.Sit then
                         humanoid.Sit = false
                         task.wait(0.1)
@@ -200,54 +201,9 @@ if autoAttackEnabled and labStage and labStage.Text ~= "Unknown" and labStage.Te
                         task.wait(0.2)
                         humanoid.Jump = true 
                     end
-
-                    -- 2. Quản lý cờ Buff theo Màn chơi
-                    local stageText = labStage.Text
-                    if stageText ~= currentStageMemory then
-                        currentStageMemory = stageText
-                        hasClaimedBuff = false -- Reset cờ cho phòng mới
-                    end
-
-                    -- 3. Quét tìm Cột Buff và Cửa
-                    local talent = Workspace:FindFirstChild("AbyssTalent")
-                    local door = Workspace:FindFirstChild("AbyssDoor")
-
-                    if talent and not hasClaimedBuff then
-                        -- Lấy tọa độ thật của mặt đất dưới chân Cột Buff
-                        local talentRawPos = talent:IsA("Model") and talent.PrimaryPart and talent.PrimaryPart.Position or talent.Position
-                        local safeTalentPos = GetGroundPosition(talentRawPos)
-                        
-                        -- Điều hướng nhân vật chạy tới
-                        humanoid:MoveTo(safeTalentPos)
-                        
-                        -- Nếu đã đến sát Cột Buff
-                        if (hrp.Position - safeTalentPos).Magnitude < 7 then
-                            -- Ép dừng di chuyển hoàn toàn để đứng im
-                            humanoid:MoveTo(hrp.Position)
-                            task.wait(0.1)
-                            
-                            -- Kích hoạt phím E để mở bảng nhận buff
-                            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-                            task.wait(0.1)
-                            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-                            
-                            -- ĐỨNG IM ĐỢI ĐÚNG 1.5 GIÂY THEO YÊU CẦU
-                            task.wait(1.5)
-                            
-                            -- Sau khi hết 1.5 giây, đổi trạng thái sang true để vòng sau chạy ra cửa
-                            hasClaimedBuff = true 
-                        end
-                        
-                    elseif door then
-                        -- Đã lấy buff xong (hoặc phòng không có buff) -> Đi tìm Cửa
-                        local doorRawPos = door:IsA("Model") and door.PrimaryPart and door.PrimaryPart.Position or door.Position
-                        local safeDoorPos = GetGroundPosition(doorRawPos)
-                        
-                        -- Điều hướng nhân vật chạy thẳng vào cửa
-                        humanoid:MoveTo(safeDoorPos)
-                    end
                 end
             end
+            
 
             -- [2] LOGIC AUTO EXIT (Giữ nguyên)
             if autoExitEnabled and not autoExitTriggered and labStage then
