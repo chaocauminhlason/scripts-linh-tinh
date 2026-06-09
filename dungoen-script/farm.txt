@@ -1,120 +1,251 @@
--- ====================================================================
--- R-CLIENT PRO: AUTO DUNGEON (ARRAYFIELD UI VERSION + FULL AUTO BUFF)
--- ====================================================================
-local ArrayField = loadstring(game:HttpGet('https://raw.githubusercontent.com/UI-Interface/ArrayField/main/source.lua'))()
-
-local Window = ArrayField:CreateWindow({
-   Name = "R-Client Pro Tool",
-   LoadingTitle = "Đang tải hệ thống Farm...",
-   LoadingSubtitle = "Phiên bản Arrayfield",
-   ConfigurationSaving = { Enabled = true, FolderName = "RClientPro", FileName = "DungeonPrio" },
-   KeySystem = false
-})
-
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
-local VirtualInputManager = game:GetService("VirtualInputManager")
+local UserInputService = game:GetService("UserInputService")
+
 local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
 
--- ==========================================
--- 1. BẢNG DỮ LIỆU & ĐỘ ƯU TIÊN
--- ==========================================
+local isAutoEnabled = true
+local isProcessing = false 
+local hasHandledTalentThisRoom = false 
+
+-- BIẾN KIỂM SOÁT ĐỒNG HỒ & TRẠNG THÁI MÀN
+local clockHasStarted = false 
+local waveCleared = false 
+local roomEnterTime = tick()
+
+local lastPosition = nil
+local TELEPORT_THRESHOLD = 20
+local isWaitingForTeleport = false
+
+-- BẢNG DỮ LIỆU ID CỬA TỪ GAME
 local ITEM_DATA = {
-    ["87744905975972"]  = "Thẻ Chọn Lại",
-    ["113200215489277"] = "Xu Shop",
-    ["109706574020670"] = "Quả EXP",
-    ["90131951298636"]  = "Đá Pet Xanh Lá",
-    ["128699832318992"] = "Đá Pet Xanh Dương",
-    ["112621630251036"] = "Xu Vàng",
-    ["113790583258911"] = "Đá Nguyên Tố"
+    ["87744905975972"]  = {name = "Thẻ Chọn Lại"},
+    ["113200215489277"] = {name = "Xu Shop"},
+    ["109706574020670"] = {name = "Quả EXP"},
+    ["90131951298636"]  = {name = "Đá Pet Xanh Lá"},
+    ["128699832318992"] = {name = "Đá Pet Xanh Dương"},
+    ["112621630251036"] = {name = "Xu Vàng"},
+    ["113790583258911"] = {name = "Đá Nguyên Tố"},
+    ["131631968594060"] = {name = "Đá Nguyên Tố"},
+    ["80309386409639"]  = {name = "Đá Nguyên Tố"},
+    ["114256696559128"] = {name = "Đá Nguyên Tố"},
+    ["113226220478841"] = {name = "Phòng Boss"},
+    ["119335826432425"] = {name = "Phòng Boss"},
+    ["97568742355714"]  = {name = "Phòng Hồi Sinh"}
 }
 
-local PrioritySettings = {
-    ["Thẻ Chọn Lại"] = 1,
-    ["Xu Vàng"] = 2,
-    ["Quả EXP"] = 3,
-    ["Xu Shop"] = 4,
-    ["Đá Pet Xanh Dương"] = 5,
-    ["Đá Pet Xanh Lá"] = 5,
-    ["Đá Nguyên Tố"] = 6
+-- DANH SÁCH ƯU TIÊN DẠNG MẢNG ĐỘNG
+local PriorityList = {
+    "Thẻ Chọn Lại",
+    "Phòng Hồi Sinh",
+    "Xu Shop",
+    "Đá Pet Xanh Dương",
+    "Đá Pet Xanh Lá",
+    "Quả EXP"
 }
 
-local isAutoEnabled = false
+local PriorityScores = {}
 
 -- ==========================================
--- 2. XÂY DỰNG GIAO DIỆN ARRAYFIELD
+-- GIAO DIỆN UI (TÍCH HỢP COLLAPSIBLE DROPDOWN)
 -- ==========================================
-local MainTab = Window:CreateTab("Hầm Ngục", 4483362458)
-local FilterTab = Window:CreateTab("Bộ Lọc Ưu Tiên", 4483362458)
+if player:WaitForChild("PlayerGui"):FindFirstChild("AbyssStrategyUI") then
+    player.PlayerGui.AbyssStrategyUI:Destroy()
+end
 
-local StatusLog = MainTab:CreateLabel("Trạng thái: Đang chờ...")
-local DoorLog = MainTab:CreateLabel("Cửa: Chưa có dữ liệu")
-local TalentLog = MainTab:CreateLabel("Buff: Chưa có dữ liệu")
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AbyssStrategyUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player.PlayerGui
 
-MainTab:CreateToggle({
-    Name = "Bật Auto Hầm Ngục",
-    CurrentValue = false,
-    Flag = "AutoDungeonMain",
-    Callback = function(Value)
-        isAutoEnabled = Value
-        if not Value then StatusLog:Set("Trạng thái: Đã TẮT") end
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 380, 0, 165) -- Kích thước mặc định lúc thu gọn
+mainFrame.Position = UDim2.new(0.05, 0, 0.2, 0) 
+mainFrame.BackgroundColor3 = Color3.fromRGB(20, 22, 28) 
+mainFrame.Active = true 
+mainFrame.ClipsDescendants = true -- Cắt phần dư khi thu gọn
+mainFrame.Parent = screenGui
+
+local mDragging, mDragInput, mDragStart, mStartPos
+mainFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        mDragging = true mDragStart = input.Position mStartPos = mainFrame.Position
+        input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then mDragging = false end end)
     end
-})
+end)
+mainFrame.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then mDragInput = input end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if input == mDragInput and mDragging then
+        local delta = input.Position - mDragStart
+        mainFrame.Position = UDim2.new(mStartPos.X.Scale, mStartPos.X.Offset + delta.X, mStartPos.Y.Scale, mStartPos.Y.Offset + delta.Y)
+    end
+end)
 
-FilterTab:CreateParagraph({Title = "Hướng dẫn", Content = "Kéo số càng NHỎ (1) thì độ ưu tiên càng CAO. Nếu 2 cửa bằng điểm nhau, hệ thống sẽ bỏ qua để game tự random."})
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 12)
 
-local function CreatePrioSlider(name, default)
-    FilterTab:CreateSlider({
-        Name = "Ưu tiên: " .. name,
-        Range = {1, 10},
-        Increment = 1,
-        Suffix = "Hạng",
-        CurrentValue = default,
-        Flag = "Slider_" .. name,
-        Callback = function(Value) PrioritySettings[name] = Value end
-    })
-end
+local title = Instance.new("TextLabel") title.Size = UDim2.new(0.6, 0, 0, 50) title.Position = UDim2.new(0, 12, 0, 0) title.BackgroundTransparency = 1 title.Text = "⚙️ AUTO ABYSS V4.1 (COMPACT)" title.TextColor3 = Color3.fromRGB(0, 210, 255) title.TextSize = 12 title.Font = Enum.Font.SourceSansBold title.TextXAlignment = Enum.TextXAlignment.Left title.Parent = mainFrame
+local toggleBtn = Instance.new("TextButton") toggleBtn.Size = UDim2.new(0, 95, 0, 30) toggleBtn.Position = UDim2.new(0.72, 0, 0, 10) toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 90) toggleBtn.Text = "🔴 AUTO: ON" toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255) toggleBtn.Font = Enum.Font.SourceSansBold toggleBtn.TextSize = 11 toggleBtn.Parent = mainFrame
+Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 6)
 
-for name, defVal in pairs(PrioritySettings) do
-    CreatePrioSlider(name, defVal)
-end
+local logTalent = Instance.new("TextLabel") logTalent.Size = UDim2.new(1, -20, 0, 35) logTalent.Position = UDim2.new(0, 10, 0, 55) logTalent.BackgroundColor3 = Color3.fromRGB(35, 40, 50) logTalent.Text = "TALENT: ĐANG CHỜ PHÒNG..." logTalent.TextColor3 = Color3.fromRGB(200, 200, 200) logTalent.TextSize = 12 logTalent.Font = Enum.Font.SourceSansBold logTalent.Parent = mainFrame
+Instance.new("UICorner", logTalent).CornerRadius = UDim.new(0, 6)
+local logDoor = Instance.new("TextLabel") logDoor.Size = UDim2.new(1, -20, 0, 35) logDoor.Position = UDim2.new(0, 10, 0, 95) logDoor.BackgroundColor3 = Color3.fromRGB(35, 40, 50) logDoor.Text = "CỬA: ĐANG QUÉT..." logDoor.TextColor3 = Color3.fromRGB(200, 200, 200) logDoor.TextSize = 12 logDoor.Font = Enum.Font.SourceSansBold logDoor.Parent = mainFrame
+Instance.new("UICorner", logDoor).CornerRadius = UDim.new(0, 6)
+
+-- NÚT BẤM DROPDOWN MỞ RỘNG DANH SÁCH
+local isListOpen = false
+local sectionToggleBtn = Instance.new("TextButton")
+sectionToggleBtn.Size = UDim2.new(1, -20, 0, 25)
+sectionToggleBtn.Position = UDim2.new(0, 10, 0, 135)
+sectionToggleBtn.BackgroundColor3 = Color3.fromRGB(45, 50, 65)
+sectionToggleBtn.Text = "⚙️ BẢNG ĐIỀU CHỈNH THỨ TỰ ƯU TIÊN ▼"
+sectionToggleBtn.TextColor3 = Color3.fromRGB(255, 170, 0)
+sectionToggleBtn.TextSize = 12
+sectionToggleBtn.Font = Enum.Font.SourceSansBold
+sectionToggleBtn.Parent = mainFrame
+Instance.new("UICorner", sectionToggleBtn).CornerRadius = UDim.new(0, 6)
+
+-- VÙNG HIỂN THỊ DANH SÁCH (BỊ ẨN KHI THU GỌN)
+local orderScroll = Instance.new("ScrollingFrame") orderScroll.Size = UDim2.new(1, -20, 0, 180) orderScroll.Position = UDim2.new(0, 10, 0, 165) orderScroll.BackgroundColor3 = Color3.fromRGB(28, 30, 38) orderScroll.BorderSizePixel = 0 orderScroll.ScrollBarThickness = 4 orderScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y orderScroll.Parent = mainFrame
+local orderListLayout = Instance.new("UIListLayout") orderListLayout.Padding = UDim.new(0, 4) orderListLayout.Parent = orderScroll
+Instance.new("UICorner", orderScroll).CornerRadius = UDim.new(0, 6)
+
+local footerHint = Instance.new("TextLabel") footerHint.Size = UDim2.new(1, -20, 0, 20) footerHint.Position = UDim2.new(0, 10, 0, 345) footerHint.BackgroundTransparency = 1 footerHint.Text = "* Các mục ngoài danh sách mặc định là rác (Hạng 99)" footerHint.TextColor3 = Color3.fromRGB(130, 135, 145) footerHint.TextSize = 11 footerHint.Font = Enum.Font.SourceSansItalic footerHint.TextXAlignment = Enum.TextXAlignment.Left footerHint.Parent = mainFrame
+
+-- LOGIC MỞ/ĐÓNG MENU XỔ XUỐNG
+sectionToggleBtn.MouseButton1Click:Connect(function()
+    isListOpen = not isListOpen
+    if isListOpen then
+        sectionToggleBtn.Text = "⚙️ BẢNG ĐIỀU CHỈNH THỨ TỰ ƯU TIÊN ▲"
+        mainFrame.Size = UDim2.new(0, 380, 0, 370) -- Phóng to
+    else
+        sectionToggleBtn.Text = "⚙️ BẢNG ĐIỀU CHỈNH THỨ TỰ ƯU TIÊN ▼"
+        mainFrame.Size = UDim2.new(0, 380, 0, 165) -- Thu nhỏ
+    end
+end)
 
 -- ==========================================
--- 3. HÀM ĐỌC VÀ CHỌN BUFF (TỪ LOGIC CŨ)
+-- CƠ CHẾ REFRESH VÀ RENDER INLINE BUTTONS
 -- ==========================================
+local function Refresh()
+    for k in pairs(PriorityScores) do PriorityScores[k] = nil end
+    for index, name in ipairs(PriorityList) do PriorityScores[name] = index end
+    
+    for _, child in ipairs(orderScroll:GetChildren()) do
+        if child:IsA("Frame") then child:Destroy() end
+    end
+    
+    for index, name in ipairs(PriorityList) do
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, -10, 0, 28)
+        row.BackgroundColor3 = Color3.fromRGB(35, 38, 48)
+        row.Parent = orderScroll
+        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
+        
+        local txt = Instance.new("TextLabel")
+        txt.Size = UDim2.new(0.6, 0, 1, 0)
+        txt.Position = UDim2.new(0, 8, 0, 0)
+        txt.BackgroundTransparency = 1
+        txt.Text = string.format("Hạng %d: %s", index, name)
+        txt.TextColor3 = Color3.fromRGB(220, 220, 220)
+        txt.Font = Enum.Font.SourceSansBold
+        txt.TextSize = 13
+        txt.TextXAlignment = Enum.TextXAlignment.Left
+        txt.Parent = row
+
+        if index > 1 then
+            local btnUp = Instance.new("TextButton")
+            btnUp.Size = UDim2.new(0, 40, 0, 22)
+            btnUp.Position = UDim2.new(0.65, 0, 0, 3)
+            btnUp.BackgroundColor3 = Color3.fromRGB(0, 150, 100)
+            btnUp.Text = "▲ Lên"
+            btnUp.TextColor3 = Color3.fromRGB(255, 255, 255)
+            btnUp.Font = Enum.Font.SourceSansBold
+            btnUp.TextSize = 11
+            Instance.new("UICorner", btnUp).CornerRadius = UDim.new(0, 4)
+            btnUp.Parent = row
+            
+            btnUp.MouseButton1Click:Connect(function()
+                PriorityList[index], PriorityList[index - 1] = PriorityList[index - 1], PriorityList[index]
+                Refresh()
+            end)
+        end
+
+        if index < #PriorityList then
+            local btnDown = Instance.new("TextButton")
+            btnDown.Size = UDim2.new(0, 45, 0, 22)
+            btnDown.Position = UDim2.new(0.8, 0, 0, 3)
+            btnDown.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+            btnDown.Text = "▼ Xuống"
+            btnDown.TextColor3 = Color3.fromRGB(255, 255, 255)
+            btnDown.Font = Enum.Font.SourceSansBold
+            btnDown.TextSize = 11
+            Instance.new("UICorner", btnDown).CornerRadius = UDim.new(0, 4)
+            btnDown.Parent = row
+            
+            btnDown.MouseButton1Click:Connect(function()
+                PriorityList[index], PriorityList[index + 1] = PriorityList[index + 1], PriorityList[index]
+                Refresh()
+            end)
+        end
+    end
+end
+
+Refresh()
+
+-- Toggle bật tắt
+toggleBtn.MouseButton1Click:Connect(function()
+    isAutoEnabled = not isAutoEnabled
+    if isAutoEnabled then
+        toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 90) toggleBtn.Text = "AUTO: ON"
+        logTalent.Text = "TRẠNG THÁI: ĐANG CHỜ ĐỒNG HỒ..." logTalent.TextColor3 = Color3.fromRGB(200, 200, 200)
+        logDoor.Text = "CỬA: ĐANG QUÉT..." logDoor.TextColor3 = Color3.fromRGB(200, 200, 200)
+    else
+        toggleBtn.BackgroundColor3 = Color3.fromRGB(170, 40, 40) toggleBtn.Text = "AUTO: OFF"
+        logTalent.Text = "ĐÃ TẠM DỪNG AUTO" logTalent.TextColor3 = Color3.fromRGB(150, 150, 150)
+        logDoor.Text = "ĐÃ TẠM DỪNG AUTO" logDoor.TextColor3 = Color3.fromRGB(150, 150, 150)
+        isProcessing = false 
+        pcall(function() if player.Character and player.Character:FindFirstChild("Humanoid") then player.Character.Humanoid:MoveTo(player.Character.HumanoidRootPart.Position) end end)
+    end
+end)
+
+-- ==========================================
+-- HÀM HỖ TRỢ ĐIỀU HƯỚNG VÀ BUFF
+-- ==========================================
+local function walkToTarget(targetPosition)
+    local hum = character:FindFirstChildOfClass("Humanoid")
+    local root = character:FindFirstChild("HumanoidRootPart")
+    if hum and root then
+        hum:MoveTo(targetPosition)
+        local timeout = 0
+        while (root.Position - targetPosition).Magnitude > 4 and timeout < 60 do
+            if not isAutoEnabled or not isProcessing then hum:MoveTo(root.Position) return end
+            task.wait(0.1) timeout = timeout + 1
+            hum:MoveTo(targetPosition) 
+        end
+    end
+end
+
 local function AutoPickBuff()
     local mainGui = player.PlayerGui:FindFirstChild("MainGui")
-    local tViewOuter = mainGui and mainGui:FindFirstChild("AbyssSelectTalentView")
-    local tViewInner = tViewOuter and tViewOuter:FindFirstChild("AbyssSelectTalentView")
-    local fmContent = tViewInner and tViewInner:FindFirstChild("FmContent")
-    
+    local fmContent = mainGui and mainGui:FindFirstChild("AbyssSelectTalentView") and mainGui.AbyssSelectTalentView:FindFirstChild("AbyssSelectTalentView") and mainGui.AbyssSelectTalentView.AbyssSelectTalentView:FindFirstChild("FmContent")
     if not fmContent then return false end
     
-    local priorityKeywords = {
-        "sát thương chí mạng", "critical damage", "crit",
-        "chí mạng", "critical",
-        "sát thương", "attack", "damage",
-        "tấn công", 
-        "hp", "bandage", "heal", "shield"
-    }
-    
-    local bestItemCell = nil
-    local bestScore = 999 
+    local priorityKeywords = {"sát thương chí mạng", "critical damage", "crit", "chí mạng", "critical", "sát thương", "attack", "damage", "tấn công", "hp", "bandage", "heal", "shield"}
+    local bestItemCell, bestScore = nil, 999 
     
     for _, itemCell in pairs(fmContent:GetChildren()) do
         if itemCell:IsA("GuiObject") and itemCell.Name == "ItemCell" and itemCell.Visible == true then
             local buffText = ""
             for _, child in pairs(itemCell:GetDescendants()) do
-                if child:IsA("TextLabel") and child.Text ~= "" and string.len(child.Text) > 2 then
-                    buffText = buffText .. " " .. string.lower(child.Text)
-                end
+                if child:IsA("TextLabel") and child.Text ~= "" and string.len(child.Text) > 2 then buffText = buffText .. " " .. string.lower(child.Text) end
             end
             for score, keyword in ipairs(priorityKeywords) do
                 if string.find(buffText, keyword) then
-                    if score < bestScore then
-                        bestScore = score
-                        bestItemCell = itemCell
-                    end
+                    if score < bestScore then bestScore = score; bestItemCell = itemCell end
                     break 
                 end
             end
@@ -123,9 +254,7 @@ local function AutoPickBuff()
     
     if not bestItemCell then
         for _, itemCell in pairs(fmContent:GetChildren()) do
-            if itemCell:IsA("GuiObject") and itemCell.Name == "ItemCell" and itemCell.Visible == true then
-                bestItemCell = itemCell; break
-            end
+            if itemCell:IsA("GuiObject") and itemCell.Name == "ItemCell" and itemCell.Visible == true then bestItemCell = itemCell; break end
         end
     end
     
@@ -134,8 +263,8 @@ local function AutoPickBuff()
         if btSelect and btSelect.AbsoluteSize.X > 0 then
             local targetX = btSelect.AbsolutePosition.X + (btSelect.AbsoluteSize.X / 2)
             local targetY = btSelect.AbsolutePosition.Y + (btSelect.AbsoluteSize.Y / 2) + 36 
-            VirtualInputManager:SendMouseButtonEvent(targetX, targetY, 0, true, game, 1)
-            task.wait(0.1)
+            local VirtualInputManager = game:GetService("VirtualInputManager")
+            VirtualInputManager:SendMouseButtonEvent(targetX, targetY, 0, true, game, 1) task.wait(0.1)
             VirtualInputManager:SendMouseButtonEvent(targetX, targetY, 0, false, game, 1)
             return true
         end
@@ -143,112 +272,225 @@ local function AutoPickBuff()
     return false
 end
 
+player.CharacterAdded:Connect(function(newChar)
+    character = newChar
+    lastPosition = nil 
+    isWaitingForTeleport = false
+end)
+
 -- ==========================================
--- 4. VÒNG LẶP CORE (XỬ LÝ CỬA VÀ BUFF)
+-- VÒNG LẶP KIỂM TRA MÁY TRẠNG THÁI (ĐỒNG HỒ & SẢNH CHỜ)
 -- ==========================================
 task.spawn(function()
-    local lastPosition = nil
-    local hasHandledTalentThisRoom = false
-    local isProcessing = false
-
-    while task.wait(0.5) do
-        if not isAutoEnabled then continue end
-
-        local char = player.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        
-        if not hrp or not hum or hum.Health <= 0 then continue end
-
-        -- KIỂM TRA CHUYỂN TẦNG (RESET)
-        if lastPosition and (hrp.Position - lastPosition).Magnitude > 20 then
-            hasHandledTalentThisRoom = false
-            isProcessing = false
-            StatusLog:Set("Trạng thái: Vừa qua tầng mới!")
-            DoorLog:Set("Cửa: Đang quét...")
-            TalentLog:Set("Buff: Đang quét...")
-            task.wait(1)
-        end
-        lastPosition = hrp.Position
-
-        if isProcessing then continue end
-
-        -- BƯỚC 1: QUÉT CỬA
-        local foundDoors = {}
-        for _, obj in pairs(Workspace:GetDescendants()) do
-            if obj:IsA("BillboardGui") and obj.Name == "AbyssDoorInfo" then
-                local icon = obj:FindFirstChild("ImgIcon", true)
-                local imgId = icon and string.match(icon.Image, "id=(%d+)")
-                local doorName = imgId and ITEM_DATA[imgId] or "Ảnh Lạ"
-                local doorPart = obj.Parent
+    while true do
+        if isAutoEnabled and character then
+            local root = character:FindFirstChild("HumanoidRootPart")
+            if root then
+                local currentPos = root.Position
+                if lastPosition and (currentPos - lastPosition).Magnitude > TELEPORT_THRESHOLD then
+                    isProcessing = false 
+                    hasHandledTalentThisRoom = false 
+                    clockHasStarted = false 
+                    waveCleared = false
+                    isWaitingForTeleport = false 
+                    
+                    _G.IsWaitingOnDoor = false 
+                    
+                    roomEnterTime = tick() 
+                    logDoor.Text = "CỬA: SANG TẦNG MỚI! ĐANG CHỜ..."
+                    logDoor.TextColor3 = Color3.fromRGB(0, 215, 255)
+                    logTalent.Text = "TRẠNG THÁI: ĐANG CHỜ ĐỒNG HỒ..."
+                    logTalent.TextColor3 = Color3.fromRGB(200, 200, 200)
+                end
+                lastPosition = currentPos
+            end
+            
+            local playerGui = player:FindFirstChild("PlayerGui")
+            local fmTimeFrame = nil
+            local labStage = nil
+            
+            if playerGui then 
+                -- Lấy đường dẫn đồng hồ
+                pcall(function() fmTimeFrame = playerGui.MainGui.ScreenGui.ArenaMainRightTopView.FmTime end) 
                 
-                if doorPart and doorPart:IsA("BasePart") then
-                    table.insert(foundDoors, {
-                        name = doorName, 
-                        part = doorPart, 
-                        score = PrioritySettings[doorName] or 10 -- Lấy điểm từ UI
-                    })
+                -- Tìm UI hiển thị Tầng (LabStage) để biết có đang trong Dungeon hay không
+                for _, v in ipairs(playerGui:GetDescendants()) do
+                    if v.Name == "LabStage" and v:IsA("TextLabel") then
+                        labStage = v
+                        break
+                    end
                 end
             end
-        end
 
-        local chosenDoor = nil
-        if #foundDoors == 2 then
-            if foundDoors[1].score < foundDoors[2].score then
-                chosenDoor = foundDoors[1]
-            elseif foundDoors[2].score < foundDoors[1].score then
-                chosenDoor = foundDoors[2]
+            -- ĐIỀU KIỆN: CÓ ĐANG Ở TRONG HẦM NGỤC KHÔNG?
+            local isInDungeon = (labStage and labStage.Text ~= "Unknown" and labStage.Text ~= "")
+
+            if not isInDungeon then
+                -- NẾU ĐANG Ở SẢNH CHỜ / NGOÀI GAME
+                clockHasStarted = false
+                waveCleared = false -- Ép khóa luồng nhặt đồ
+                roomEnterTime = tick() -- Reset liên tục thời gian để không bị dính Timeout 5 giây khi vừa vào phòng
+                
+                logTalent.Text = "TRẠNG THÁI: ĐANG Ở SẢNH CHỜ..."
+                logTalent.TextColor3 = Color3.fromRGB(150, 150, 150)
             else
-                -- 2 Cửa điểm bằng nhau -> Skip
-                chosenDoor = nil
-            end
-        elseif #foundDoors == 1 then
-            chosenDoor = foundDoors[1]
-        end
-
-        if not chosenDoor then
-            DoorLog:Set("Cửa: GIỐNG NHAU HOẶC KHÔNG TỐT -> BỎ QUA")
-            continue 
-        else
-            DoorLog:Set("Cửa Đã Chọn: " .. chosenDoor.name .. " (Hạng " .. chosenDoor.score .. ")")
-        end
-
-        -- BƯỚC 2: XỬ LÝ BUFF VÀ ĐI RA CỬA
-        if not hasHandledTalentThisRoom then
-            isProcessing = true
-            
-            local abyssTalent = Workspace:FindFirstChild("AbyssTalent")
-            
-            if abyssTalent then
-                TalentLog:Set("Buff: Đang chạy đến lấy...")
-                
-                local talentPos = abyssTalent:IsA("Model") and abyssTalent.PrimaryPart and abyssTalent.PrimaryPart.Position or abyssTalent.Position
-                hum:MoveTo(talentPos)
-                
-                local timeout = tick() + 3
-                repeat task.wait(0.1) until (hrp.Position - talentPos).Magnitude < 7 or tick() > timeout
-                hum:MoveTo(hrp.Position)
-                
-                local prompt = abyssTalent:FindFirstChildWhichIsA("ProximityPrompt", true)
-                if prompt then
-                    fireproximityprompt(prompt)
+                -- NẾU ĐANG TRONG HẦM NGỤC -> CHẠY LOGIC BÌNH THƯỜNG
+                if fmTimeFrame and fmTimeFrame.Visible == true then
+                    if not clockHasStarted then 
+                        clockHasStarted = true 
+                        waveCleared = false 
+                        logTalent.Text = "TRẠNG THÁI: ĐANG ĐÁNH QUÁI..."
+                        logTalent.TextColor3 = Color3.fromRGB(255, 100, 100)
+                    end
                 else
-                    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-                    task.wait(0.1)
-                    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                    if clockHasStarted then
+                        if not waveCleared then
+                            waveCleared = true
+                            logTalent.Text = "TRẠNG THÁI: ĐÃ DỌN XONG! TÌM QUÀ..."
+                            logTalent.TextColor3 = Color3.fromRGB(100, 255, 100)
+                        end
+                    else
+                        -- Timeout 5 giây dành cho phòng an toàn trong hầm ngục
+                        if (tick() - roomEnterTime) > 5 then
+                            if not waveCleared then
+                                waveCleared = true
+                                logTalent.Text = "TRẠNG THÁI: PHÒNG AN TOÀN. TÌM QUÀ..."
+                                logTalent.TextColor3 = Color3.fromRGB(100, 255, 100)
+                            end
+                        end
+                    end
                 end
-                
-                task.wait(0.5)
-                AutoPickBuff()
-                TalentLog:Set("Buff: Đã lấy xong. Chạy ra Cửa!")
-            else
-                TalentLog:Set("Buff: Không thấy ở tầng này.")
             end
-
-            -- BƯỚC 3: CHẠY RA CỬA VÀ ĐỨNG CHỜ
-            StatusLog:Set("Trạng thái: Đang đứng trên bục Cửa...")
-            hum:MoveTo(chosenDoor.part.Position)
-            hasHandledTalentThisRoom = true
         end
+        task.wait(0.2)
+    end
+end)
+
+-- ==========================================
+-- LOGIC PHÂN TÍCH CHỌN CỬA THEO ĐIỂM SỐ ĐỘNG
+-- ==========================================
+local function coreAutoSystem()
+    if isWaitingForTeleport or not isAutoEnabled or isProcessing or not waveCleared then return end
+
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return end
+
+    local currentDoors = {}
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if obj.ClassName == "BillboardGui" and obj.Name == "AbyssDoorInfo" then
+            local doorPart = obj.Parent
+            if doorPart and doorPart:IsA("BasePart") then
+                local doorName = "Ảnh Lạ Unknown"
+                for _, child in ipairs(obj:GetDescendants()) do
+                    if child.ClassName == "ImageLabel" or child.ClassName == "ImageButton" then
+                        local id = string.match(child.Image, "%d+")
+                        if id and ITEM_DATA[id] then
+                            doorName = ITEM_DATA[id].name
+                            break 
+                        end
+                    end
+                end
+                table.insert(currentDoors, {part = doorPart, name = doorName})
+            end
+        end
+    end
+
+    if #currentDoors == 0 then return end
+
+    if #currentDoors >= 2 then
+        table.sort(currentDoors, function(a, b)
+            return rootPart.CFrame:PointToObjectSpace(a.part.Position).X < rootPart.CFrame:PointToObjectSpace(b.part.Position).X
+        end)
+    end
+
+    local chosenDoor = nil
+
+    if #currentDoors == 1 then
+        chosenDoor = currentDoors[1]
+        logDoor.Text = "CỬA: CHỈ CÓ 1 CỬA -> VÀO LUÔN!"
+        logDoor.TextColor3 = Color3.fromRGB(100, 255, 100)
+    else
+        local door1 = currentDoors[1]
+        local door2 = currentDoors[2]
+
+        local score1 = PriorityScores[door1.name] or 99
+        local score2 = PriorityScores[door2.name] or 99
+
+        if score1 < score2 then
+            chosenDoor = door1
+            logDoor.Text = "CHỌN CỬA 1: " .. door1.name .. " (Hạng " .. score1 .. ")"
+            logDoor.TextColor3 = Color3.fromRGB(100, 255, 100)
+        elseif score2 < score1 then
+            chosenDoor = door2
+            logDoor.Text = "CHỌN CỬA 2: " .. door2.name .. " (Hạng " .. score2 .. ")"
+            logDoor.TextColor3 = Color3.fromRGB(100, 255, 100)
+        else
+            chosenDoor = door2
+            logDoor.Text = "CỬA: ĐỒNG HẠNG/RÁC -> ÉP CỬA 2 QUA MÀN NHANH!"
+            logDoor.TextColor3 = Color3.fromRGB(255, 150, 50)
+        end
+    end
+
+    -- XỬ LÝ LẤY TALENT (CỘT BUFF)
+    if not hasHandledTalentThisRoom then
+        isProcessing = true 
+        logDoor.Text = "CỬA: ĐÃ CHỌN! TÌM TALENT..."
+        logDoor.TextColor3 = Color3.fromRGB(200, 200, 100)
+        
+        task.wait(1.5) 
+
+        local abyssTalent = Workspace:FindFirstChild("AbyssTalent")
+        if abyssTalent then
+            logTalent.Text = "TALENT: ĐANG CHẠY ĐẾN CỘT BUFF..."
+            logTalent.TextColor3 = Color3.fromRGB(255, 215, 0)
+            
+            local talentPos = abyssTalent:IsA("Model") and abyssTalent.PrimaryPart and abyssTalent.PrimaryPart.Position or abyssTalent.Position
+            local hum = character:FindFirstChildOfClass("Humanoid")
+            
+            if hum then
+                hum:MoveTo(talentPos)
+                local timeout = tick() + 6
+                repeat task.wait(0.1) until (rootPart.Position - talentPos).Magnitude < 7 or tick() > timeout
+                hum:MoveTo(rootPart.Position)
+            end
+            
+            logTalent.Text = "TALENT: ĐANG MỞ BẢNG BUFF..."
+            local prompt = abyssTalent:FindFirstChildWhichIsA("ProximityPrompt", true)
+            if prompt then fireproximityprompt(prompt) else
+                local VirtualInputManager = game:GetService("VirtualInputManager")
+                VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game) task.wait(0.1) VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+            end
+    
+            task.wait(0.5)
+            AutoPickBuff()
+            logTalent.Text = "TALENT: ĐÃ LẤY XONG. RA CỬA!"
+            logTalent.TextColor3 = Color3.fromRGB(0, 255, 100)
+        else
+            logTalent.Text = "TALENT: KHÔNG CÓ Ở TẦNG NÀY."
+            logTalent.TextColor3 = Color3.fromRGB(180, 180, 180)
+        end
+
+        hasHandledTalentThisRoom = true
+    end
+
+    isProcessing = true 
+
+    if chosenDoor and chosenDoor.part then
+        walkToTarget(chosenDoor.part.Position)
+        
+        isWaitingForTeleport = true
+        _G.IsWaitingOnDoor = true 
+        logDoor.Text = "CỬA: ĐANG ĐỨNG CHỜ TELEPORT..."
+        logDoor.TextColor3 = Color3.fromRGB(0, 255, 255)
+    end
+    
+    isProcessing = false 
+end
+
+task.spawn(function()
+    while true do
+        local success, err = pcall(coreAutoSystem)
+        if not success then warn("AUTO ERROR: " .. tostring(err)) end
+        task.wait(0.2) 
     end
 end)

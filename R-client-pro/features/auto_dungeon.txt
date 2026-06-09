@@ -57,7 +57,7 @@ return function(Window, Utils, WebhookModule)
     -- GIAO DIỆN UI (RAYFIELD TABS)
     -- ==========================================
     local DungeonTab = Window:CreateTab("Hầm Ngục", 4483362458)
-    local DungeonStatus = DungeonTab:CreateLabel("🔌 Trạng thái hệ thống: AUTO DUNGEON ĐANG TẮT")
+    local DungeonStatus = DungeonTab:CreateLabel("AUTO DUNGEON ĐANG TẮT")
 
     DungeonTab:CreateToggle({
         Name = "Auto dungeon",
@@ -66,7 +66,7 @@ return function(Window, Utils, WebhookModule)
         Callback = function(Value)
             masterSwitchEnabled = Value
             if not Value then
-                DungeonStatus:Set("🔌 Trạng thái hệ thống: AUTO DUNGEON ĐANG TẮT")
+                DungeonStatus:Set("AUTO DUNGEON ĐANG TẮT")
                 pcall(function()
                     local char = LocalPlayer.Character
                     if char and char:FindFirstChild("Humanoid") then
@@ -74,12 +74,12 @@ return function(Window, Utils, WebhookModule)
                     end
                 end)
             else
-                DungeonStatus:Set("⚡ Hệ thống đã cấp điện! Các nút con bắt đầu hoạt động.")
+                DungeonStatus:Set("AUTO DUNGEON ĐANG BẬT")
             end
         end
     })
 
-    DungeonTab:CreateSection("--- CÁC CHỨC NĂNG CON VẬN HÀNH ---")
+    DungeonTab:CreateSection("__________________________")
 
     DungeonTab:CreateToggle({ 
         Name = "Tự Động Tìm & Đánh Quái (Tối Ưu Phím M)", 
@@ -109,7 +109,7 @@ return function(Window, Utils, WebhookModule)
     })
 
     DungeonTab:CreateToggle({ 
-        Name = "Tự Động Nhảy Vào Phòng Người Khác", 
+        Name = "Tự vào phòng", 
         CurrentValue = false, 
         Flag = "AutoJoinOthers", 
         Callback = function(Value) autoJoinOthersEnabled = Value end 
