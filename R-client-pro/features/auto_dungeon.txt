@@ -181,7 +181,13 @@ return function(Window, Utils, WebhookModule)
                         humanoid:MoveTo(hrp.Position)
                         dungeonStuckTimer = 0
                         
-                        -- Lợi dụng cơ chế gọi lệnh Attack để game tự động ép nhân vật đáp đất
+                        -- BỔ SUNG: Ép nhân vật rời khỏi thú cưỡi ngay khi áp sát
+                        if humanoid.Sit then
+                            humanoid.Sit = false
+                            humanoid.Jump = true
+                            task.wait(0.15) -- Nghỉ một nhịp siêu nhỏ để server đồng bộ trạng thái đứng dưới đất
+                        end
+                        
                         local id = tonumber(bestTarget.Name:match("Monster_(%d+)"))
                         if id and MonsterSystem then 
                             MonsterSystem.ClientAttackMonster(id) 
