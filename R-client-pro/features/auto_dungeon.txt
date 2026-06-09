@@ -175,31 +175,53 @@ return function(Window, Utils, WebhookModule)
                         dungeonLastPosition = hrp.Position
                         
                     else
-                        -- ĐỦ TẦM ĐÁNH (< 12)
-                        humanoid:MoveTo(hrp.Position)
-                        dungeonStuckTimer = 0
-                        
+                -- ĐỦ TẦM ĐÁNH (< 12)
+humanoid:MoveTo(hrp.Position)
+dungeonStuckTimer = 0
 
-                    -- FIX KẸT THÚ: Ép nhân vật rời khỏi thú cưỡi ngay khi áp sát quái
-                    if humanoid.Sit then
-                        humanoid.Sit = false
-                        task.wait(0.1)
+-- 1. TẠO TIA QUÉT (RAYCAST) ĐO ĐỘ CAO
+local rayParams = RaycastParams.new()
+rayParams.FilterType = Enum.RaycastFilterType.Exclude
+-- Bỏ qua cơ thể nhân vật và thư mục chứa thú cưỡi để tia quét không bị vướng
+rayParams.FilterDescendantsInstances = {char, Workspace:FindFirstChild("Pets")}
+
+-- Bắn một tia dài 15 studs thẳng xuống dưới
+local rayResult = Workspace:Raycast(hrp.Position, Vector3.new(0, -15, 0), rayParams)
+
+local isRiding = humanoid.Sit -- Lấy trạng thái Sit gốc làm cơ sở đầu tiên
+
+-- 2. ĐÁNH GIÁ ĐỘ CAO
+if rayResult then
+    -- Tính khoảng cách từ tâm nhân vật xuống điểm chạm đất
+    local heightFromGround = hrp.Position.Y - rayResult.Position.Y
+    if heightFromGround > 6 then 
+        isRiding = true -- Chiều cao bất thường -> Đang trên lưng thú
+    end
+else
+    -- Nếu tia quét 15 studs mà không hề chạm đất -> Nhân vật đang bay quá cao
+    isRiding = true 
+end
+
+-- 3. THỰC THI ÉP XUỐNG THÚ KHI PHÁT HIỆN
+if isRiding then
+    humanoid.Sit = false
+    task.wait(0.1)
     
-                        -- Giả lập bấm phím M để báo cho Server game biết đã cất thú
-                        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.M, false, game) 
-                        task.wait() 
-                        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.M, false, game)
+    -- Gửi phím M để báo server cất thú
+    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.M, false, game) 
+    task.wait() 
+    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.M, false, game)
     
-                        task.wait(0.15)
-                        humanoid.Jump = true
-                        task.wait(0.15) -- Giữ một nhịp cực nhỏ để server nhận diện trạng thái đáp đất an toàn
-                    end
-                        
-                        local id = tonumber(bestTarget.Name:match("Monster_(%d+)"))
-                        if id and MonsterSystem then 
-                            MonsterSystem.ClientAttackMonster(id) 
-                        end
-                    end
+    task.wait(0.15)
+    humanoid.Jump = true -- Nhảy để reset animation trôi nổi
+    task.wait(0.15) -- Chờ server đồng bộ chạm đất an toàn
+end
+
+-- Tiến hành gọi API đánh quái sau khi đã chắc chắn chạm đất
+local id = tonumber(bestTarget.Name:match("Monster_(%d+)"))
+if id and MonsterSystem then 
+    MonsterSystem.ClientAttackMonster(id) 
+end
                 else 
                     -- KHÔNG TÌM THẤY QUÁI (PHÒNG TRỐNG)
                     dungeonStuckTimer = 0 
