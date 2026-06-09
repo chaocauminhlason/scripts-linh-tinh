@@ -179,12 +179,21 @@ return function(Window, Utils, WebhookModule)
                         humanoid:MoveTo(hrp.Position)
                         dungeonStuckTimer = 0
                         
-                        -- FIX KẸT THÚ: Ép nhân vật rời khỏi thú cưỡi ngay khi áp sát quái
-                        if humanoid.Sit then
-                            humanoid.Sit = false
-                            humanoid.Jump = true
-                            task.wait(0.15) -- Giữ một nhịp cực nhỏ để server nhận diện trạng thái đáp đất
-                        end
+
+                    -- FIX KẸT THÚ: Ép nhân vật rời khỏi thú cưỡi ngay khi áp sát quái
+                    if humanoid.Sit then
+                        humanoid.Sit = false
+                        task.wait(0.1)
+    
+                        -- Giả lập bấm phím M để báo cho Server game biết đã cất thú
+                        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.M, false, game) 
+                        task.wait() 
+                        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.M, false, game)
+    
+                        task.wait(0.15)
+                        humanoid.Jump = true
+                        task.wait(0.15) -- Giữ một nhịp cực nhỏ để server nhận diện trạng thái đáp đất an toàn
+                    end
                         
                         local id = tonumber(bestTarget.Name:match("Monster_(%d+)"))
                         if id and MonsterSystem then 
