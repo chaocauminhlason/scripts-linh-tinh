@@ -1,6 +1,6 @@
 -- ====================================================================
 -- MODULE: DUNGEON AUTO (TÍCH HỢP TỐI ƯU PHÍM M, AUTO EXIT & AUTO DUNGEON)
--- BẢN CẬP NHẬT: TỐI ƯU HÀM FORCE DISMOUNT (ÉP XUỐNG THÚ SAU TELEPORT)
+-- BẢN CẬP NHẬT HOÀN HẢO: CHECK THÚ CƯỠI BẰNG ATTRIBUTE "RidePetId" GỐC
 -- ====================================================================
 return function(Window, Utils, WebhookModule)
     local Players = game:GetService("Players")
@@ -28,36 +28,28 @@ return function(Window, Utils, WebhookModule)
     pcall(function() MonsterSystem = require(ReplicatedStorage.CommonLogic.Monster.MonsterSystem) end)
 
     -- ==========================================
-    -- HÀM ÉP XUỐNG THÚ AN TOÀN (RAYCAST)
+    -- HÀM ÉP XUỐNG THÚ HOÀN HẢO 100% (DỰA VÀO SOURCE CODE GAME)
     -- ==========================================
-    local function ForceDismount(char, hrp, humanoid)
-        local rayParams = RaycastParams.new()
-        rayParams.FilterType = Enum.RaycastFilterType.Exclude
-        
-        -- Lọc bỏ bản thân và thư mục Pets an toàn
-        local filterList = {char}
-        local petsFolder = Workspace:FindFirstChild("Pets")
-        if petsFolder then table.insert(filterList, petsFolder) end
-        rayParams.FilterDescendantsInstances = filterList
-
-        local rayResult = Workspace:Raycast(hrp.Position, Vector3.new(0, -15, 0), rayParams)
-        local isRiding = humanoid.Sit
-
-        if rayResult then
-            if (hrp.Position.Y - rayResult.Position.Y) > 6 then isRiding = true end
-        else
-            isRiding = true 
-        end
+    local function SmartDismount()
+        -- Đọc thẳng vào hệ thống game xem người chơi có đang gắn cờ "RidePetId" không
+        local isRiding = LocalPlayer:GetAttribute("RidePetId") ~= nil
 
         if isRiding then
-            humanoid.Sit = false
-            task.wait(0.1)
+            -- Nếu đang cưỡi, giả lập bấm phím M để báo Server cất thú
             VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.M, false, game) 
             task.wait() 
             VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.M, false, game)
-            task.wait(0.15)
-            humanoid.Jump = true
-            task.wait(0.15)
+            
+            -- Chờ một chút cho server phản hồi và xóa thú
+            task.wait(0.3)
+            
+            -- Nhảy nhẹ một cái để ngắt animation đang ngồi (AnimUser) của game
+            local char = LocalPlayer.Character
+            local humanoid = char and char:FindFirstChild("Humanoid")
+            if humanoid then
+                humanoid.Jump = true
+            end
+            task.wait(0.1)
         end
     end
 
@@ -98,9 +90,7 @@ return function(Window, Utils, WebhookModule)
             if not Value then
                 pcall(function()
                     local char = LocalPlayer.Character
-                    if char and char:FindFirstChild("Humanoid") then
-                        char.Humanoid:MoveTo(char.HumanoidRootPart.Position)
-                    end
+                    if char and char:FindFirstChild("Humanoid") then char.Humanoid:MoveTo(char.HumanoidRootPart.Position) end
                 end)
             end
         end 
@@ -114,10 +104,7 @@ return function(Window, Utils, WebhookModule)
             autoExitEnabled = Value 
             if Value then 
                 if masterSwitchEnabled then DungeonStatus:Set("Trạng thái Auto Exit: ĐANG BẬT VÀ QUÉT...") end
-            else 
-                autoExitTriggered = false
-                stage20ClockStarted = false 
-            end 
+            else autoExitTriggered = false stage20ClockStarted = false end 
         end 
     })
 
@@ -191,16 +178,15 @@ return function(Window, Utils, WebhookModule)
                     local targetPos = bestTarget:IsA("Model") and bestTarget.PrimaryPart and bestTarget.PrimaryPart.Position or bestTarget.Position
                     
                     if closestDist2D > 40 then
-                        -- [TỐI ƯU MỚI]: Bỏ lệnh bấm M rác trước khi Teleport. 
-                        -- Dịch chuyển thẳng, sau đó gọi hàm ForceDismount để ép đáp đất.
+                        -- 1. TELEPORT TỚI QUÁI
                         hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 0, 4)) 
                         task.wait(0.2)
                         humanoid:MoveTo(hrp.Position) 
                         dungeonLastPosition = hrp.Position 
                         dungeonStuckTimer = 0
                         
-                        -- ÉP XUỐNG THÚ NGAY SAU KHI TELEPORT
-                        ForceDismount(char, hrp, humanoid)
+                        -- 2. ÉP XUỐNG THÚ SAU TELEPORT BẰNG HÀM CHUẨN
+                        SmartDismount()
                         
                     elseif closestDist2D > 12 then
                         humanoid:MoveTo(targetPos)
@@ -214,8 +200,8 @@ return function(Window, Utils, WebhookModule)
                         humanoid:MoveTo(hrp.Position)
                         dungeonStuckTimer = 0
                         
-                        -- DOUBLE CHECK: Kiểm tra lần cuối trước khi tung chiêu
-                        ForceDismount(char, hrp, humanoid)
+                        -- DOUBLE CHECK: Ở tầm gần đánh luôn, đảm bảo đã xuống thú
+                        SmartDismount()
                         
                         local id = tonumber(bestTarget.Name:match("Monster_(%d+)"))
                         if id and MonsterSystem then 
@@ -225,7 +211,7 @@ return function(Window, Utils, WebhookModule)
                 else 
                     dungeonStuckTimer = 0 
                     -- Tự động xuống thú khi phòng đã trống
-                    ForceDismount(char, hrp, humanoid)
+                    SmartDismount()
                 end
             end
 
@@ -237,27 +223,18 @@ return function(Window, Utils, WebhookModule)
                 
                 if currentStage and maxStage and tonumber(currentStage) == tonumber(maxStage) then
                     if fmTimeFrame and fmTimeFrame.Visible == true then
-                        if not stage20ClockStarted then 
-                            stage20ClockStarted = true
-                            DungeonStatus:Set("Trạng thái Auto Exit: Đồng hồ màn 20 đã chạy...") 
-                        end
+                        if not stage20ClockStarted then stage20ClockStarted = true DungeonStatus:Set("Trạng thái Auto Exit: Đồng hồ màn 20 đã chạy...") end
                     end
                     if stage20ClockStarted and (not fmTimeFrame or fmTimeFrame.Visible == false) then
                         autoExitTriggered = true
                         DungeonStatus:Set("Trạng thái Auto Exit: Boss đã gục, chuẩn bị click thoát...")
-                        task.spawn(function() 
-                            if WebhookModule and WebhookModule.SendNotification then 
-                                WebhookModule.SendNotification("**" .. LocalPlayer.Name .. "** vừa hoàn thành vòng Dungeon 20/20!") 
-                            end 
-                        end)
+                        task.spawn(function() if WebhookModule and WebhookModule.SendNotification then WebhookModule.SendNotification("**" .. LocalPlayer.Name .. "** vừa hoàn thành vòng Dungeon 20/20!") end end)
                         task.spawn(SafeExitRoutine)
                     end
-                else 
-                    stage20ClockStarted = false; autoExitTriggered = false 
-                end
+                else stage20ClockStarted = false; autoExitTriggered = false end
             end
 
-            -- [3] LOGIC AUTO JOIN OTHERS
+            -- [3] LOGIC AUTO JOIN OTHERS (Giữ nguyên)
             if autoJoinOthersEnabled and (not labStage or labStage.Text == "Unknown" or labStage.Text == "") then
                 pcall(function()
                     local wArea = Workspace:FindFirstChild("Area")
@@ -279,42 +256,25 @@ return function(Window, Utils, WebhookModule)
                                 
                                 if surfaceGui and surfaceGui:FindFirstChild("FmEmpty") and surfaceGui:FindFirstChild("FmPrepare") and surfaceGui:FindFirstChild("FmInfo") and surfaceGui:FindFirstChild("FmPlayer") then
                                     if (not surfaceGui.FmEmpty.Visible) and (not surfaceGui.FmPrepare.Visible) and surfaceGui.FmInfo.Visible and surfaceGui.FmPlayer.Visible then
-                                        local isOtherPlayer = false
-                                        local isMyRoom = false
-                                      
+                                        local isOtherPlayer = false; local isMyRoom = false
                                         for _, desc in ipairs(surfaceGui.FmPlayer:GetDescendants()) do
                                             if desc:IsA("ImageLabel") and string.find(desc.Image, "AvatarHeadShot") then
                                                 local extractedId = string.match(desc.Image, "id=(%d+)")
-                                                if extractedId then 
-                                                    if tonumber(extractedId) ~= myUserId then isOtherPlayer = true else isMyRoom = true end 
-                                                    break 
-                                                end
+                                                if extractedId then if tonumber(extractedId) ~= myUserId then isOtherPlayer = true else isMyRoom = true end break end
                                             end
                                         end
-                                   
                                         local targetPos = (room:IsA("Model") and room:GetPivot().Position) or (room:IsA("BasePart") and room.Position)
                                         if targetPos then
                                             local dist = (hrp.Position - targetPos).Magnitude
-                                            if isMyRoom and dist < 25 then
-                                                shouldJumpOut = true
-                                                local leaveAth = room:FindFirstChild("LeaveAth")
-                                                if leaveAth and leaveAth:IsA("Attachment") then jumpOutTarget = leaveAth.WorldPosition end
-                                            elseif isOtherPlayer then
-                                                if dist < 15 then alreadyInSomeoneRoom = true elseif not roomToJoin then roomToJoin = targetPos + Vector3.new(0, 5, 0) end
-                                            end
+                                            if isMyRoom and dist < 25 then shouldJumpOut = true local leaveAth = room:FindFirstChild("LeaveAth") if leaveAth and leaveAth:IsA("Attachment") then jumpOutTarget = leaveAth.WorldPosition end
+                                            elseif isOtherPlayer then if dist < 15 then alreadyInSomeoneRoom = true elseif not roomToJoin then roomToJoin = targetPos + Vector3.new(0, 5, 0) end end
                                         end
                                     end
                                 end
                             end
                         end
-                        
-                        if shouldJumpOut then
-                            if jumpOutTarget then hrp.CFrame = CFrame.new(jumpOutTarget + Vector3.new(0, 3, 0)) else hrp.CFrame = hrp.CFrame * CFrame.new(0, 0, 20) end
-                            task.wait(2)
-                        elseif roomToJoin and not alreadyInSomeoneRoom then
-                            hrp.CFrame = CFrame.new(roomToJoin)
-                            task.wait(3)
-                        end
+                        if shouldJumpOut then if jumpOutTarget then hrp.CFrame = CFrame.new(jumpOutTarget + Vector3.new(0, 3, 0)) else hrp.CFrame = hrp.CFrame * CFrame.new(0, 0, 20) end task.wait(2)
+                        elseif roomToJoin and not alreadyInSomeoneRoom then hrp.CFrame = CFrame.new(roomToJoin) task.wait(3) end
                     end
                 end)
             end
