@@ -25,7 +25,7 @@ return function(Window, Utils)
 
     OptimizationTab:CreateToggle({ 
         Name = "Chống AFK (Anti-Kick)", 
-        CurrentValue = false, 
+        CurrentValue = true, -- Sửa giá trị này thành true
         Flag = "AntiAfk", 
         Callback = function(Value) antiAfkEnabled = Value end 
     })
