@@ -1,6 +1,6 @@
 -- ====================================================================
 -- MODULE: DUNGEON AUTO (AUTO ATTACK, AUTO EXIT, AUTO JOIN & AUTO CREATE)
--- BẢN CẬP NHẬT: FIX LỖI CHỌN ĐỘ KHÓ TRƯỚC KHI BẤM CREATE & START
+-- BẢN CẬP NHẬT: FIX TỌA ĐỘ CAO ĐỘ (Y-OFFSET) ĐỂ ĐÁP XUỐNG MƯỢT HƠN
 -- ====================================================================
 return function(Window, Utils, WebhookModule)
     local Players = game:GetService("Players")
@@ -280,16 +280,16 @@ return function(Window, Utils, WebhookModule)
                                                     if leaveAth and leaveAth:IsA("Attachment") then jumpOutTarget = leaveAth.WorldPosition end
                                                 elseif isOtherPlayer then 
                                                     if dist < 15 then alreadyInSomeoneRoom = true 
-                                                    elseif not roomToJoin then roomToJoin = targetPos + Vector3.new(0, 5, 0) end 
+                                                    elseif not roomToJoin then roomToJoin = targetPos + Vector3.new(0, 3, 0) end -- Hạ độ cao Join
                                                 end
                                             end
                                         end
 
-                                        -- Lọc phòng trống để Create (Chỉ thực thi khi KHÔNG bật Join)
+                                        -- Lọc phòng trống để Create
                                         if surfaceGui.FmEmpty.Visible and not autoJoinOthersEnabled then
                                             local targetPos = (room:IsA("Model") and room:GetPivot().Position) or (room:IsA("BasePart") and room.Position)
                                             if targetPos and not emptyRoomToCreate then
-                                                emptyRoomToCreate = targetPos + Vector3.new(0, 5, 0)
+                                                emptyRoomToCreate = targetPos + Vector3.new(0, 3, 0) -- Hạ độ cao Create
                                             end
                                         end
                                     end
@@ -318,19 +318,27 @@ return function(Window, Utils, WebhookModule)
                                     if currentPlayerCount >= targetPlayerCount then
                                         DungeonStatus:Set("Sảnh: Đủ " .. currentPlayerCount .. "/" .. targetPlayerCount .. " người! Đang Start...")
                                         
-                                        -- 1. Gọi API Gốc (Mượt nhất)
+                                        -- Lớp 1: Gọi API Gốc qua bộ Framework của Game (Chuẩn nhất)
+                                        pcall(function()
+                                            if _G.PathTool and _G.PathTool.AbyssSystem and _G.PathTool.ViewUtil then
+                                                _G.PathTool.ViewUtil.DoRequest(_G.PathTool.AbyssSystem.ClientStartAbyss)
+                                            end
+                                        end)
+                                        
+                                        -- Lớp 2: Gọi Require gốc
                                         if AbyssSystem and AbyssSystem.ClientStartAbyss then
                                             pcall(function() AbyssSystem.ClientStartAbyss() end)
                                         end
                                         
-                                        -- 2. Fallback Click Nút Start (Lỡ API chưa sẵn sàng)
-                                        local btStart = nil
-                                        for _, v in pairs(playerGui:GetDescendants()) do
-                                            if (v.Name == "BtStart" or v.Name == "BtnStart") and v:IsA("GuiObject") and v.Visible then
-                                                btStart = v break
+                                        -- Lớp 3: Quét Click UI thủ công
+                                        local startNames = {"BtStart", "BtnStart", "BtGo", "BtEnter"}
+                                        for _, btnName in ipairs(startNames) do
+                                            local btn = Utils.FindUIElementByName(playerGui, btnName)
+                                            if btn and btn.AbsoluteSize.X > 0 and btn.Visible then
+                                                Utils.ClickButtonExact(btn, "Nút Start")
+                                                break
                                             end
                                         end
-                                        if btStart then Utils.ClickButtonExact(btStart, "Nút Start") end
                                         
                                         task.wait(2.5) -- Đợi server load map
                                     else
@@ -346,7 +354,7 @@ return function(Window, Utils, WebhookModule)
                                         task.wait(2)
                                     else
                                         DungeonStatus:Set("Sảnh: Đang thiết lập Độ Khó và Tạo...")
-                                        task.wait(1) -- Chờ UI Game nảy lên ổn định
+                                        task.wait(1.5) -- Chờ UI Game nảy lên ổn định
                                         
                                         local diffBtnName = tostring(targetDifficulty) .. "Btn"
                                         local diffBtn = nil
@@ -372,7 +380,7 @@ return function(Window, Utils, WebhookModule)
                                         -- 2. Click Tạo phòng
                                         if btCreate then
                                             Utils.ClickButtonExact(btCreate, "Nút Tạo Phòng")
-                                            task.wait(2) -- Chờ phòng được xác lập, sau đó Vòng lặp sẽ nhận diện isMyRoom = true
+                                            task.wait(2.5) -- Tăng độ trễ cho server xác lập quyền Owner
                                         end
                                     end
                                 end
