@@ -1,6 +1,6 @@
 -- ====================================================================
 -- MODULE: DUNGEON AUTO (AUTO ATTACK, AUTO EXIT, AUTO JOIN & AUTO CREATE)
--- BẢN CẬP NHẬT: FIX LỖI NHẢY LẠI GIỮA 2 BỤC (LOCK VÀO BỤC GẦN NHẤT)
+-- BẢN CẬP NHẬT: FIX LỖI NHẢY LOẠN BỤC (CHIA 3 GIAI ĐOẠN TẠO PHÒNG)
 -- ====================================================================
 return function(Window, Utils, WebhookModule)
     local Players = game:GetService("Players")
@@ -25,7 +25,7 @@ return function(Window, Utils, WebhookModule)
     
     local dungeonStuckTimer = 0
     local dungeonLastPosition = nil
-    local isStartingDungeon = false -- Cờ khoá (Debounce) để chống spam Start liên tục
+    local isStartingDungeon = false
 
     -- API Game
     local MonsterSystem = nil
@@ -33,7 +33,6 @@ return function(Window, Utils, WebhookModule)
     local AbyssSystem = nil
     pcall(function() AbyssSystem = require(ReplicatedStorage.CommonLogic.Abyss.AbyssSystem) end)
 
-    -- Hàm Ép Xuống Thú
     local function SmartDismount()
         local isRiding = LocalPlayer:GetAttribute("RidePetId") ~= nil
         if isRiding then
@@ -79,19 +78,8 @@ return function(Window, Utils, WebhookModule)
     DungeonTab:CreateToggle({ Name = "Tự Động Thoát Màn 20", CurrentValue = false, Flag = "AutoExitDungeon", Callback = function(Value) autoExitEnabled = Value if not Value then autoExitTriggered = false stage20ClockStarted = false end end })
 
     DungeonTab:CreateSection("--- LOGIC NGOÀI SẢNH (LOBBY) ---")
-    DungeonTab:CreateToggle({ 
-        Name = "Tự Động Join Phòng Người Khác (Ưu tiên số 1)", 
-        CurrentValue = false, 
-        Flag = "AutoJoinOthers", 
-        Callback = function(Value) autoJoinOthersEnabled = Value end 
-    })
-    
-    DungeonTab:CreateToggle({ 
-        Name = "Tự Động Tạo Phòng & Start (Bị tắt nếu đang Join)", 
-        CurrentValue = false, 
-        Flag = "AutoCreateRoom", 
-        Callback = function(Value) autoCreateEnabled = Value end 
-    })
+    DungeonTab:CreateToggle({ Name = "Tự Động Join Phòng Người Khác", CurrentValue = false, Flag = "AutoJoinOthers", Callback = function(Value) autoJoinOthersEnabled = Value end })
+    DungeonTab:CreateToggle({ Name = "Tự Động Tạo Phòng & Start", CurrentValue = false, Flag = "AutoCreateRoom", Callback = function(Value) autoCreateEnabled = Value end })
 
     DungeonTab:CreateDropdown({
         Name = "Chọn Độ Khó (Khi Tạo Phòng)",
@@ -121,7 +109,6 @@ return function(Window, Utils, WebhookModule)
     local function SafeExitRoutine()
         local exitBtn = Utils.FindUIElementByName(playerGui, "BgLeave")
         if exitBtn and exitBtn.AbsoluteSize.X > 0 then Utils.ClickButtonExact(exitBtn, "Nút Thoát") else autoExitTriggered = false return end
-        
         task.wait(1.5)
         local mainGui = playerGui:FindFirstChild("MainGui")
         if mainGui and mainGui:FindFirstChild("ScreenGui") and mainGui.ScreenGui:FindFirstChild("ConfirmView") then
@@ -130,13 +117,10 @@ return function(Window, Utils, WebhookModule)
                 for i = 1, 3 do Utils.ClickButtonExact(fmBottom.BtOk, "Nút Yes") task.wait(0.2) end
             else autoExitTriggered = false return end
         else autoExitTriggered = false return end
-        
         task.wait(2.5)
         local checkLabStage = Utils.FindUIElementByName(playerGui, "LabStage")
         local currentStageText = checkLabStage and checkLabStage.Text or "Unknown"
-        if currentStageText == "Unknown" or not string.match(currentStageText, "20/20") then 
-            autoExitTriggered = false; stage20ClockStarted = false 
-        else autoExitTriggered = false end
+        if currentStageText == "Unknown" or not string.match(currentStageText, "20/20") then autoExitTriggered = false; stage20ClockStarted = false else autoExitTriggered = false end
     end
 
     -- ==========================================
@@ -154,7 +138,6 @@ return function(Window, Utils, WebhookModule)
             local labStage = Utils.FindUIElementByName(playerGui, "LabStage")
             local isInDungeon = (labStage and labStage.Text ~= "Unknown" and labStage.Text ~= "")
          
-            -- [1] LOGIC AUTO ATTACK & AUTO EXIT TRONG HẦM NGỤC
             if isInDungeon then
                 if autoAttackEnabled then
                     local monstersFolder = Workspace:FindFirstChild("Monsters")
@@ -168,11 +151,7 @@ return function(Window, Utils, WebhookModule)
                                 if (not hum) or (hum and hum.Health > 0) then
                                     local pos = monster:IsA("Model") and monster.PrimaryPart and monster.PrimaryPart.Position or monster.Position
                                     local dist2D = math.sqrt((hrp.Position.X - pos.X)^2 + (hrp.Position.Z - pos.Z)^2)
-                                    
-                                    if dist2D < closestDist2D then 
-                                        closestDist2D = dist2D
-                                        bestTarget = monster 
-                                    end
+                                    if dist2D < closestDist2D then closestDist2D = dist2D bestTarget = monster end
                                 end
                             end
                         end
@@ -180,14 +159,9 @@ return function(Window, Utils, WebhookModule)
 
                     if bestTarget then
                         local targetPos = bestTarget:IsA("Model") and bestTarget.PrimaryPart and bestTarget.PrimaryPart.Position or bestTarget.Position
-                        
                         if closestDist2D > 40 then
-                            hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 0, 4)) 
-                            task.wait(0.2)
-                            humanoid:MoveTo(hrp.Position) 
-                            dungeonLastPosition = hrp.Position 
-                            dungeonStuckTimer = 0
-                            SmartDismount()
+                            hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 0, 4)) task.wait(0.2)
+                            humanoid:MoveTo(hrp.Position) dungeonLastPosition = hrp.Position dungeonStuckTimer = 0 SmartDismount()
                         elseif closestDist2D > 12 then
                             humanoid:MoveTo(targetPos)
                             if dungeonLastPosition and (hrp.Position - dungeonLastPosition).Magnitude < 1 then
@@ -196,38 +170,28 @@ return function(Window, Utils, WebhookModule)
                             else dungeonStuckTimer = 0 end
                             dungeonLastPosition = hrp.Position
                         else
-                            humanoid:MoveTo(hrp.Position)
-                            dungeonStuckTimer = 0
-                            SmartDismount()
-                            
+                            humanoid:MoveTo(hrp.Position) dungeonStuckTimer = 0 SmartDismount()
                             local id = tonumber(bestTarget.Name:match("Monster_(%d+)"))
                             if id and MonsterSystem then MonsterSystem.ClientAttackMonster(id) end
                         end
-                    else 
-                        dungeonStuckTimer = 0 
-                        SmartDismount()
-                    end
+                    else dungeonStuckTimer = 0 SmartDismount() end
                 end
 
                 if autoExitEnabled and not autoExitTriggered then
                     local fmTimeFrame = nil
                     pcall(function() fmTimeFrame = playerGui.MainGui.ScreenGui.ArenaMainRightTopView.FmTime end)
                     local currentStage, maxStage = string.match(labStage.Text, "(%d+)/(%d+)")
-                    
                     if currentStage and maxStage and tonumber(currentStage) == tonumber(maxStage) then
-                        if fmTimeFrame and fmTimeFrame.Visible == true then
-                            if not stage20ClockStarted then stage20ClockStarted = true DungeonStatus:Set("Trạng thái: Đồng hồ màn 20 đã chạy...") end
-                        end
+                        if fmTimeFrame and fmTimeFrame.Visible == true then if not stage20ClockStarted then stage20ClockStarted = true DungeonStatus:Set("Trạng thái: Đồng hồ màn 20 đã chạy...") end end
                         if stage20ClockStarted and (not fmTimeFrame or fmTimeFrame.Visible == false) then
-                            autoExitTriggered = true
-                            DungeonStatus:Set("Trạng thái: Boss gục, chuẩn bị click thoát...")
+                            autoExitTriggered = true DungeonStatus:Set("Trạng thái: Boss gục, chuẩn bị click thoát...")
                             task.spawn(function() if WebhookModule and WebhookModule.SendNotification then WebhookModule.SendNotification("**" .. LocalPlayer.Name .. "** vừa hoàn thành vòng Dungeon 20/20!") end end)
                             task.spawn(SafeExitRoutine)
                         end
                     else stage20ClockStarted = false; autoExitTriggered = false end
                 end
 
-            -- [3] LOGIC LOBBY: TẠO PHÒNG, CHỌN ĐỘ KHÓ, BẤM START & JOIN
+            -- LOGIC SẢNH LOBBY
             else
                 if autoJoinOthersEnabled or autoCreateEnabled then
                     pcall(function()
@@ -244,18 +208,20 @@ return function(Window, Utils, WebhookModule)
                             local jumpOutTarget = nil
                             
                             local roomToJoin = nil
-                            local closestJoinDist = math.huge -- Lưu khoảng cách tới bục Join gần nhất
+                            local closestJoinDist = math.huge
                             
                             local emptyRoomToCreate = nil
-                            local closestEmptyDist = math.huge -- Lưu khoảng cách tới bục trống gần nhất
+                            local closestEmptyDist = math.huge
                             
+                            -- NEW: Biến nhận diện Giai đoạn 2 (Đứng trên bục chuẩn bị)
+                            local isPreparingRoom = false
+
                             for _, room in ipairs(abyssFolder:GetChildren()) do
                                 if string.match(room.Name, "Abyss_") then
                                     local platform = room:FindFirstChild("Platform")
                                     local board = platform and platform:FindFirstChild("Board")
                                     local surfaceGui = board and board:FindFirstChild("SurfaceGui")
                                     
-                                    -- Check xem mình có phải chủ phòng không qua Attribute Server
                                     for k, _ in pairs(room:GetAttributes()) do
                                         if k == "Owner_" .. tostring(myUserId) then
                                             isMyRoom = true
@@ -265,12 +231,11 @@ return function(Window, Utils, WebhookModule)
                                     end
 
                                     if surfaceGui and surfaceGui:FindFirstChild("FmEmpty") and surfaceGui:FindFirstChild("FmPrepare") and surfaceGui:FindFirstChild("FmInfo") and surfaceGui:FindFirstChild("FmPlayer") then
-                                        
                                         local targetPos = (room:IsA("Model") and room:GetPivot().Position) or (room:IsA("BasePart") and room.Position)
                                         if targetPos then
                                             local dist = (hrp.Position - targetPos).Magnitude
                                             
-                                            -- Lọc phòng có người để Join
+                                            -- 1. Lọc phòng đang mở để Join
                                             if (not surfaceGui.FmEmpty.Visible) and (not surfaceGui.FmPrepare.Visible) and surfaceGui.FmInfo.Visible and surfaceGui.FmPlayer.Visible then
                                                 local isOtherPlayer = false
                                                 for _, desc in ipairs(surfaceGui.FmPlayer:GetDescendants()) do
@@ -285,16 +250,17 @@ return function(Window, Utils, WebhookModule)
                                                     local leaveAth = room:FindFirstChild("LeaveAth") 
                                                     if leaveAth and leaveAth:IsA("Attachment") then jumpOutTarget = leaveAth.WorldPosition end
                                                 elseif isOtherPlayer then 
-                                                    if dist < 15 then 
-                                                        alreadyInSomeoneRoom = true 
-                                                    elseif dist < closestJoinDist then 
-                                                        closestJoinDist = dist
-                                                        roomToJoin = targetPos + Vector3.new(0, 3, 0) 
-                                                    end 
+                                                    if dist < 15 then alreadyInSomeoneRoom = true 
+                                                    elseif dist < closestJoinDist then closestJoinDist = dist roomToJoin = targetPos + Vector3.new(0, 3, 0) end 
                                                 end
                                             end
 
-                                            -- Lọc phòng trống để Create (Luôn ƯU TIÊN PHÒNG GẦN NHẤT ĐỂ KHÔNG BỊ NHẢY LOẠN)
+                                            -- 2. Lọc bục đang ở trạng thái Prepare (Đã nhảy vào nhưng chưa bấm tạo)
+                                            if surfaceGui.FmPrepare.Visible and dist < 12 then
+                                                isPreparingRoom = true
+                                            end
+
+                                            -- 3. Lọc bục trống hoàn toàn
                                             if surfaceGui.FmEmpty.Visible and not autoJoinOthersEnabled then
                                                 if dist < closestEmptyDist then
                                                     closestEmptyDist = dist
@@ -306,102 +272,60 @@ return function(Window, Utils, WebhookModule)
                                 end
                             end
 
-                            -- THỰC THI CHÍNH
+                            -- THỰC THI HÀNH ĐỘNG
                             if autoJoinOthersEnabled then
                                 DungeonStatus:Set("Sảnh: Đang tìm phòng có người...")
-                                if shouldJumpOut then 
-                                    if jumpOutTarget then hrp.CFrame = CFrame.new(jumpOutTarget + Vector3.new(0, 3, 0)) else hrp.CFrame = hrp.CFrame * CFrame.new(0, 0, 20) end task.wait(2)
-                                elseif roomToJoin and not alreadyInSomeoneRoom then 
-                                    hrp.CFrame = CFrame.new(roomToJoin) task.wait(3) 
-                                end
+                                if shouldJumpOut then if jumpOutTarget then hrp.CFrame = CFrame.new(jumpOutTarget + Vector3.new(0, 3, 0)) else hrp.CFrame = hrp.CFrame * CFrame.new(0, 0, 20) end task.wait(2)
+                                elseif roomToJoin and not alreadyInSomeoneRoom then hrp.CFrame = CFrame.new(roomToJoin) task.wait(3) end
 
                             elseif autoCreateEnabled then
-                                -- Chống spam Start nếu server đang xử lý chuyển map
                                 if isStartingDungeon then return end
 
+                                -- GIAI ĐOẠN 3: PHÒNG ĐÃ TẠO -> ĐỢI ĐỦ NGƯỜI VÀ BẤM START
                                 if isMyRoom and myRoomNode then
-                                    -- ĐÃ TẠO XONG -> Đếm người qua Attributes -> START
                                     local currentPlayerCount = 0
                                     for key, _ in pairs(myRoomNode:GetAttributes()) do
-                                        if string.find(key, "Owner_") == 1 or string.find(key, "Mem_") == 1 then
-                                            currentPlayerCount = currentPlayerCount + 1
-                                        end
+                                        if string.find(key, "Owner_") == 1 or string.find(key, "Mem_") == 1 then currentPlayerCount = currentPlayerCount + 1 end
                                     end
                                     
                                     if currentPlayerCount >= targetPlayerCount then
                                         DungeonStatus:Set("Sảnh: Đủ " .. currentPlayerCount .. "/" .. targetPlayerCount .. " người! Đang Start...")
-                                        isStartingDungeon = true -- Khóa cờ lại
-                                        
-                                        -- Lớp 1: Gọi API Gốc qua bộ Framework của Game (Chuẩn nhất)
-                                        pcall(function()
-                                            if _G.PathTool and _G.PathTool.AbyssSystem and _G.PathTool.ViewUtil then
-                                                _G.PathTool.ViewUtil.DoRequest(_G.PathTool.AbyssSystem.ClientStartAbyss)
-                                            end
-                                        end)
-                                        
-                                        -- Lớp 2: Gọi Require gốc
-                                        if AbyssSystem and AbyssSystem.ClientStartAbyss then
-                                            pcall(function() AbyssSystem.ClientStartAbyss() end)
-                                        end
-                                        
-                                        -- Lớp 3: Quét Click UI thủ công
+                                        isStartingDungeon = true
+                                        pcall(function() if _G.PathTool and _G.PathTool.AbyssSystem and _G.PathTool.ViewUtil then _G.PathTool.ViewUtil.DoRequest(_G.PathTool.AbyssSystem.ClientStartAbyss) end end)
+                                        if AbyssSystem and AbyssSystem.ClientStartAbyss then pcall(function() AbyssSystem.ClientStartAbyss() end) end
                                         local startNames = {"BtStart", "BtnStart", "BtGo", "BtEnter"}
                                         for _, btnName in ipairs(startNames) do
                                             local btn = Utils.FindUIElementByName(playerGui, btnName)
-                                            if btn and btn.AbsoluteSize.X > 0 and btn.Visible then
-                                                Utils.ClickButtonExact(btn, "Nút Start")
-                                                break
-                                            end
+                                            if btn and btn.AbsoluteSize.X > 0 and btn.Visible then Utils.ClickButtonExact(btn, "Nút Start") break end
                                         end
-                                        
-                                        task.wait(6) -- Nghỉ 6 giây đợi map load, tránh spam rate limit
-                                        isStartingDungeon = false -- Mở khóa
-                                    else
-                                        DungeonStatus:Set("Sảnh: Đang chờ người " .. currentPlayerCount .. "/" .. targetPlayerCount)
-                                    end
+                                        task.wait(6) isStartingDungeon = false
+                                    else DungeonStatus:Set("Sảnh: Đang chờ người " .. currentPlayerCount .. "/" .. targetPlayerCount) end
 
+                                -- GIAI ĐOẠN 2: CHÂN ĐÃ CHẠM BỤC TRỐNG -> ĐỨNG YÊN BẤM CREATE
+                                elseif isPreparingRoom then
+                                    DungeonStatus:Set("Sảnh: Đang thiết lập Độ Khó và Tạo...")
+                                    local diffMap = {"Normal", "Hard", "Nightmare"}
+                                    local diffString = diffMap[targetDifficulty] or "Normal"
+                                    local diffBtnName = diffString .. "Btn"
+                                    local diffBtn, btCreate = nil, nil
+                                    
+                                    for _, v in pairs(playerGui:GetDescendants()) do
+                                        if v:IsA("GuiObject") and v.Visible then
+                                            if v.Name == diffBtnName and v.Parent and v.Parent.Name == "BtnFrame" then diffBtn = v
+                                            elseif v.Name == "BtCreate" and v.Parent and v.Parent.Name == "BottomFrame" then btCreate = v end
+                                        end
+                                    end
+                                    
+                                    if diffBtn then Utils.ClickButtonExact(diffBtn, "Nút Độ Khó: " .. diffString) task.wait(0.5) end
+                                    if btCreate then Utils.ClickButtonExact(btCreate, "Nút Tạo Phòng") task.wait(2) end
+
+                                -- GIAI ĐOẠN 1: TÌM BỤC TRỐNG ĐỂ NHẢY VÀO
                                 elseif emptyRoomToCreate then
-                                    -- CHƯA CÓ PHÒNG -> Nhảy vào phòng trống GẦN NHẤT & Setup
-                                    -- Khoảng cách nới lỏng lên 15 để nếu rớt lệch vẫn nhận diện được đang ở trong phòng
                                     local distToEmpty = (hrp.Position - emptyRoomToCreate).Magnitude
                                     if distToEmpty > 15 then
                                         DungeonStatus:Set("Sảnh: Đang nhảy vào phòng trống...")
                                         hrp.CFrame = CFrame.new(emptyRoomToCreate)
-                                        task.wait(2)
-                                    else
-                                        DungeonStatus:Set("Sảnh: Đang thiết lập Độ Khó và Tạo...")
-                                        task.wait(1.5) -- Chờ UI Game nảy lên ổn định
-                                        
-                                        -- Chuẩn hóa tên nút Độ Khó ("NormalBtn", "HardBtn", "NightmareBtn")
-                                        local diffMap = {"Normal", "Hard", "Nightmare"}
-                                        local diffString = diffMap[targetDifficulty] or "Normal"
-                                        local diffBtnName = diffString .. "Btn"
-                                        
-                                        local diffBtn = nil
-                                        local btCreate = nil
-                                        
-                                        -- Quét kĩ bên trong UI Tạo phòng để tránh bấm nhầm
-                                        for _, v in pairs(playerGui:GetDescendants()) do
-                                            if v:IsA("GuiObject") and v.Visible then
-                                                if v.Name == diffBtnName and v.Parent and v.Parent.Name == "BtnFrame" then
-                                                    diffBtn = v
-                                                elseif v.Name == "BtCreate" and v.Parent and v.Parent.Name == "BottomFrame" then
-                                                    btCreate = v
-                                                end
-                                            end
-                                        end
-                                        
-                                        -- 1. Chọn độ khó
-                                        if diffBtn then
-                                            Utils.ClickButtonExact(diffBtn, "Nút Độ Khó: " .. diffString)
-                                            task.wait(0.5)
-                                        end
-                                        
-                                        -- 2. Click Tạo phòng
-                                        if btCreate then
-                                            Utils.ClickButtonExact(btCreate, "Nút Tạo Phòng")
-                                            task.wait(2.5) -- Tăng độ trễ cho server xác lập quyền Owner
-                                        end
+                                        task.wait(1.5) -- Chờ game load bảng FmPrepare
                                     end
                                 end
                             end
