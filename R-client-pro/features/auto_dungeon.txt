@@ -1,6 +1,6 @@
 -- ====================================================================
 -- MODULE: DUNGEON AUTO (AUTO ATTACK, AUTO EXIT, AUTO JOIN & AUTO CREATE)
--- BẢN CẬP NHẬT: FIX LỖI CHỌN ĐỘ KHÓ BẰNG NHẬN DIỆN THÔNG MINH + GETCONNECTIONS
+-- BẢN CẬP NHẬT: FIX LỖI TELE ĐẾN QUÁI BỊ LÚN XUỐNG ĐẤT (CỘNG TRỤC Y)
 -- ====================================================================
 return function(Window, Utils, WebhookModule)
     local Players = game:GetService("Players")
@@ -159,14 +159,24 @@ return function(Window, Utils, WebhookModule)
 
                     if bestTarget then
                         local targetPos = bestTarget:IsA("Model") and bestTarget.PrimaryPart and bestTarget.PrimaryPart.Position or bestTarget.Position
+                        
+                        -- FIX Y-OFFSET (CỘNG THÊM 3 VÀO TRỤC Y) KHI TELEPORT ĐỂ KHÔNG BỊ LÚN ĐẤT
                         if closestDist2D > 40 then
-                            hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 0, 4)) task.wait(0.2)
-                            humanoid:MoveTo(hrp.Position) dungeonLastPosition = hrp.Position dungeonStuckTimer = 0 SmartDismount()
+                            hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 4)) 
+                            task.wait(0.2)
+                            humanoid:MoveTo(hrp.Position) 
+                            dungeonLastPosition = hrp.Position 
+                            dungeonStuckTimer = 0 
+                            SmartDismount()
                         elseif closestDist2D > 12 then
                             humanoid:MoveTo(targetPos)
                             if dungeonLastPosition and (hrp.Position - dungeonLastPosition).Magnitude < 1 then
                                 dungeonStuckTimer = dungeonStuckTimer + 0.5
-                                if dungeonStuckTimer >= 3 then hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 0, 3)) dungeonStuckTimer = 0 end
+                                if dungeonStuckTimer >= 3 then 
+                                    -- CỘNG THÊM 3 VÀO TRỤC Y KHI BỊ KẸT
+                                    hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 3)) 
+                                    dungeonStuckTimer = 0 
+                                end
                             else dungeonStuckTimer = 0 end
                             dungeonLastPosition = hrp.Position
                         else
@@ -347,7 +357,6 @@ return function(Window, Utils, WebhookModule)
                                     
                                     local diffBtn, btCreate = nil, nil
                                     
-                                    -- Tìm nút Create
                                     for _, v in pairs(playerGui:GetDescendants()) do
                                         if v:IsA("GuiObject") and v.Visible then
                                             if v.Name == "BtCreate" and v.Parent and v.Parent.Name == "BottomFrame" then 
@@ -357,7 +366,6 @@ return function(Window, Utils, WebhookModule)
                                         end
                                     end
 
-                                    -- TÌM NÚT ĐỘ KHÓ THÔNG MINH
                                     local btnFrame = nil
                                     for _, v in pairs(playerGui:GetDescendants()) do
                                         if v.Name == "BtnFrame" and v.Parent and v.Parent.Name == "DifficultyFrame" then
@@ -366,12 +374,10 @@ return function(Window, Utils, WebhookModule)
                                     end
                                     
                                     if btnFrame then
-                                        -- Cố tìm theo tên thường thấy
                                         local n1 = tostring(targetDifficulty) .. "Btn"
                                         local n2 = ({"NormalBtn", "HardBtn", "NightmareBtn"})[targetDifficulty]
                                         diffBtn = btnFrame:FindFirstChild(n1) or btnFrame:FindFirstChild(n2)
                                         
-                                        -- Nếu vẫn không thấy, lấy tất cả nút trong Frame và chọn theo thứ tự từ trái sang phải
                                         if not diffBtn then
                                             local btns = {}
                                             for _, child in ipairs(btnFrame:GetChildren()) do
@@ -383,7 +389,6 @@ return function(Window, Utils, WebhookModule)
                                     end
                                     
                                     if diffBtn then 
-                                        -- Ép Click Độ Khó
                                         pcall(function()
                                             if getconnections then
                                                 for _, conn in ipairs(getconnections(diffBtn.Activated)) do conn.Function() end
@@ -395,7 +400,6 @@ return function(Window, Utils, WebhookModule)
                                     end
                                     
                                     if btCreate then 
-                                        -- Ép lệnh Click cho Create
                                         pcall(function()
                                             if getconnections then
                                                 for _, conn in ipairs(getconnections(btCreate.Activated)) do conn.Function() end
