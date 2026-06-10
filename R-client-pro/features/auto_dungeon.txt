@@ -1,6 +1,6 @@
 -- ====================================================================
 -- MODULE: DUNGEON AUTO (AUTO ATTACK, AUTO EXIT, AUTO JOIN & AUTO CREATE)
--- BẢN CẬP NHẬT: ÉP CLICK BẰNG GETCONNECTIONS & DELAY ĐỒNG BỘ UI
+-- BẢN CẬP NHẬT: FIX LỖI CHỌN ĐỘ KHÓ BẰNG NHẬN DIỆN THÔNG MINH + GETCONNECTIONS
 -- ====================================================================
 return function(Window, Utils, WebhookModule)
     local Players = game:GetService("Players")
@@ -288,11 +288,9 @@ return function(Window, Utils, WebhookModule)
                                         DungeonStatus:Set("Sảnh: Đủ " .. currentPlayerCount .. "/" .. targetPlayerCount .. " người! Chuẩn bị Start...")
                                         isStartingDungeon = true
                                         
-                                        -- QUAN TRỌNG: Nới lỏng thời gian để Game kịp bật bảng UI Phòng Chờ lên
                                         task.wait(2.5)
                                         DungeonStatus:Set("Sảnh: Đang ép lệnh Start...")
                                         
-                                        -- LỚP 1: Ép API của Game
                                         pcall(function()
                                             local CG = getrenv()._G
                                             if CG and CG.PathTool and CG.PathTool.ViewUtil and CG.PathTool.AbyssSystem then
@@ -300,7 +298,6 @@ return function(Window, Utils, WebhookModule)
                                             end
                                         end)
                                         
-                                        -- LỚP 2: Quét Tìm Bằng Mọi Giá & Kích Hoạt Nút Start
                                         local startNames = {"BtStart", "BtnStart", "BtGo", "BtEnter", "StartBtn"}
                                         local btnStart = nil
                                         
@@ -319,31 +316,26 @@ return function(Window, Utils, WebhookModule)
                                                         if v.Name == btnName then btnStart = v break end
                                                     end
                                                     if btnStart then break end
-                                                    
                                                     local txt = v:IsA("TextButton") and v.Text or ""
                                                     local lab = v:FindFirstChildOfClass("TextLabel")
                                                     if lab then txt = lab.Text end
                                                     txt = string.lower(txt)
-                                                    if string.match(txt, "start") or string.match(txt, "bắt đầu") then
-                                                        btnStart = v break
-                                                    end
+                                                    if string.match(txt, "start") or string.match(txt, "bắt đầu") then btnStart = v break end
                                                 end
                                             end
                                         end
                                         
                                         if btnStart then
-                                            -- Ép tín hiệu Click ngầm (Bypass Layer UI cho Solara)
                                             pcall(function()
                                                 if getconnections then
                                                     for _, conn in ipairs(getconnections(btnStart.Activated)) do conn.Function() end
                                                     for _, conn in ipairs(getconnections(btnStart.MouseButton1Click)) do conn.Function() end
                                                 end
                                             end)
-                                            -- Click chuột ảo (Dự phòng)
                                             Utils.ClickButtonExact(btnStart, "Nút Start")
                                         end
                                         
-                                        task.wait(4.5) -- Đợi map load
+                                        task.wait(4.5)
                                         isStartingDungeon = false
                                     else 
                                         DungeonStatus:Set("Sảnh: Đang chờ người " .. currentPlayerCount .. "/" .. targetPlayerCount) 
@@ -352,22 +344,56 @@ return function(Window, Utils, WebhookModule)
                                 -- GIAI ĐOẠN 2: CHÂN ĐÃ CHẠM BỤC TRỐNG -> ĐỨNG YÊN BẤM CREATE
                                 elseif isPreparingRoom then
                                     DungeonStatus:Set("Sảnh: Đang thiết lập Độ Khó và Tạo...")
-                                    local diffMap = {"Normal", "Hard", "Nightmare"}
-                                    local diffString = diffMap[targetDifficulty] or "Normal"
-                                    local diffBtnName = diffString .. "Btn"
+                                    
                                     local diffBtn, btCreate = nil, nil
                                     
+                                    -- Tìm nút Create
                                     for _, v in pairs(playerGui:GetDescendants()) do
                                         if v:IsA("GuiObject") and v.Visible then
-                                            if v.Name == diffBtnName and v.Parent and v.Parent.Name == "BtnFrame" then diffBtn = v
-                                            elseif v.Name == "BtCreate" and v.Parent and v.Parent.Name == "BottomFrame" then btCreate = v end
+                                            if v.Name == "BtCreate" and v.Parent and v.Parent.Name == "BottomFrame" then 
+                                                btCreate = v 
+                                                break
+                                            end
+                                        end
+                                    end
+
+                                    -- TÌM NÚT ĐỘ KHÓ THÔNG MINH
+                                    local btnFrame = nil
+                                    for _, v in pairs(playerGui:GetDescendants()) do
+                                        if v.Name == "BtnFrame" and v.Parent and v.Parent.Name == "DifficultyFrame" then
+                                            btnFrame = v break
+                                        end
+                                    end
+                                    
+                                    if btnFrame then
+                                        -- Cố tìm theo tên thường thấy
+                                        local n1 = tostring(targetDifficulty) .. "Btn"
+                                        local n2 = ({"NormalBtn", "HardBtn", "NightmareBtn"})[targetDifficulty]
+                                        diffBtn = btnFrame:FindFirstChild(n1) or btnFrame:FindFirstChild(n2)
+                                        
+                                        -- Nếu vẫn không thấy, lấy tất cả nút trong Frame và chọn theo thứ tự từ trái sang phải
+                                        if not diffBtn then
+                                            local btns = {}
+                                            for _, child in ipairs(btnFrame:GetChildren()) do
+                                                if child:IsA("GuiButton") then table.insert(btns, child) end
+                                            end
+                                            table.sort(btns, function(a,b) return a.AbsolutePosition.X < b.AbsolutePosition.X end)
+                                            diffBtn = btns[targetDifficulty]
                                         end
                                     end
                                     
                                     if diffBtn then 
-                                        Utils.ClickButtonExact(diffBtn, "Nút Độ Khó: " .. diffString) 
+                                        -- Ép Click Độ Khó
+                                        pcall(function()
+                                            if getconnections then
+                                                for _, conn in ipairs(getconnections(diffBtn.Activated)) do conn.Function() end
+                                                for _, conn in ipairs(getconnections(diffBtn.MouseButton1Click)) do conn.Function() end
+                                            end
+                                        end)
+                                        Utils.ClickButtonExact(diffBtn, "Nút Độ Khó " .. tostring(targetDifficulty)) 
                                         task.wait(0.5) 
                                     end
+                                    
                                     if btCreate then 
                                         -- Ép lệnh Click cho Create
                                         pcall(function()
@@ -377,7 +403,7 @@ return function(Window, Utils, WebhookModule)
                                             end
                                         end)
                                         Utils.ClickButtonExact(btCreate, "Nút Tạo Phòng") 
-                                        task.wait(3.5) -- TĂNG THỜI GIAN CHỜ LÊN 3.5s CHO GAME LẬT UI
+                                        task.wait(3.5)
                                     end
 
                                 -- GIAI ĐOẠN 1: TÌM BỤC TRỐNG ĐỂ NHẢY VÀO
