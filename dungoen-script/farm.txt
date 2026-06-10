@@ -3,6 +3,7 @@ local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
@@ -11,19 +12,18 @@ local isAutoEnabled = true
 local isProcessing = false 
 local hasHandledTalentThisRoom = false 
 
--- BIẾN KIỂM SOÁT ĐỒNG HỒ & TRẠNG THÁI MÀN
-local clockHasStarted = false 
 local waveCleared = false 
 local roomEnterTime = tick()
+local clearConfirmTimer = 0 
 
 local lastPosition = nil
 local TELEPORT_THRESHOLD = 150 
 local isWaitingForTeleport = false
 
-local EXTRA_SPEED = 8 -- Tốc độ cộng thêm an toàn cho CFrame Glide
+local EXTRA_SPEED = 8
 
 -- ==========================================
--- BẢN ĐỒ CÁC TẦNG CÓ CỘT BUFF (DATA MAP)
+-- BẢN ĐỒ CÁC TẦNG CÓ CỘT BUFF
 -- ==========================================
 local STAGES_WITH_BUFF = {
     ["1/20"] = true, ["3/20"] = true, ["5/20"] = true, 
@@ -33,7 +33,7 @@ local STAGES_WITH_BUFF = {
 }
 
 -- ==========================================
--- DANH SÁCH ƯU TIÊN BUFF TỪ BẬC IV ĐẾN I
+-- DANH SÁCH ƯU TIÊN 
 -- ==========================================
 local PRIORITY_BUFF_LIST = {
     "Critical Damage IV", "Attack IV", "Critical IV", "HP Boost IV", "Shield Effect IV",
@@ -43,7 +43,6 @@ local PRIORITY_BUFF_LIST = {
     "Critical Damage I", "Attack I", "Critical I", "HP Boost I", "Shield Effect I"
 }
 
--- BẢNG DỮ LIỆU ID CỬA TỪ GAME
 local ITEM_DATA = {
     ["87744905975972"]  = {name = "Thẻ Chọn Lại"},
     ["113200215489277"] = {name = "Xu Shop"},
@@ -60,7 +59,6 @@ local ITEM_DATA = {
     ["97568742355714"]  = {name = "Phòng Hồi Sinh"}
 }
 
--- DANH SÁCH ƯU TIÊN DẠNG MẢNG ĐỘNG CỦA CỬA
 local PriorityList = {
     "Thẻ Chọn Lại",
     "Phòng Hồi Sinh",
@@ -73,7 +71,7 @@ local PriorityList = {
 local PriorityScores = {}
 
 -- ==========================================
--- GIAO DIỆN UI KHỞI TẠO
+-- GIAO DIỆN UI
 -- ==========================================
 if player:WaitForChild("PlayerGui"):FindFirstChild("AbyssStrategyUI") then
     player.PlayerGui.AbyssStrategyUI:Destroy()
@@ -92,7 +90,6 @@ mainFrame.Active = true
 mainFrame.ClipsDescendants = true 
 mainFrame.Parent = screenGui
 
--- Xử lý kéo thả khung UI
 local mDragging, mDragInput, mDragStart, mStartPos
 mainFrame.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -112,7 +109,7 @@ end)
 
 Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 12)
 
-local title = Instance.new("TextLabel") title.Size = UDim2.new(0.6, 0, 0, 50) title.Position = UDim2.new(0, 12, 0, 0) title.BackgroundTransparency = 1 title.Text = "⚙️ AUTO ABYSS V5.5 (DYNAMIC)" title.TextColor3 = Color3.fromRGB(0, 210, 255) title.TextSize = 12 title.Font = Enum.Font.SourceSansBold title.TextXAlignment = Enum.TextXAlignment.Left title.Parent = mainFrame
+local title = Instance.new("TextLabel") title.Size = UDim2.new(0.6, 0, 0, 50) title.Position = UDim2.new(0, 12, 0, 0) title.BackgroundTransparency = 1 title.Text = "⚙️ AUTO CLAIM REWARDS" title.TextColor3 = Color3.fromRGB(0, 210, 255) title.TextSize = 12 title.Font = Enum.Font.SourceSansBold title.TextXAlignment = Enum.TextXAlignment.Left title.Parent = mainFrame
 local toggleBtn = Instance.new("TextButton") toggleBtn.Size = UDim2.new(0, 95, 0, 30) toggleBtn.Position = UDim2.new(0.72, 0, 0, 10) toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 90) toggleBtn.Text = "🔴 AUTO: ON" toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255) toggleBtn.Font = Enum.Font.SourceSansBold toggleBtn.TextSize = 11 toggleBtn.Parent = mainFrame
 Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 6)
 
@@ -122,12 +119,162 @@ local logDoor = Instance.new("TextLabel") logDoor.Size = UDim2.new(1, -20, 0, 35
 Instance.new("UICorner", logDoor).CornerRadius = UDim.new(0, 6)
 
 -- ==========================================
--- KHỞI TẠO CÁC THÀNH PHẦN ĐIỀU CHỈNH ƯU TIÊN ĐỘC LẬP
+-- HỆ THỐNG KÉO THẢ DRAG & DROP
+-- ==========================================
+local draggingItem = nil
+local dragVisual = nil
+local dragOffset = Vector2.new(0, 0)
+local dragTargetList = nil
+local dragTargetIndex = nil
+
+local function RenderList(scrollFrame, dataList, isDoor)
+    for _, child in ipairs(scrollFrame:GetChildren()) do
+        if child:IsA("Frame") then child:Destroy() end
+    end
+    
+    if isDoor then
+        for k in pairs(PriorityScores) do PriorityScores[k] = nil end
+        for index, name in ipairs(dataList) do PriorityScores[name] = index end
+    end
+    
+    for index, name in ipairs(dataList) do
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, -10, 0, 32)
+        row.BackgroundColor3 = Color3.fromRGB(35, 38, 48)
+        row.Parent = scrollFrame
+        row:SetAttribute("Index", index)
+        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
+        
+        -- Vùng kéo thả (nút kéo 3 gạch)
+        local dragHandle = Instance.new("TextButton")
+        dragHandle.Size = UDim2.new(0, 35, 1, 0)
+        dragHandle.Position = UDim2.new(0, 0, 0, 0)
+        dragHandle.BackgroundColor3 = Color3.fromRGB(60, 65, 80)
+        dragHandle.Text = "☰"
+        dragHandle.TextColor3 = Color3.fromRGB(200, 200, 200)
+        dragHandle.TextSize = 16
+        dragHandle.Font = Enum.Font.SourceSansBold
+        dragHandle.AutoButtonColor = false
+        dragHandle.Parent = row
+        Instance.new("UICorner", dragHandle).CornerRadius = UDim.new(0, 6)
+        
+        -- Text hiển thị
+        local txt = Instance.new("TextLabel")
+        txt.Size = UDim2.new(1, -45, 1, 0)
+        txt.Position = UDim2.new(0, 40, 0, 0)
+        txt.BackgroundTransparency = 1
+        txt.Text = string.format("%d. %s", index, name)
+        txt.TextColor3 = Color3.fromRGB(220, 220, 220)
+        txt.Font = Enum.Font.SourceSansBold
+        txt.TextSize = 12
+        txt.TextXAlignment = Enum.TextXAlignment.Left
+        txt.Parent = row
+        
+        -- Sự kiện kéo thả
+        dragHandle.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                draggingItem = row
+                dragTargetList = dataList
+                dragTargetIndex = row:GetAttribute("Index")
+                
+                local mousePos = UserInputService:GetMouseLocation()
+                local rowAbsolutePos = row.AbsolutePosition
+                local rowSize = row.AbsoluteSize
+                
+                dragOffset = Vector2.new(
+                    mousePos.X - rowAbsolutePos.X,
+                    mousePos.Y - rowAbsolutePos.Y
+                )
+                
+                dragVisual = row:Clone()
+                dragVisual.AnchorPoint = Vector2.new(0, 0)
+                dragVisual.Size = UDim2.fromOffset(rowSize.X, rowSize.Y)
+                dragVisual.Position = UDim2.fromOffset(mousePos.X - dragOffset.X, mousePos.Y - dragOffset.Y)
+                dragVisual.BackgroundColor3 = Color3.fromRGB(80, 85, 105)
+                dragVisual.ZIndex = 10
+                dragVisual.Parent = screenGui
+                
+                row.BackgroundTransparency = 0.5
+                for _, child in ipairs(row:GetChildren()) do
+                    if child:IsA("TextLabel") or child:IsA("TextButton") then
+                        child.TextTransparency = 0.5
+                    end
+                end
+                
+                input.Changed:Connect(function()
+                    if input.UserInputState == Enum.UserInputState.End then
+                        if dragVisual then
+                            TweenService:Create(dragVisual, TweenInfo.new(0.1), {BackgroundTransparency = 1}):Play()
+                            task.wait(0.1)
+                            dragVisual:Destroy()
+                            dragVisual = nil
+                        end
+                        
+                        row.BackgroundTransparency = 0
+                        for _, child in ipairs(row:GetChildren()) do
+                            if child:IsA("TextLabel") or child:IsA("TextButton") then
+                                child.TextTransparency = 0
+                            end
+                        end
+                        
+                        draggingItem = nil
+                        dragTargetList = nil
+                        dragTargetIndex = nil
+                        RenderList(scrollFrame, dataList, isDoor)
+                    end
+                end)
+            end
+        end)
+    end
+end
+
+-- Xử lý di chuyển chuột để hoán đổi vị trí
+UserInputService.InputChanged:Connect(function(input)
+    if draggingItem and dragVisual and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local mousePos = UserInputService:GetMouseLocation()
+        dragVisual.Position = UDim2.fromOffset(mousePos.X - dragOffset.X, mousePos.Y - dragOffset.Y)
+        
+        local visualCenterY = dragVisual.AbsolutePosition.Y + (dragVisual.AbsoluteSize.Y / 2)
+        
+        local rows = {}
+        for _, child in ipairs(draggingItem.Parent:GetChildren()) do
+            if child:IsA("Frame") and child ~= draggingItem then
+                table.insert(rows, child)
+            end
+        end
+        
+        table.sort(rows, function(a, b)
+            return a.AbsolutePosition.Y < b.AbsolutePosition.Y
+        end)
+        
+        local newIndex = nil
+        for i, otherRow in ipairs(rows) do
+            local otherCenterY = otherRow.AbsolutePosition.Y + (otherRow.AbsoluteSize.Y / 2)
+            if visualCenterY < otherCenterY then
+                newIndex = otherRow:GetAttribute("Index")
+                break
+            end
+        end
+        
+        if newIndex and newIndex ~= dragTargetIndex then
+            local temp = dragTargetList[dragTargetIndex]
+            dragTargetList[dragTargetIndex] = dragTargetList[newIndex]
+            dragTargetList[newIndex] = temp
+            
+            dragTargetIndex = newIndex
+            
+            local isDoorList = (dragTargetList == PriorityList)
+            RenderList(draggingItem.Parent, dragTargetList, isDoorList)
+        end
+    end
+end)
+
+-- ==========================================
+-- TẠO UI DROP DOWN
 -- ==========================================
 local isDoorOpen = false
 local isBuffOpen = false
 
--- 1. BẢNG ƯU TIÊN CỬA
 local doorToggleBtn = Instance.new("TextButton")
 doorToggleBtn.Size = UDim2.new(1, -20, 0, 25)
 doorToggleBtn.BackgroundColor3 = Color3.fromRGB(45, 50, 65)
@@ -149,7 +296,6 @@ doorScroll.Parent = mainFrame
 local doorLayout = Instance.new("UIListLayout", doorScroll) doorLayout.Padding = UDim.new(0, 4)
 Instance.new("UICorner", doorScroll).CornerRadius = UDim.new(0, 6)
 
--- 2. BẢNG ƯU TIÊN BUFF
 local buffToggleBtn = Instance.new("TextButton")
 buffToggleBtn.Size = UDim2.new(1, -20, 0, 25)
 buffToggleBtn.BackgroundColor3 = Color3.fromRGB(45, 50, 65)
@@ -171,106 +317,27 @@ buffScroll.Parent = mainFrame
 local buffLayout = Instance.new("UIListLayout", buffScroll) buffLayout.Padding = UDim.new(0, 4)
 Instance.new("UICorner", buffScroll).CornerRadius = UDim.new(0, 6)
 
--- Hàm tính toán vị trí động cho UI
 local function UpdateUILayout()
     local startY = 135
-    
-    -- Khối Cửa
     doorToggleBtn.Position = UDim2.new(0, 10, 0, startY)
     startY = startY + 25 + 5
     if isDoorOpen then
         doorScroll.Visible = true
         doorScroll.Position = UDim2.new(0, 10, 0, startY)
         startY = startY + 130 + 5
-    else
-        doorScroll.Visible = false
-    end
+    else doorScroll.Visible = false end
     
-    -- Khối Buff
     buffToggleBtn.Position = UDim2.new(0, 10, 0, startY)
     startY = startY + 25 + 5
     if isBuffOpen then
         buffScroll.Visible = true
         buffScroll.Position = UDim2.new(0, 10, 0, startY)
         startY = startY + 130 + 5
-    else
-        buffScroll.Visible = false
-    end
+    else buffScroll.Visible = false end
     
-    -- Thiết lập chiều cao tổng thể của MainFrame
     mainFrame.Size = UDim2.new(0, 380, 0, startY + 5)
 end
 
--- ==========================================
--- HÀM RENDERING NỘI DUNG TỪNG LIST
--- ==========================================
-local function RenderList(scrollFrame, dataList, isDoor)
-    for _, child in ipairs(scrollFrame:GetChildren()) do
-        if child:IsA("Frame") then child:Destroy() end
-    end
-    
-    if isDoor then
-        for k in pairs(PriorityScores) do PriorityScores[k] = nil end
-        for index, name in ipairs(dataList) do PriorityScores[name] = index end
-    end
-    
-    for index, name in ipairs(dataList) do
-        local row = Instance.new("Frame")
-        row.Size = UDim2.new(1, -10, 0, 28)
-        row.BackgroundColor3 = Color3.fromRGB(35, 38, 48)
-        row.Parent = scrollFrame
-        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
-        
-        local txt = Instance.new("TextLabel")
-        txt.Size = UDim2.new(0.6, 0, 1, 0)
-        txt.Position = UDim2.new(0, 8, 0, 0)
-        txt.BackgroundTransparency = 1
-        txt.Text = string.format("Hạng %d: %s", index, name)
-        txt.TextColor3 = Color3.fromRGB(220, 220, 220)
-        txt.Font = Enum.Font.SourceSansBold
-        txt.TextSize = 12
-        txt.TextXAlignment = Enum.TextXAlignment.Left
-        txt.Parent = row
-
-        if index > 1 then
-            local btnUp = Instance.new("TextButton")
-            btnUp.Size = UDim2.new(0, 35, 0, 22)
-            btnUp.Position = UDim2.new(0.68, 0, 0, 3)
-            btnUp.BackgroundColor3 = Color3.fromRGB(0, 150, 100)
-            btnUp.Text = "▲"
-            btnUp.TextColor3 = Color3.fromRGB(255, 255, 255)
-            btnUp.Font = Enum.Font.SourceSansBold
-            btnUp.TextSize = 11
-            Instance.new("UICorner", btnUp).CornerRadius = UDim.new(0, 4)
-            btnUp.Parent = row
-            
-            btnUp.MouseButton1Click:Connect(function()
-                dataList[index], dataList[index - 1] = dataList[index - 1], dataList[index]
-                RenderList(scrollFrame, dataList, isDoor)
-            end)
-        end
-
-        if index < #dataList then
-            local btnDown = Instance.new("TextButton")
-            btnDown.Size = UDim2.new(0, 35, 0, 22)
-            btnDown.Position = UDim2.new(0.82, 0, 0, 3)
-            btnDown.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
-            btnDown.Text = "▼"
-            btnDown.TextColor3 = Color3.fromRGB(255, 255, 255)
-            btnDown.Font = Enum.Font.SourceSansBold
-            btnDown.TextSize = 11
-            Instance.new("UICorner", btnDown).CornerRadius = UDim.new(0, 4)
-            btnDown.Parent = row
-            
-            btnDown.MouseButton1Click:Connect(function()
-                dataList[index], dataList[index + 1] = dataList[index + 1], dataList[index]
-                RenderList(scrollFrame, dataList, isDoor)
-            end)
-        end
-    end
-end
-
--- Kết nối sự kiện Click đóng mở Dropdown
 doorToggleBtn.MouseButton1Click:Connect(function()
     isDoorOpen = not isDoorOpen
     doorToggleBtn.Text = isDoorOpen and "🚪 BẢNG ƯU TIÊN CỬA ▲" or "🚪 BẢNG ƯU TIÊN CỬA ▼"
@@ -283,7 +350,6 @@ buffToggleBtn.MouseButton1Click:Connect(function()
     UpdateUILayout()
 end)
 
--- Khởi tạo render ban đầu
 RenderList(doorScroll, PriorityList, true)
 RenderList(buffScroll, PRIORITY_BUFF_LIST, false)
 UpdateUILayout()
@@ -292,7 +358,7 @@ toggleBtn.MouseButton1Click:Connect(function()
     isAutoEnabled = not isAutoEnabled
     if isAutoEnabled then
         toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 90) toggleBtn.Text = "AUTO: ON"
-        logTalent.Text = "TRẠNG THÁI: ĐANG CHỜ ĐỒNG HỒ..." logTalent.TextColor3 = Color3.fromRGB(200, 200, 200)
+        logTalent.Text = "TRẠNG THÁI: ĐANG CHỜ PHÒNG..." logTalent.TextColor3 = Color3.fromRGB(200, 200, 200)
         logDoor.Text = "CỬA: ĐANG QUÉT..." logDoor.TextColor3 = Color3.fromRGB(200, 200, 200)
     else
         toggleBtn.BackgroundColor3 = Color3.fromRGB(170, 40, 40) toggleBtn.Text = "AUTO: OFF"
@@ -304,40 +370,14 @@ toggleBtn.MouseButton1Click:Connect(function()
 end)
 
 -- ==========================================
--- HÀM HỖ TRỢ ĐIỀU HƯỚNG MƯỢT (NATIVE PATHFINDING OPTIMIZED)
+-- CÁC HÀM AUTO (GIỮ NGUYÊN)
 -- ==========================================
-local function walkToTarget(targetPosition)
-    local hum = character:FindFirstChildOfClass("Humanoid")
-    local root = character:FindFirstChild("HumanoidRootPart")
-    if hum and root then
-        hum:MoveTo(targetPosition)
-        local timeout = tick() + 60
-        local lastMoveCall = tick()
-
-        while (root.Position - targetPosition).Magnitude > 4 and tick() < timeout do
-            if not isAutoEnabled or not isProcessing then 
-                hum:MoveTo(root.Position) 
-                return 
-            end
-            
-            -- Chỉ gọi lại MoveTo sau mỗi 0.5 giây để tránh giật hình nhân vật
-            if tick() - lastMoveCall > 0.5 then
-                hum:MoveTo(targetPosition)
-                lastMoveCall = tick()
-            end
-            task.wait(0.03) -- Tốc độ quét cực cao tăng độ phản hồi nhạy bén
-        end
-    end
-end
-
 local function AutoPickBuff()
     local mainGui = player.PlayerGui:FindFirstChild("MainGui")
     local fmContent = mainGui and mainGui:FindFirstChild("AbyssSelectTalentView") and mainGui.AbyssSelectTalentView:FindFirstChild("AbyssSelectTalentView") and mainGui.AbyssSelectTalentView.AbyssSelectTalentView:FindFirstChild("FmContent")
-    
     if not fmContent then return false end
     
     local bestItemCell, bestScore = nil, 999 
-    
     for _, itemCell in pairs(fmContent:GetChildren()) do
         if itemCell:IsA("GuiObject") and itemCell.Name == "ItemCell" and itemCell.Visible == true then
             local buffName = ""
@@ -351,10 +391,7 @@ local function AutoPickBuff()
             if buffName ~= "" then
                 for score, pName in ipairs(PRIORITY_BUFF_LIST) do
                     if string.lower(buffName) == string.lower(pName) then
-                        if score < bestScore then 
-                            bestScore = score
-                            bestItemCell = itemCell 
-                        end
+                        if score < bestScore then bestScore = score; bestItemCell = itemCell end
                         break 
                     end
                 end
@@ -364,10 +401,7 @@ local function AutoPickBuff()
     
     if not bestItemCell then
         for _, itemCell in pairs(fmContent:GetChildren()) do
-            if itemCell:IsA("GuiObject") and itemCell.Name == "ItemCell" and itemCell.Visible == true then 
-                bestItemCell = itemCell
-                break 
-            end
+            if itemCell:IsA("GuiObject") and itemCell.Name == "ItemCell" and itemCell.Visible == true then bestItemCell = itemCell; break end
         end
     end
     
@@ -377,7 +411,7 @@ local function AutoPickBuff()
             local targetX = btSelect.AbsolutePosition.X + (btSelect.AbsoluteSize.X / 2)
             local targetY = btSelect.AbsolutePosition.Y + (btSelect.AbsoluteSize.Y / 2) + 36 
             VirtualInputManager:SendMouseButtonEvent(targetX, targetY, 0, true, game, 1) 
-            task.wait(0.1)
+            task.wait(0.05)
             VirtualInputManager:SendMouseButtonEvent(targetX, targetY, 0, false, game, 1)
             return true
         end
@@ -385,26 +419,18 @@ local function AutoPickBuff()
     return false
 end
 
--- ==========================================
--- ĐỘNG CƠ TĂNG TỐC ẨN (CFRAME GLIDE CHỐNG STUTTER)
--- ==========================================
 local speedConnection = nil
-
 local function InjectSpeedHack(char)
     character = char
     lastPosition = nil 
     isWaitingForTeleport = false
-    
     if speedConnection then speedConnection:Disconnect() end
-    
     speedConnection = RunService.Heartbeat:Connect(function(deltaTime)
         if not isAutoEnabled or not isProcessing then return end
         local hum = character:FindFirstChildOfClass("Humanoid")
         local root = character:FindFirstChild("HumanoidRootPart")
-        
         if hum and root and hum.MoveDirection.Magnitude > 0 then
-            local glideVector = hum.MoveDirection * (EXTRA_SPEED * deltaTime)
-            root.CFrame = root.CFrame + glideVector
+            root.CFrame = root.CFrame + (hum.MoveDirection * (EXTRA_SPEED * deltaTime))
         end
     end)
 end
@@ -413,7 +439,7 @@ if player.Character then InjectSpeedHack(player.Character) end
 player.CharacterAdded:Connect(InjectSpeedHack)
 
 -- ==========================================
--- VÒNG LẶP KIỂM TRA MÁY TRẠNG THÁI (ĐỒNG HỒ & SẢNH CHỜ)
+-- VÒNG LẶP MÁY TRẠNG THÁI
 -- ==========================================
 task.spawn(function()
     while true do
@@ -424,14 +450,15 @@ task.spawn(function()
                 if lastPosition and (currentPos - lastPosition).Magnitude > TELEPORT_THRESHOLD then
                     isProcessing = false 
                     hasHandledTalentThisRoom = false 
-                    clockHasStarted = false 
                     waveCleared = false
                     isWaitingForTeleport = false 
                     _G.IsWaitingOnDoor = false 
                     roomEnterTime = tick() 
+                    clearConfirmTimer = 0 
+                    
                     logDoor.Text = "CỬA: SANG TẦNG MỚI!\nĐANG CHỜ..."
                     logDoor.TextColor3 = Color3.fromRGB(0, 215, 255)
-                    logTalent.Text = "TRẠNG THÁI: ĐANG CHỜ ĐỒNG HỒ..."
+                    logTalent.Text = "TRẠNG THÁI: ĐANG QUÉT PHÒNG..."
                     logTalent.TextColor3 = Color3.fromRGB(200, 200, 200)
                 end
                 lastPosition = currentPos
@@ -444,54 +471,58 @@ task.spawn(function()
             if playerGui then 
                 pcall(function() fmTimeFrame = playerGui.MainGui.ScreenGui.ArenaMainRightTopView.FmTime end) 
                 for _, v in ipairs(playerGui:GetDescendants()) do
-                    if v.Name == "LabStage" and v:IsA("TextLabel") then
-                        labStage = v
-                        break
-                    end
+                    if v.Name == "LabStage" and v:IsA("TextLabel") then labStage = v; break end
                 end
             end
 
             local isInDungeon = (labStage and labStage.Text ~= "Unknown" and labStage.Text ~= "")
 
             if not isInDungeon then
-                clockHasStarted = false
                 waveCleared = false
-                roomEnterTime = tick() 
+                clearConfirmTimer = 0
                 logTalent.Text = "TRẠNG THÁI: ĐANG Ở SẢNH CHỜ..."
                 logTalent.TextColor3 = Color3.fromRGB(150, 150, 150)
             else
-                if fmTimeFrame and fmTimeFrame.Visible == true then
-                    if not clockHasStarted then 
-                        clockHasStarted = true 
-                        waveCleared = false 
-                        logTalent.Text = "TRẠNG THÁI: ĐANG ĐÁNH QUÁI..."
-                        logTalent.TextColor3 = Color3.fromRGB(255, 100, 100)
+                local hasMonsters = false
+                local monstersFolder = Workspace:FindFirstChild("Monsters")
+                if monstersFolder then
+                    for _, monster in ipairs(monstersFolder:GetChildren()) do
+                        local hum = monster:FindFirstChildOfClass("Humanoid")
+                        if hum and hum.Health > 0 then
+                            hasMonsters = true
+                            break
+                        end
                     end
+                end
+                
+                local isClockVisible = (fmTimeFrame and fmTimeFrame.Visible == true)
+
+                if hasMonsters or isClockVisible then
+                    waveCleared = false
+                    clearConfirmTimer = 0 
+                    logTalent.Text = "TRẠNG THÁI: ĐANG ĐÁNH QUÁI..."
+                    logTalent.TextColor3 = Color3.fromRGB(255, 100, 100)
                 else
-                    if clockHasStarted then
-                        if not waveCleared then
+                    if not waveCleared then
+                        clearConfirmTimer = clearConfirmTimer + 0.05
+                        if clearConfirmTimer >= 1.5 then 
                             waveCleared = true
                             logTalent.Text = "TRẠNG THÁI: ĐÃ DỌN XONG!\nTÌM QUÀ..."
                             logTalent.TextColor3 = Color3.fromRGB(100, 255, 100)
-                        end
-                    else
-                        if (tick() - roomEnterTime) > 5 then
-                            if not waveCleared then
-                                waveCleared = true
-                                logTalent.Text = "TRẠNG THÁI: PHÒNG AN TOÀN.\nTÌM QUÀ..."
-                                logTalent.TextColor3 = Color3.fromRGB(100, 255, 100)
-                            end
+                        else
+                            logTalent.Text = "TRẠNG THÁI: CHỜ XÁC NHẬN CLEAR..."
+                            logTalent.TextColor3 = Color3.fromRGB(255, 200, 50)
                         end
                     end
                 end
             end
         end
-        task.wait(0.2)
+        task.wait(0.05) 
     end
 end)
 
 -- ==========================================
--- LOGIC PHÂN TÍCH CHỌN CỬA VÀ TƯƠNG TÁC CHÍNH
+-- VÒNG LẶP CORE AUTO
 -- ==========================================
 local function coreAutoSystem()
     if isWaitingForTeleport or not isAutoEnabled or isProcessing or not waveCleared then return end
@@ -500,13 +531,20 @@ local function coreAutoSystem()
     if not rootPart then return end
 
     local currentDoors = {}
-    for _, obj in ipairs(Workspace:GetDescendants()) do
-        if obj.ClassName == "BillboardGui" and obj.Name == "AbyssDoorInfo" then
+    local doGUI = nil
+
+    local abyssModel = Workspace:FindFirstChild("AbyssClientModel")
+    local scanScope = abyssModel and abyssModel:GetDescendants() or Workspace:GetDescendants()
+
+    for _, obj in ipairs(scanScope) do
+        if obj.Name == "DoGUI" then
+            doGUI = obj
+        elseif obj.Name == "AbyssDoorInfo" and obj:IsA("BillboardGui") then
             local doorPart = obj.Parent
             if doorPart and doorPart:IsA("BasePart") then
                 local doorName = "Ảnh Lạ Unknown"
                 for _, child in ipairs(obj:GetDescendants()) do
-                    if child.ClassName == "ImageLabel" or child.ClassName == "ImageButton" then
+                    if child:IsA("ImageLabel") or child:IsA("ImageButton") then
                         local id = string.match(child.Image, "%d+")
                         if id and ITEM_DATA[id] then
                             doorName = ITEM_DATA[id].name
@@ -528,15 +566,12 @@ local function coreAutoSystem()
     end
 
     local chosenDoor = nil
-
     if #currentDoors == 1 then
         chosenDoor = currentDoors[1]
         logDoor.Text = "CỬA: CHỈ CÓ 1 CỬA -> VÀO LUÔN!"
         logDoor.TextColor3 = Color3.fromRGB(100, 255, 100)
     else
-        local door1 = currentDoors[1]
-        local door2 = currentDoors[2]
-
+        local door1, door2 = currentDoors[1], currentDoors[2]
         local score1 = PriorityScores[door1.name] or 99
         local score2 = PriorityScores[door2.name] or 99
 
@@ -550,57 +585,35 @@ local function coreAutoSystem()
             logDoor.TextColor3 = Color3.fromRGB(100, 255, 100)
         else
             chosenDoor = door2
-            logDoor.Text = "CỬA: ĐỒNG HẠNG/RÁC -> ÉP CỬA 2 QUA MÀN NHANH!"
+            logDoor.Text = "CỬA: ĐỒNG HẠNG -> ÉP CỬA 2 QUA NHANH!"
             logDoor.TextColor3 = Color3.fromRGB(255, 150, 50)
         end
     end
 
-    -- ==========================================
-    -- XỬ LÝ LẤY TALENT (CỘT BUFF) - THEO DATA MAP ĐỊNH SẴN
-    -- ==========================================
     if not hasHandledTalentThisRoom then
         isProcessing = true 
-        
         local currentStageUI = "Unknown"
         local playerGui = player:FindFirstChild("PlayerGui")
         if playerGui then
             for _, v in ipairs(playerGui:GetDescendants()) do
-                if v.Name == "LabStage" and v:IsA("TextLabel") then
-                    currentStageUI = v.Text
-                    break
-                end
+                if v.Name == "LabStage" and v:IsA("TextLabel") then currentStageUI = v.Text break end
             end
         end
 
         if STAGES_WITH_BUFF[currentStageUI] then
-            logDoor.Text = "CỬA: ĐÃ CHỌN!\nTÌM TALENT..."
-            logDoor.TextColor3 = Color3.fromRGB(200, 200, 100)
-
-            local doGUI = nil
-            for _, obj in ipairs(Workspace:GetDescendants()) do
-                if obj.Name == "DoGUI" then
-                    doGUI = obj
-                    break
-                end
-            end
-
             if doGUI then
+                logTalent.Text = "TALENT: ĐANG CHẠY ĐẾN CỘT BUFF..."
+                logTalent.TextColor3 = Color3.fromRGB(255, 215, 0)
+                
                 local targetPos = nil
-                if doGUI:IsA("BasePart") then
-                    targetPos = doGUI.Position
-                elseif doGUI:IsA("Model") and doGUI.PrimaryPart then
-                    targetPos = doGUI.PrimaryPart.Position
+                if doGUI:IsA("BasePart") then targetPos = doGUI.Position
+                elseif doGUI:IsA("Model") and doGUI.PrimaryPart then targetPos = doGUI.PrimaryPart.Position
                 else
                     local parent = doGUI.Parent
-                    if parent and parent:IsA("BasePart") then
-                        targetPos = parent.Position
-                    end
+                    if parent and parent:IsA("BasePart") then targetPos = parent.Position end
                 end
 
                 if targetPos then
-                    logTalent.Text = "TALENT: ĐANG CHẠY ĐẾN CỘT BUFF..."
-                    logTalent.TextColor3 = Color3.fromRGB(255, 215, 0)
-                    
                     local hum = character:FindFirstChildOfClass("Humanoid")
                     if hum then
                         local timeout = tick() + 6
@@ -615,14 +628,13 @@ local function coreAutoSystem()
                         until (rootPart.Position - targetPos).Magnitude < 4 or tick() > timeout
                         hum:MoveTo(rootPart.Position)
                         
-                        task.wait(0.2) 
-                        
+                        task.wait(0.05) 
                         logTalent.Text = "TALENT: ĐANG MỞ BẢNG BUFF..."
                         VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
                         task.wait(0.05)
                         VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
                         
-                        task.wait(0.3) 
+                        task.wait(0.15) 
                         AutoPickBuff()
                         
                         logTalent.Text = "TALENT: ĐÃ LẤY XONG.\nRA CỬA!"
@@ -633,22 +645,34 @@ local function coreAutoSystem()
                     logTalent.TextColor3 = Color3.fromRGB(180, 60, 60)
                 end
             else
-                logTalent.Text = "TALENT: TẦNG NÀY LỖI KHÔNG RỚT TRỤ."
+                logTalent.Text = "TALENT: ĐANG ĐỢI TRỤ RỚT..."
                 logTalent.TextColor3 = Color3.fromRGB(180, 180, 180)
+                isProcessing = false
+                return 
             end
         else
-            logTalent.Text = "TALENT: MÀN " .. currentStageUI .. " KHÔNG CÓ BUFF. BỎ QUA!"
+            logTalent.Text = "TALENT: MÀN KHÔNG CÓ BUFF. BỎ QUA!"
             logTalent.TextColor3 = Color3.fromRGB(150, 150, 150)
         end
-
         hasHandledTalentThisRoom = true
     end
 
     isProcessing = true 
 
     if chosenDoor and chosenDoor.part then
-        walkToTarget(chosenDoor.part.Position)
-        
+        local hum = character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            local timeout = tick() + 60
+            local lastMoveCall = tick()
+            while (rootPart.Position - chosenDoor.part.Position).Magnitude > 4 and tick() < timeout do
+                if not isAutoEnabled or not isProcessing then hum:MoveTo(rootPart.Position); return end
+                if tick() - lastMoveCall > 0.5 then
+                    hum:MoveTo(chosenDoor.part.Position)
+                    lastMoveCall = tick()
+                end
+                task.wait(0.03)
+            end
+        end
         isWaitingForTeleport = true
         _G.IsWaitingOnDoor = true 
         logDoor.Text = "CỬA: ĐANG ĐỨNG CHỜ TELEPORT..."
@@ -662,6 +686,6 @@ task.spawn(function()
     while true do
         local success, err = pcall(coreAutoSystem)
         if not success then warn("AUTO ERROR: " .. tostring(err)) end
-        task.wait(0.2) 
+        task.wait(0.05) 
     end
 end)
