@@ -229,6 +229,7 @@ return function(Window, Utils, WebhookModule)
                             local closestEmptyDist = math.huge
                             
                             local isPreparingRoom = false
+                            local preparingRoomNode = nil -- [THÊM MỚI] Lưu lại Object của phòng để lấy số hiệu Abyss
 
                             for _, room in ipairs(abyssFolder:GetChildren()) do
                                 if string.match(room.Name, "Abyss_") then
@@ -270,6 +271,7 @@ return function(Window, Utils, WebhookModule)
 
                                             if surfaceGui.FmPrepare.Visible and dist < 12 then
                                                 isPreparingRoom = true
+                                                preparingRoomNode = room -- [THÊM MỚI] Gán phòng đang đứng vào biến
                                             end
 
                                             if surfaceGui.FmEmpty.Visible and not autoJoinOthersEnabled then
@@ -356,64 +358,27 @@ return function(Window, Utils, WebhookModule)
                                         DungeonStatus:Set("Sảnh: Đang chờ người " .. currentPlayerCount .. "/" .. targetPlayerCount) 
                                     end
 
-                                -- GIAI ĐOẠN 2: CHÂN ĐÃ CHẠM BỤC TRỐNG -> ĐỨNG YÊN BẤM CREATE
-                                elseif isPreparingRoom then
-                                    DungeonStatus:Set("Sảnh: Đang thiết lập Độ Khó và Tạo...")
+                                -- GIAI ĐOẠN 2: CHÂN ĐÃ CHẠM BỤC TRỐNG -> GỌI REMOTE TẠO PHÒNG
+                                elseif isPreparingRoom and preparingRoomNode then
+                                    DungeonStatus:Set("Sảnh: Đang thiết lập Độ Khó và Tạo bằng Remote...")
                                     
-                                    local diffBtn, btCreate = nil, nil
+                                    -- Lấy số hiệu bục (VD: Đứng ở "Abyss_2" thì sẽ bóc tách lấy số 2)
+                                    local abyssIndex = tonumber(string.match(preparingRoomNode.Name, "Abyss_(%d+)")) or 1
                                     
-                                    for _, v in pairs(playerGui:GetDescendants()) do
-                                        if v:IsA("GuiObject") and v.Visible then
-                                            if v.Name == "BtCreate" and v.Parent and v.Parent.Name == "BottomFrame" then 
-                                                btCreate = v 
-                                                break
-                                            end
-                                        end
-                                    end
-
-                                    local btnFrame = nil
-                                    for _, v in pairs(playerGui:GetDescendants()) do
-                                        if v.Name == "BtnFrame" and v.Parent and v.Parent.Name == "DifficultyFrame" then
-                                            btnFrame = v break
-                                        end
-                                    end
+                                    -- Tính toán độ khó (1 -> 1001, 2 -> 1002, 3 -> 1003)
+                                    local difficultyCode = 1000 + targetDifficulty 
                                     
-                                    if btnFrame then
-                                        local n1 = tostring(targetDifficulty) .. "Btn"
-                                        local n2 = ({"NormalBtn", "HardBtn", "NightmareBtn"})[targetDifficulty]
-                                        diffBtn = btnFrame:FindFirstChild(n1) or btnFrame:FindFirstChild(n2)
-                                        
-                                        if not diffBtn then
-                                            local btns = {}
-                                            for _, child in ipairs(btnFrame:GetChildren()) do
-                                                if child:IsA("GuiButton") then table.insert(btns, child) end
-                                            end
-                                            table.sort(btns, function(a,b) return a.AbsolutePosition.X < b.AbsolutePosition.X end)
-                                            diffBtn = btns[targetDifficulty]
-                                        end
-                                    end
+                                    pcall(function()
+                                        local args = {
+                                            "AbyssCreateTeamChannel",
+                                            abyssIndex,
+                                            difficultyCode,
+                                            targetPlayerCount -- Lấy trực tiếp từ thanh trượt cài đặt của UI (1-4)
+                                        }
+                                        game:GetService("ReplicatedStorage"):WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc"):InvokeServer(unpack(args))
+                                    end)
                                     
-                                    if diffBtn then 
-                                        pcall(function()
-                                            if getconnections then
-                                                for _, conn in ipairs(getconnections(diffBtn.Activated)) do conn.Function() end
-                                                for _, conn in ipairs(getconnections(diffBtn.MouseButton1Click)) do conn.Function() end
-                                            end
-                                        end)
-                                        Utils.ClickButtonExact(diffBtn, "Nút Độ Khó " .. tostring(targetDifficulty)) 
-                                        task.wait(0.5) 
-                                    end
-                                    
-                                    if btCreate then 
-                                        pcall(function()
-                                            if getconnections then
-                                                for _, conn in ipairs(getconnections(btCreate.Activated)) do conn.Function() end
-                                                for _, conn in ipairs(getconnections(btCreate.MouseButton1Click)) do conn.Function() end
-                                            end
-                                        end)
-                                        Utils.ClickButtonExact(btCreate, "Nút Tạo Phòng") 
-                                        task.wait(3.5)
-                                    end
+                                    task.wait(1.5) -- Đợi một nhịp nhỏ để server load xong phòng
 
                                 -- GIAI ĐOẠN 1: TÌM BỤC TRỐNG ĐỂ NHẢY VÀO
                                 elseif emptyRoomToCreate then
