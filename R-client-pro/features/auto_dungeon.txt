@@ -105,22 +105,27 @@ return function(Window, Utils, WebhookModule)
         Callback = function(Value) targetPlayerCount = Value end,
     })
 
-    -- LOGIC QUÉT UI THOÁT
+-- LOGIC GỌI REMOTE THOÁT
     local function SafeExitRoutine()
-        local exitBtn = Utils.FindUIElementByName(playerGui, "BgLeave")
-        if exitBtn and exitBtn.AbsoluteSize.X > 0 then Utils.ClickButtonExact(exitBtn, "Nút Thoát") else autoExitTriggered = false return end
+        -- Gọi thẳng Remote để thoát thay vì click UI
+        pcall(function()
+            local args = {
+                "ArenaLeaveChannel"
+            }
+            ReplicatedStorage:WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc"):InvokeServer(unpack(args))
+        end)
+        
         task.wait(1.5)
-        local mainGui = playerGui:FindFirstChild("MainGui")
-        if mainGui and mainGui:FindFirstChild("ScreenGui") and mainGui.ScreenGui:FindFirstChild("ConfirmView") then
-            local fmBottom = mainGui.ScreenGui.ConfirmView:FindFirstChild("FmBottom")
-            if fmBottom and fmBottom:FindFirstChild("BtOk") and fmBottom.BtOk.AbsoluteSize.X > 0 then
-                for i = 1, 3 do Utils.ClickButtonExact(fmBottom.BtOk, "Nút Yes") task.wait(0.2) end
-            else autoExitTriggered = false return end
-        else autoExitTriggered = false return end
-        task.wait(2.5)
+        
+        -- Cập nhật lại các biến trạng thái
         local checkLabStage = Utils.FindUIElementByName(playerGui, "LabStage")
         local currentStageText = checkLabStage and checkLabStage.Text or "Unknown"
-        if currentStageText == "Unknown" or not string.match(currentStageText, "20/20") then autoExitTriggered = false; stage20ClockStarted = false else autoExitTriggered = false end
+        if currentStageText == "Unknown" or not string.match(currentStageText, "20/20") then 
+            autoExitTriggered = false
+            stage20ClockStarted = false 
+        else 
+            autoExitTriggered = false 
+        end
     end
 
     -- ==========================================
