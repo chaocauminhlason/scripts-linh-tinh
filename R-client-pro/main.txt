@@ -52,7 +52,10 @@ if Utils then
     local d = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/auto_dungeon.txt')
     if d then d(Window, Utils, WebhookModule) end
     
-    local o = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/optimization.txt')
+    local h = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/auto_hatch.txt')
+    if h then h(Window, Utils) end
+    
+    SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/optimization.txt')
     if o then o(Window, Utils) end
 end
 

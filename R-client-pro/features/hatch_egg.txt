@@ -1,0 +1,109 @@
+-- ====================================================================
+-- MODULE: AUTO ẤP TRỨNG & THU HOẠCH (DÙNG REMOTE TỐI THƯỢNG)
+-- ====================================================================
+return function(Window, Utils)
+    local Workspace = game:GetService("Workspace")
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    
+    local autoHatchEnabled = false
+    local targetEggId = 60 -- ID mặc định của quả trứng
+    
+    -- ==========================================
+    -- GIAO DIỆN UI (Tạo Tab mới)
+    -- ==========================================
+    local HatchTab = Window:CreateTab("Ấp Trứng", 4483362458)
+    
+    HatchTab:CreateSection("--- THIẾT LẬP AUTO HATCH ---")
+    
+    HatchTab:CreateInput({
+        Name = "Nhập ID Trứng cần ấp (Vd: 60)",
+        PlaceholderText = "Nhập số ID trứng vào đây...",
+        RemoveTextAfterFocusLost = false,
+        Flag = "TargetEggIdInput",
+        Callback = function(Text)
+            local id = tonumber(Text)
+            if id then
+                targetEggId = id
+                print("🥚 Đã cài đặt ID trứng sẽ ấp là:", targetEggId)
+            end
+        end,
+    })
+
+    HatchTab:CreateToggle({
+        Name = "Bật/Tắt Auto Ấp & Nhận (Cả 5 Máy)",
+        CurrentValue = false,
+        Flag = "AutoHatchToggle",
+        Callback = function(Value)
+            autoHatchEnabled = Value
+        end,
+    })
+
+    -- Lấy đường dẫn tới Remote
+    local DataPullFunc = ReplicatedStorage:WaitForChild("CommonLibrary")
+        :WaitForChild("Tool")
+        :WaitForChild("RemoteManager")
+        :WaitForChild("Funcs")
+        :WaitForChild("DataPullFunc")
+
+    -- ==========================================
+    -- VÒNG LẶP XỬ LÝ 5 MÁY ẤP
+    -- ==========================================
+    task.spawn(function()
+        while task.wait(1) do -- Quét 1 giây 1 lần cho nhẹ máy
+            if not autoHatchEnabled then continue end
+            
+            -- Trỏ tới khu vực chứa máy ấp trứng
+            local eggHatchFolder = Workspace:FindFirstChild("Area") 
+                and Workspace.Area:FindFirstChild("center") 
+                and Workspace.Area.center:FindFirstChild("Area") 
+                and Workspace.Area.center.Area:FindFirstChild("EggHatch")
+                
+            if not eggHatchFolder then continue end
+            
+            -- Lặp qua 5 máy ấp (Hatch_1 -> Hatch_5)
+            for i = 1, 5 do
+                local machineName = "Hatch_" .. i
+                local machine = eggHatchFolder:FindFirstChild(machineName)
+                
+                if machine then
+                    local isReady = false
+                    local isHatching = false
+                    
+                    local topGui = machine:FindFirstChild("TopGUI")
+                    local hatchInfoGui = topGui and topGui:FindFirstChild("HatchInfoGui")
+                    
+                    -- Phân tích trạng thái máy thông qua Text
+                    if hatchInfoGui then
+                        for _, child in ipairs(hatchInfoGui:GetDescendants()) do
+                            if child:IsA("TextLabel") and child.Visible and child.Text ~= "" then
+                                local text = string.lower(child.Text)
+                                if string.match(text, "ready") then
+                                    isReady = true
+                                elseif string.match(text, "%d+:%d+") then
+                                    isHatching = true
+                                end
+                            end
+                        end
+                    end
+                    
+                    -- THỰC THI LỆNH REMOTE
+                    if isReady then
+                        -- Trạng thái 1: Trứng đã chín -> GỌI REMOTE THU HOẠCH
+                        pcall(function()
+                            DataPullFunc:InvokeServer("EggHatchTakenChannel", i)
+                        end)
+                        task.wait(0.2) -- Tránh spam remote quá nhanh gây kick
+                        
+                    elseif not isHatching then
+                        -- Trạng thái 2: Máy trống (Không Ready, không có đồng hồ) -> GỌI REMOTE ẤP MỚI
+                        pcall(function()
+                            DataPullFunc:InvokeServer("EggHatchStartChannel", i, targetEggId)
+                        end)
+                        task.wait(0.2)
+                    end
+                    -- Trạng thái 3: Đang có đồng hồ -> Bỏ qua, xét máy tiếp theo
+                end
+            end
+        end
+    end)
+end
