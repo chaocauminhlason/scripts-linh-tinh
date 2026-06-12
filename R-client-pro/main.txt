@@ -36,6 +36,7 @@ end
 local Utils = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/core/utilities.txt')
 local WebhookModule = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/core/webhook.txt')
 
+
 -- 2. Kéo các Features
 if Utils then
     local t = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/tracker.txt')
@@ -47,14 +48,15 @@ if Utils then
     local b = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/boss_hunt.txt')
     if b then b(Window, Utils) end
     
-    -- [ĐÃ SỬA] Tải tính năng Auto Hatch tự động mở trứng bằng Remote
-    local h = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/hatch_egg.txt')
-    if h then h(Window, Utils) end
-    
-    -- Load Hầm Ngục ĐỘC LẬP
+    -- Load Hầm Ngục ĐỘC LẬP (Không bị phụ thuộc vào Webhook nữa)
     local d = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/auto_dungeon.txt')
     if d then d(Window, Utils, WebhookModule) end
     
+    -- [ĐÃ SỬA LỖI TÊN FILE]: auto_hatch.txt -> hatch_egg.txt
+    local h = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/hatch_egg.txt')
+    if h then h(Window, Utils) end
+    
+    -- [ĐÃ SỬA LỖI MẤT BIẾN O]: Thêm "local o ="
     local o = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/optimization.txt')
     if o then o(Window, Utils) end
 end
