@@ -11,6 +11,7 @@ return function(Window, Utils)
 
     local autoRiftEnabled = false
     local targetRiftId = nil 
+    local targetRiftKey = nil -- [BIẾN MỚI] Ghi nhớ tên định danh độc nhất của cổng
     local currentTeamId = 0
     local inRiftMatch = false
     local riftsClearedCount = 0
@@ -115,16 +116,21 @@ return function(Window, Utils)
                 RiftStatus:Set("STATUS: Hoàn thành! Đang chuẩn bị thoát...")
                 task.wait(0.5)
 
-                Utils.LeaveMatch(DataPullFunc, targetRiftId, currentTeamId) -- Gọi hàm thoát phòng từ Utils
+                Utils.LeaveMatch(DataPullFunc, targetRiftId, currentTeamId) 
 
                 if targetRiftId then
-                    completedRifts[targetRiftId] = os.time()
+                    -- Ưu tiên lưu targetRiftKey (Cổng Dynamic), nếu không có thì lưu targetRiftId (Cổng Map)
+                    local memoryKey = targetRiftKey or targetRiftId
+                    completedRifts[memoryKey] = os.time()
+                    
                     riftsClearedCount = riftsClearedCount + 1
                     ClearedLabel:Set("Rift đã dọn dẹp: " .. riftsClearedCount)
+                    print(string.format("🚪 [AUTO RIFT] Đã thoát trận! Ghi nhớ [%s] vào Blacklist.", tostring(memoryKey)))
                 end
 
                 inRiftMatch = false
                 targetRiftId = nil 
+                targetRiftKey = nil -- Xóa Key để không bị nhầm cho vòng lặp sau
                 catchingMemory = {} 
                 task.wait(3)
 
@@ -134,14 +140,17 @@ return function(Window, Utils)
                 local foundNewRift = false
                 local currentTime = os.time()
                 
-                -- [GARBAGE COLLECTOR]: Xóa trí nhớ rác sau 5 phút
-                for id, timeCleared in pairs(completedRifts) do
-                    if currentTime - timeCleared > riftRespawnTime then
-                        completedRifts[id] = nil 
+                -- [GARBAGE COLLECTOR THÔNG MINH]: Phân biệt rác 2 phút và 5 phút
+                for key, timeCleared in pairs(completedRifts) do
+                    -- Nếu tên Key có chữ "Dynamic", vòng đời của nó chỉ là 120s (2 phút)
+                    local isDynamic = type(key) == "string" and string.find(key, "Dynamic")
+                    local expireTime = isDynamic and 120 or riftRespawnTime
+                    
+                    if currentTime - timeCleared > expireTime then
+                        completedRifts[key] = nil -- Xóa ký ức
                     end
                 end
                 
-                -- Mục tiêu mới: Quét thẳng vào thư mục DynamicDungeon
                 local dynamicFolder = Workspace:FindFirstChild("DynamicDungeon")
 
                 if dynamicFolder then
@@ -150,49 +159,43 @@ return function(Window, Utils)
                         if idStr then
                             local id = tonumber(idStr)
                             
-                            if not completedRifts[id] or (currentTime - completedRifts[id] > riftRespawnTime) then
+                            -- [TÌM ĐỊNH DANH ĐỘC NHẤT]: Bóc tách chữ Portal7 hoặc Portal8 ra
+                            local portalName = "UnknownPortal"
+                            for _, child in pairs(obj:GetChildren()) do
+                                if string.match(child.Name, "Portal") then 
+                                    portalName = child.Name 
+                                    break 
+                                end
+                            end
+                            
+                            -- Ghép lại thành một cái tên không bao giờ trùng lặp
+                            local dynamicKey = "Dynamic_" .. idStr .. "_" .. portalName
+                            
+                            -- Nếu cái tên này chưa có trong sổ đen thì mới đi
+                            if not completedRifts[dynamicKey] then
                                 targetRiftId = id
+                                targetRiftKey = dynamicKey -- Gán biến để phần Thoát trận biết đường lưu sổ đen
                                 foundNewRift = true
-                                RiftStatus:Set("STATUS: Đã khóa mục tiêu Dynamic Rift ID: " .. id)
+                                RiftStatus:Set("STATUS: Đã khóa mục tiêu: " .. dynamicKey)
                                 
-                                -- TÌM TỌA ĐỘ BẰNG CÁCH LỤC LÕI BÊN TRONG (Bỏ qua tên biến động)
                                 local doorPos = nil
-                                
-                                if obj:IsA("Model") and obj.PrimaryPart then
-                                    doorPos = obj.PrimaryPart.Position
-                                elseif obj:IsA("BasePart") then
-                                    doorPos = obj.Position
+                                if obj:IsA("Model") and obj.PrimaryPart then doorPos = obj.PrimaryPart.Position
+                                elseif obj:IsA("BasePart") then doorPos = obj.Position
                                 else
-                                    -- Lục tìm toàn bộ con/cháu bên trong (Portal7, PET_chuansong...)
                                     for _, desc in pairs(obj:GetDescendants()) do
-                                        if desc:IsA("BasePart") then
-                                            doorPos = desc.Position
-                                            break -- Bắt được Part vật lý đầu tiên là dừng
-                                        end
+                                        if desc:IsA("BasePart") then doorPos = desc.Position break end
                                     end
                                 end
+                                if not doorPos and obj:IsA("Model") then doorPos = obj:GetPivot().Position end
                                 
-                                -- Nếu vẫn không có Part, lấy tạm tọa độ trung tâm của Model
-                                if not doorPos and obj:IsA("Model") then
-                                    doorPos = obj:GetPivot().Position
-                                end
-                                
-                                -- Dịch chuyển tới cổng nếu tìm thấy tọa độ
-                                if doorPos then
-                                    if (hrp.Position - doorPos).Magnitude > 20 then
-                                        hrp.CFrame = CFrame.new(doorPos + Vector3.new(0, 3, 5))
-                                        task.wait(1.5)
-                                    end
-                                else
-                                    print("⚠️ [AUTO RIFT] Không tìm thấy tọa độ vật lý của cổng, thử ném Remote mù!")
+                                if doorPos and (hrp.Position - doorPos).Magnitude > 20 then
+                                    hrp.CFrame = CFrame.new(doorPos + Vector3.new(0, 3, 5))
+                                    task.wait(1.5)
                                 end
 
-                                -- Chuỗi lệnh Remote mở phòng thần tốc
                                 currentTeamId = os.time()
                                 pcall(function() DataPullFunc:InvokeServer("DungeonCreateTeamChannel", id, currentTeamId) end)
                                 task.wait(1.5)
-                                
-                                RiftStatus:Set("STATUS: Đang gửi lệnh Start trận...")
                                 pcall(function() DataPullFunc:InvokeServer("DungeonStartChannel", id, currentTeamId) end)
                                 task.wait(3.5)
                                 break
