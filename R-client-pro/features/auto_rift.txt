@@ -128,40 +128,71 @@ return function(Window, Utils)
                 catchingMemory = {} 
                 task.wait(3)
 
-            -- 4. SẢNH CHỜ QUÉT MAP
+-- 4. SẢNH CHỜ QUÉT DYNAMIC RIFT (CỔNG DO NGƯỜI CHƠI TẠO)
             else
-                RiftStatus:Set("STATUS: Sảnh - Radar đang dò tìm Rift...")
+                RiftStatus:Set("STATUS: Sảnh - Radar đang dò tìm Dynamic Rift...")
                 local foundNewRift = false
                 local currentTime = os.time()
-                local areaFolder = Workspace:FindFirstChild("Area")
-                local dungeonFolder = nil
                 
-                if areaFolder then
-                    for _, mapFolder in pairs(areaFolder:GetChildren()) do
-                        local serverZone = mapFolder:FindFirstChild("ServerZone")
-                        if serverZone and serverZone:FindFirstChild("Dungeon") then dungeonFolder = serverZone.Dungeon break end
+                -- [GARBAGE COLLECTOR]: Xóa trí nhớ rác sau 5 phút
+                for id, timeCleared in pairs(completedRifts) do
+                    if currentTime - timeCleared > riftRespawnTime then
+                        completedRifts[id] = nil 
                     end
                 end
+                
+                -- Mục tiêu mới: Quét thẳng vào thư mục DynamicDungeon
+                local dynamicFolder = Workspace:FindFirstChild("DynamicDungeon")
 
-                if dungeonFolder then
-                    for _, obj in pairs(dungeonFolder:GetChildren()) do
+                if dynamicFolder then
+                    for _, obj in pairs(dynamicFolder:GetChildren()) do
                         local idStr = string.match(obj.Name, "Dungeon_(%d+)")
                         if idStr then
                             local id = tonumber(idStr)
+                            
                             if not completedRifts[id] or (currentTime - completedRifts[id] > riftRespawnTime) then
                                 targetRiftId = id
                                 foundNewRift = true
-                                RiftStatus:Set("STATUS: Đã khóa mục tiêu Rift ID: " .. id)
+                                RiftStatus:Set("STATUS: Đã khóa mục tiêu Dynamic Rift ID: " .. id)
                                 
-                                local doorPos = obj:IsA("Model") and obj:GetPivot().Position or obj.Position
-                                if (hrp.Position - doorPos).Magnitude > 20 then
-                                    hrp.CFrame = CFrame.new(doorPos + Vector3.new(0, 3, 5))
-                                    task.wait(1.5)
+                                -- TÌM TỌA ĐỘ BẰNG CÁCH LỤC LÕI BÊN TRONG (Bỏ qua tên biến động)
+                                local doorPos = nil
+                                
+                                if obj:IsA("Model") and obj.PrimaryPart then
+                                    doorPos = obj.PrimaryPart.Position
+                                elseif obj:IsA("BasePart") then
+                                    doorPos = obj.Position
+                                else
+                                    -- Lục tìm toàn bộ con/cháu bên trong (Portal7, PET_chuansong...)
+                                    for _, desc in pairs(obj:GetDescendants()) do
+                                        if desc:IsA("BasePart") then
+                                            doorPos = desc.Position
+                                            break -- Bắt được Part vật lý đầu tiên là dừng
+                                        end
+                                    end
+                                end
+                                
+                                -- Nếu vẫn không có Part, lấy tạm tọa độ trung tâm của Model
+                                if not doorPos and obj:IsA("Model") then
+                                    doorPos = obj:GetPivot().Position
+                                end
+                                
+                                -- Dịch chuyển tới cổng nếu tìm thấy tọa độ
+                                if doorPos then
+                                    if (hrp.Position - doorPos).Magnitude > 20 then
+                                        hrp.CFrame = CFrame.new(doorPos + Vector3.new(0, 3, 5))
+                                        task.wait(1.5)
+                                    end
+                                else
+                                    print("⚠️ [AUTO RIFT] Không tìm thấy tọa độ vật lý của cổng, thử ném Remote mù!")
                                 end
 
+                                -- Chuỗi lệnh Remote mở phòng thần tốc
                                 currentTeamId = os.time()
                                 pcall(function() DataPullFunc:InvokeServer("DungeonCreateTeamChannel", id, currentTeamId) end)
                                 task.wait(1.5)
+                                
+                                RiftStatus:Set("STATUS: Đang gửi lệnh Start trận...")
                                 pcall(function() DataPullFunc:InvokeServer("DungeonStartChannel", id, currentTeamId) end)
                                 task.wait(3.5)
                                 break
@@ -171,7 +202,7 @@ return function(Window, Utils)
                 end
 
                 if not foundNewRift then
-                    RiftStatus:Set("STATUS: Đã dọn sạch Map. Đợi Rift hồi sinh (2-5 phút)...")
+                    RiftStatus:Set("STATUS: Đã dọn sạch Map. Đợi Rift mới xuất hiện...")
                     task.wait(2)
                 end
             end
