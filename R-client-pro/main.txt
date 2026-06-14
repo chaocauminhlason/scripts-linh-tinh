@@ -55,6 +55,9 @@ if Utils then
     -- [ĐÃ SỬA LỖI TÊN FILE]: auto_hatch.txt -> hatch_egg.txt
     local h = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/hatch_egg.txt')
     if h then h(Window, Utils) end
+
+    local rift = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/auto_rift.txt')
+    if rift then rift(Window, Utils) end
     
     -- [ĐÃ SỬA LỖI MẤT BIẾN O]: Thêm "local o ="
     local o = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/optimization.txt')

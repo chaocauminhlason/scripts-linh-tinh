@@ -1,0 +1,277 @@
+-- ====================================================================
+-- MODULE: AUTO RIFT SYSTEM V2.2 (AUTO CATCH QUÁI TRẮNG MÁU)
+-- ====================================================================
+return function(Window, Utils)
+    local Players = game:GetService("Players")
+    local Workspace = game:GetService("Workspace")
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    
+    local LocalPlayer = Players.LocalPlayer
+    local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+    -- Biến trạng thái hệ thống
+    local autoRiftEnabled = false
+    local targetRiftId = nil 
+    local currentTeamId = 0
+    local inRiftMatch = false
+    local riftsClearedCount = 0
+
+    local dungeonStuckTimer = 0
+    local dungeonLastPosition = nil
+
+    -- TRÍ NHỚ NHÂN TẠO
+    local completedRifts = {} 
+    local riftRespawnTime = 300 -- 5 Phút chờ hồi sinh
+    local catchingMemory = {} -- Trí nhớ đánh dấu quái đang bị bắt (Chống spam ném bóng)
+
+    local DataPullFunc = ReplicatedStorage:WaitForChild("CommonLibrary")
+        :WaitForChild("Tool")
+        :WaitForChild("RemoteManager")
+        :WaitForChild("Funcs")
+        :WaitForChild("DataPullFunc")
+
+    -- ==========================================
+    -- HÀM HỖ TRỢ
+    -- ==========================================
+    local function ToggleMount(state)
+        pcall(function()
+            DataPullFunc:InvokeServer("PetSwitchRideStatusChannel", state)
+        end)
+    end
+
+    local function SmartDismount()
+        local isRiding = LocalPlayer:GetAttribute("RidePetId") ~= nil
+        if isRiding then
+            ToggleMount(false)
+            task.wait(0.3)
+            local char = LocalPlayer.Character
+            local humanoid = char and char:FindFirstChild("Humanoid")
+            if humanoid then humanoid.Jump = true end
+            task.wait(0.1)
+        end
+    end
+
+    -- ==========================================
+    -- GIAO DIỆN UI
+    -- ==========================================
+    local RiftTab = Window:CreateTab("Auto Rift", 4483362458)
+    local RiftStatus = RiftTab:CreateLabel("STATUS: AUTO RIFT ĐANG TẮT")
+    local ClearedLabel = RiftTab:CreateLabel("Rift đã dọn dẹp: 0")
+
+    RiftTab:CreateSection("--- HỆ THỐNG QUÉT BẢN ĐỒ ---")
+    
+    RiftTab:CreateToggle({
+        Name = "Bật/Tắt Auto Quét & Đi Rift",
+        CurrentValue = false,
+        Flag = "AutoRiftMasterToggle",
+        Callback = function(Value)
+            autoRiftEnabled = Value
+            if not Value then
+                RiftStatus:Set("STATUS: AUTO RIFT ĐANG TẮT")
+                inRiftMatch = false
+                targetRiftId = nil
+            else
+                RiftStatus:Set("STATUS: HỆ THỐNG ĐANG QUÉT MAP...")
+            end
+        end
+    })
+
+    RiftTab:CreateButton({
+        Name = "Xóa Trí Nhớ (Quét lại từ đầu)",
+        Callback = function()
+            completedRifts = {}
+            riftsClearedCount = 0
+            ClearedLabel:Set("Rift đã dọn dẹp: 0")
+            print("🔄 [AUTO RIFT] Đã reset toàn bộ trí nhớ Blacklist.")
+        end,
+    })
+
+    -- ==========================================
+    -- VÒNG LẶP XỬ LÝ CHÍNH
+    -- ==========================================
+    task.spawn(function()
+        while task.wait(0.5) do
+            if not autoRiftEnabled then continue end
+
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local humanoid = char and char:FindFirstChild("Humanoid")
+            if not (hrp and humanoid and humanoid.Health > 0) then continue end
+
+            local monstersFolder = Workspace:FindFirstChild("Monsters")
+            local hasAliveMonsters = false
+            local deadMonsters = {}
+            
+            -- [BỘ LỌC] Tách Quái sống và Quái trắng máu
+            if monstersFolder then
+                for _, m in pairs(monstersFolder:GetChildren()) do
+                    local h = m:FindFirstChildOfClass("Humanoid")
+                    if h then
+                        if h.Health <= 0 then
+                            table.insert(deadMonsters, m) -- Quái trắng máu
+                        else
+                            hasAliveMonsters = true -- Quái còn sống
+                        end
+                    else
+                        hasAliveMonsters = true
+                    end
+                end
+            end
+
+            -- ==========================================
+            -- TRẠNG THÁI 1: BẮT QUÁI (QUÁI TRẮNG MÁU)
+            -- ==========================================
+            if #deadMonsters > 0 then
+                RiftStatus:Set("STATUS: Đang ném bóng bắt quái...")
+                for _, m in pairs(deadMonsters) do
+                    local id = tonumber(m.Name:match("Monster_(%d+)"))
+                    -- Nếu có ID và con quái này chưa từng bị ném bóng
+                    if id and not catchingMemory[id] then
+                        catchingMemory[id] = true
+                        pcall(function() DataPullFunc:InvokeServer("MonsterCatchStartChannel", id) end)
+                        print("🎾 [AUTO RIFT] Quái trắng máu! Đang bắt quái ID: " .. id)
+                    end
+                end
+            end
+
+            -- ==========================================
+            -- TRẠNG THÁI 2: ĐÁNH QUÁI (QUÁI CÒN SỐNG)
+            -- ==========================================
+            if hasAliveMonsters then
+                inRiftMatch = true
+                if #deadMonsters == 0 then
+                    RiftStatus:Set("STATUS: Đang trong trận - Chiến đấu!")
+                end
+
+                local closestDist2D = math.huge
+                local bestTarget = nil
+
+                for _, monster in pairs(monstersFolder:GetChildren()) do
+                    if monster:IsA("Model") or monster:IsA("BasePart") then
+                        local hum = monster:FindFirstChildOfClass("Humanoid")
+                        if (not hum) or (hum and hum.Health > 0) then
+                            local pos = monster:IsA("Model") and monster.PrimaryPart and monster.PrimaryPart.Position or monster.Position
+                            local dist2D = math.sqrt((hrp.Position.X - pos.X)^2 + (hrp.Position.Z - pos.Z)^2)
+                            if dist2D < closestDist2D then 
+                                closestDist2D = dist2D 
+                                bestTarget = monster 
+                            end
+                        end
+                    end
+                end
+
+                if bestTarget then
+                    local targetPos = bestTarget:IsA("Model") and bestTarget.PrimaryPart and bestTarget.PrimaryPart.Position or bestTarget.Position
+                    
+                    if closestDist2D > 40 then
+                        ToggleMount(true)
+                        task.wait(0.2)
+                        hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 4))
+                        task.wait(0.2)
+                        humanoid:MoveTo(hrp.Position)
+                        dungeonLastPosition = hrp.Position
+                        dungeonStuckTimer = 0
+                        SmartDismount()
+                    elseif closestDist2D > 12 then
+                        humanoid:MoveTo(targetPos)
+                        if dungeonLastPosition and (hrp.Position - dungeonLastPosition).Magnitude < 1 then
+                            dungeonStuckTimer = dungeonStuckTimer + 0.5
+                            if dungeonStuckTimer >= 3 then 
+                                hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 3))
+                                dungeonStuckTimer = 0 
+                            end
+                        else dungeonStuckTimer = 0 end
+                        dungeonLastPosition = hrp.Position
+                    else
+                        humanoid:MoveTo(hrp.Position) 
+                        dungeonStuckTimer = 0 
+                        SmartDismount()
+                        local id = tonumber(bestTarget.Name:match("Monster_(%d+)"))
+                        if id then pcall(function() DataPullFunc:InvokeServer("MonsterAttackChannel", id) end) end
+                    end
+                end
+
+            -- ==========================================
+            -- TRẠNG THÁI 3: ĐÃ XONG -> LƯU DATA VÀ RỜI ĐI
+            -- ==========================================
+            elseif inRiftMatch and not hasAliveMonsters and #deadMonsters == 0 then
+                RiftStatus:Set("STATUS: Hoàn thành! Đang chuẩn bị thoát...")
+                task.wait(0.5)
+
+                pcall(function()
+                    DataPullFunc:InvokeServer("ArenaLeaveChannel")
+                    if targetRiftId then DataPullFunc:InvokeServer("DungeonLeaveTeamChannel", targetRiftId, currentTeamId) end
+                end)
+
+                if targetRiftId then
+                    completedRifts[targetRiftId] = os.time()
+                    riftsClearedCount = riftsClearedCount + 1
+                    ClearedLabel:Set("Rift đã dọn dẹp: " .. riftsClearedCount)
+                    print(string.format("🚪 [AUTO RIFT] Đã thoát trận! Đưa Rift ID [%d] vào Blacklist.", targetRiftId))
+                end
+
+                inRiftMatch = false
+                targetRiftId = nil 
+                catchingMemory = {} -- XÓA TRÍ NHỚ ĐỂ DÙNG CHO PHÒNG TIẾP THEO
+                task.wait(3)
+
+            -- ==========================================
+            -- TRẠNG THÁI 4: SẢNH CHỜ -> TÌM ĐƯỜNG DẪN ĐỘNG VÀ QUÉT
+            -- ==========================================
+            else
+                RiftStatus:Set("STATUS: Sảnh - Radar đang dò tìm Rift...")
+                local foundNewRift = false
+                local currentTime = os.time()
+                
+                local dungeonFolder = nil
+                local areaFolder = Workspace:FindFirstChild("Area")
+                
+                if areaFolder then
+                    for _, mapFolder in pairs(areaFolder:GetChildren()) do
+                        local serverZone = mapFolder:FindFirstChild("ServerZone")
+                        if serverZone and serverZone:FindFirstChild("Dungeon") then
+                            dungeonFolder = serverZone.Dungeon
+                            break 
+                        end
+                    end
+                end
+
+                if dungeonFolder then
+                    for _, obj in pairs(dungeonFolder:GetChildren()) do
+                        local idStr = string.match(obj.Name, "Dungeon_(%d+)")
+                        if idStr then
+                            local id = tonumber(idStr)
+                            
+                            if not completedRifts[id] or (currentTime - completedRifts[id] > riftRespawnTime) then
+                                targetRiftId = id
+                                foundNewRift = true
+                                RiftStatus:Set("STATUS: Đã khóa mục tiêu Rift ID: " .. id)
+                                
+                                local doorPos = obj:IsA("Model") and obj:GetPivot().Position or obj.Position
+                                
+                                if (hrp.Position - doorPos).Magnitude > 20 then
+                                    hrp.CFrame = CFrame.new(doorPos + Vector3.new(0, 3, 5))
+                                    task.wait(1.5)
+                                end
+
+                                currentTeamId = os.time()
+                                pcall(function() DataPullFunc:InvokeServer("DungeonCreateTeamChannel", id, currentTeamId) end)
+                                task.wait(1.5)
+                                
+                                RiftStatus:Set("STATUS: Đang gửi lệnh Start trận...")
+                                pcall(function() DataPullFunc:InvokeServer("DungeonStartChannel", id, currentTeamId) end)
+                                task.wait(3.5)
+                                break
+                            end
+                        end
+                    end
+                end
+
+                if not foundNewRift then
+                    RiftStatus:Set("STATUS: Đã dọn sạch Map. Đợi Rift hồi sinh (2-5 phút)...")
+                    task.wait(2)
+                end
+            end
+        end
+    end)
+end
