@@ -47,6 +47,18 @@ return function(Window, Utils)
             local humanoid = char and char:FindFirstChild("Humanoid")
             if not (hrp and humanoid and humanoid.Health > 0) then continue end
 
+            -- ==============================================================
+            -- [BỘ LỌC CHỐNG XUNG ĐỘT]: NHƯỜNG QUYỀN CHO AUTO ABYSS TRIAL
+            -- ==============================================================
+            local labStage = Utils.FindUIElementByName(playerGui, "LabStage")
+            local isInAbyssTrial = (labStage and labStage.Text ~= "Unknown" and labStage.Text ~= "")
+            
+            if isInAbyssTrial then
+                RiftStatus:Set("STATUS: Đang trong Abyss Trial - Nhường quyền điều khiển!")
+                continue -- Lập tức bỏ qua vòng lặp này, không quét quái, không đánh nhau
+            end
+            -- ==============================================================
+
             local monstersFolder = Workspace:FindFirstChild("Monsters")
             
             -- [SỬ DỤNG RADAR TỪ UTILS] Một dòng code thay thế cho hàng chục dòng tính toán!
