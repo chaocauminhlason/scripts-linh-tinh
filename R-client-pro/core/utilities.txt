@@ -106,5 +106,80 @@ local function GetGroundPosition(targetPosition)
     end
 end
 
+-- ==============================================================
+    -- HỆ THỐNG CHIẾN ĐẤU & TƯƠNG TÁC REMOTE (DÙNG CHUNG)
+    -- ==============================================================
+    
+    -- 1. Lên / Xuống thú cưỡi
+    Utils.ToggleMount = function(DataPullFunc, state)
+        pcall(function() DataPullFunc:InvokeServer("PetSwitchRideStatusChannel", state) end)
+    end
+
+    -- 2. Tự động nhảy xuống thú an toàn
+    Utils.SmartDismount = function(LocalPlayer, DataPullFunc)
+        local isRiding = LocalPlayer:GetAttribute("RidePetId") ~= nil
+        if isRiding then
+            Utils.ToggleMount(DataPullFunc, false)
+            task.wait(0.3)
+            local char = LocalPlayer.Character
+            local humanoid = char and char:FindFirstChild("Humanoid")
+            if humanoid then humanoid.Jump = true end
+            task.wait(0.1)
+        end
+    end
+
+    -- 3. Gửi lệnh tấn công quái
+    Utils.AttackMonster = function(DataPullFunc, monsterId)
+        pcall(function() DataPullFunc:InvokeServer("MonsterAttackChannel", monsterId) end)
+    end
+
+    -- 4. Gửi lệnh ném bóng bắt quái
+    Utils.CatchMonster = function(DataPullFunc, monsterId)
+        pcall(function() DataPullFunc:InvokeServer("MonsterCatchStartChannel", monsterId) end)
+    end
+
+    -- 5. Gửi lệnh Rời Phòng / Thoát Trận
+    Utils.LeaveMatch = function(DataPullFunc, riftId, teamId)
+        pcall(function()
+            DataPullFunc:InvokeServer("ArenaLeaveChannel")
+            if riftId and teamId then
+                DataPullFunc:InvokeServer("DungeonLeaveTeamChannel", riftId, teamId)
+            end
+        end)
+    end
+
+    -- 6. HỆ THỐNG RADAR: Quét, phân loại và tìm quái vật gần nhất
+    Utils.ScanMonsters = function(monstersFolder, hrp)
+        local hasAlive = false
+        local deadList = {}
+        local bestTarget = nil
+        local closestDist2D = math.huge
+
+        if monstersFolder then
+            for _, m in pairs(monstersFolder:GetChildren()) do
+                if m:IsA("Model") or m:IsA("BasePart") then
+                    local hum = m:FindFirstChildOfClass("Humanoid")
+                    if hum then
+                        if hum.Health <= 0 then
+                            table.insert(deadList, m) -- Quái trắng máu để Catch
+                        else
+                            hasAlive = true
+                            local pos = m:IsA("Model") and m.PrimaryPart and m.PrimaryPart.Position or m.Position
+                            local dist2D = math.sqrt((hrp.Position.X - pos.X)^2 + (hrp.Position.Z - pos.Z)^2)
+                            if dist2D < closestDist2D then closestDist2D = dist2D; bestTarget = m end
+                        end
+                    else
+                        hasAlive = true
+                        local pos = m:IsA("Model") and m.PrimaryPart and m.PrimaryPart.Position or m.Position
+                        local dist2D = math.sqrt((hrp.Position.X - pos.X)^2 + (hrp.Position.Z - pos.Z)^2)
+                        if dist2D < closestDist2D then closestDist2D = dist2D; bestTarget = m end
+                    end
+                end
+            end
+        end
+
+        return hasAlive, deadList, bestTarget, closestDist2D
+    end
+
 -- Trả về bảng Utils chứa tất cả các hàm trên để các file khác gọi lại
 return Utils
