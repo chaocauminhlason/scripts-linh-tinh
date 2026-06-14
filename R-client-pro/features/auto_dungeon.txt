@@ -28,8 +28,7 @@ return function(Window, Utils, WebhookModule)
     local isStartingDungeon = false
 
     -- API Game
-    local MonsterSystem = nil
-    pcall(function() MonsterSystem = require(ReplicatedStorage.CommonLogic.Monster.MonsterSystem) end)
+    
     local AbyssSystem = nil
     pcall(function() AbyssSystem = require(ReplicatedStorage.CommonLogic.Abyss.AbyssSystem) end)
 
@@ -202,9 +201,22 @@ return function(Window, Utils, WebhookModule)
                             else dungeonStuckTimer = 0 end
                             dungeonLastPosition = hrp.Position
                         else
-                            humanoid:MoveTo(hrp.Position) dungeonStuckTimer = 0 SmartDismount()
+                            -- KHI ĐÃ ĐỦ TẦM ĐÁNH
+                            humanoid:MoveTo(hrp.Position) 
+                            dungeonStuckTimer = 0 
+                            SmartDismount()
+                            
                             local id = tonumber(bestTarget.Name:match("Monster_(%d+)"))
-                            if id and MonsterSystem then MonsterSystem.ClientAttackMonster(id) end
+                            if id then
+                                -- Gọi thẳng Remote đánh quái
+                                pcall(function()
+                                    local args = {
+                                        "MonsterAttackChannel",
+                                        id
+                                    }
+                                    ReplicatedStorage:WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc"):InvokeServer(unpack(args))
+                                end)
+                            end
                         end
                     else dungeonStuckTimer = 0 SmartDismount() end
                 end
