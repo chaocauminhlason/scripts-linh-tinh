@@ -33,12 +33,25 @@ return function(Window, Utils, WebhookModule)
     local AbyssSystem = nil
     pcall(function() AbyssSystem = require(ReplicatedStorage.CommonLogic.Abyss.AbyssSystem) end)
 
+-- ==========================================
+    -- HÀM REMOTE: LÊN / XUỐNG THÚ
+    -- ==========================================
+    local function ToggleMount(state)
+        -- state = true (Lên thú), state = false (Xuống thú)
+        pcall(function()
+            local args = {
+                "PetSwitchRideStatusChannel",
+                state
+            }
+            ReplicatedStorage:WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc"):InvokeServer(unpack(args))
+        end)
+    end
+
     local function SmartDismount()
         local isRiding = LocalPlayer:GetAttribute("RidePetId") ~= nil
         if isRiding then
-            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.M, false, game) 
-            task.wait() 
-            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.M, false, game)
+            ToggleMount(false) -- Gọi Remote để XUỐNG THÚ
+            
             task.wait(0.3)
             local char = LocalPlayer.Character
             local humanoid = char and char:FindFirstChild("Humanoid")
@@ -166,13 +179,17 @@ return function(Window, Utils, WebhookModule)
                         local targetPos = bestTarget:IsA("Model") and bestTarget.PrimaryPart and bestTarget.PrimaryPart.Position or bestTarget.Position
                         
                         -- FIX Y-OFFSET (CỘNG THÊM 3 VÀO TRỤC Y) KHI TELEPORT ĐỂ KHÔNG BỊ LÚN ĐẤT
+                        -- NẾU QUÁI Ở XA HƠN 40 STUDS
                         if closestDist2D > 40 then
+                            ToggleMount(true) -- [LỆNH MỚI] Gọi Remote để CƯỠI THÚ LÊN trước khi Teleport
+                            task.wait(0.2)
+                            
                             hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 4)) 
                             task.wait(0.2)
                             humanoid:MoveTo(hrp.Position) 
                             dungeonLastPosition = hrp.Position 
                             dungeonStuckTimer = 0 
-                            SmartDismount()
+                            SmartDismount() -- Bay tới nơi thì tự động gọi Remote XUỐNG THÚ
                         elseif closestDist2D > 12 then
                             humanoid:MoveTo(targetPos)
                             if dungeonLastPosition and (hrp.Position - dungeonLastPosition).Magnitude < 1 then
