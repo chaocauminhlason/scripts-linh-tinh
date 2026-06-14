@@ -55,7 +55,7 @@ return function(Window, Utils)
     -- ==========================================
     -- GIAO DIỆN UI
     -- ==========================================
-    local CamTab = Window:CreateTab("Bắt Quái (CAM)", 4483345998)
+    local CamTab = Window:CreateTab("Auto farm", 4483345998)
 
     CamTab:CreateSection("--- THIẾT LẬP CƠ BẢN ---")
     CamTab:CreateToggle({ Name = "Tự Động Đánh Quái", CurrentValue = false, Flag = "CamAutoAttack", Callback = function(V) camSettings.autoAttack = V end })
