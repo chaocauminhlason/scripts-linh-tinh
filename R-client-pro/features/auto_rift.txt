@@ -125,7 +125,7 @@ return function(Window, Utils)
                 end
                 
                 -- ==========================================
-                -- HÀM THỰC THI REMOTE CHUẨN SIMPLESPY
+                -- HÀM THỰC THI REMOTE CHUẨN SIMPLESPY (CÓ DUMP LOG F9)
                 -- ==========================================
                 local function ExecuteRiftEntry(id, key, targetPos)
                     targetRiftId = id
@@ -135,12 +135,31 @@ return function(Window, Utils)
                     
                     -- Dịch chuyển đơn giản (để chắc chắn ở gần cổng)
                     hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0))
-                    task.wait(0.5) -- Chỉ đợi 0.5s cho nhân vật rớt xuống đất
+                    task.wait(0.5) 
 
                     -- TẠO ĐÚNG THỜI GIAN THỰC NHƯ SIMPLESPY
                     currentTeamId = os.time()
                     local createArgs = { "DungeonCreateTeamChannel", id, currentTeamId }
                     local startArgs = { "DungeonStartChannel", id, currentTeamId }
+
+                    -- IN RA F9 NGUYÊN BẢN CÂU LỆNH SẼ BẮN (RAW DUMP)
+                    print(" ")
+                    print("========== 📡 RAW REMOTE LOG ==========")
+                    print("local args_create = {")
+                    print("    \"DungeonCreateTeamChannel\",")
+                    print("    " .. tostring(id) .. ",")
+                    print("    " .. tostring(currentTeamId))
+                    print("}")
+                    print("game:GetService(\"ReplicatedStorage\"):WaitForChild(\"CommonLibrary\"):WaitForChild(\"Tool\"):WaitForChild(\"RemoteManager\"):WaitForChild(\"Funcs\"):WaitForChild(\"DataPullFunc\"):InvokeServer(unpack(args_create))")
+                    
+                    print("local args_start = {")
+                    print("    \"DungeonStartChannel\",")
+                    print("    " .. tostring(id) .. ",")
+                    print("    " .. tostring(currentTeamId))
+                    print("}")
+                    print("game:GetService(\"ReplicatedStorage\"):WaitForChild(\"CommonLibrary\"):WaitForChild(\"Tool\"):WaitForChild(\"RemoteManager\"):WaitForChild(\"Funcs\"):WaitForChild(\"DataPullFunc\"):InvokeServer(unpack(args_start))")
+                    print("=======================================")
+                    print(" ")
 
                     -- Bắn Remote liên tiếp không có Delay ở giữa
                     pcall(function()
@@ -151,7 +170,7 @@ return function(Window, Utils)
                     RiftStatus:Set("STATUS: Đang đợi Server dịch chuyển...")
                     task.wait(3.5)
                     
-                    -- KIỂM TRA BẰNG NHÂN VẬT MỚI NHẤT (Đề phòng game tạo mới Character)
+                    -- KIỂM TRA BẰNG NHÂN VẬT MỚI NHẤT
                     local checkChar = LocalPlayer.Character
                     local checkHrp = checkChar and checkChar:FindFirstChild("HumanoidRootPart")
                     
