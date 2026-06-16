@@ -170,24 +170,24 @@ return function(Window, Utils)
                                     -- ÉP LẤY TỌA ĐỘ TỪ GUI BẰNG GETPIVOT (KHÔNG BAO GIỜ LỖI)
                                     local doorPos = GetPositionFromGUI(obj)
                                     
-                                    -- ===== KỸ THUẬT HẠ CÁNH ÉP ĐỒNG BỘ SERVER =====
+                                    -- ===== KỸ THUẬT ĐI BỘ ÁP SÁT ĐỂ ĐỒNG BỘ MƯỢT =====
                                     if doorPos and (hrp.Position - doorPos).Magnitude > 20 then
-                                        -- 1. Dịch chuyển thẳng lên đỉnh đầu cổng (Cao 10 stud)
-                                        hrp.CFrame = CFrame.new(doorPos + Vector3.new(0, 10, 0))
-                                        task.wait(0.2)
+                                        -- 1. Dịch chuyển an toàn ra xa cổng một chút (cách khoảng 12 stud)
+                                        -- Dùng math.random để tránh việc bị kẹt vào đúng 1 góc chết
+                                        local offset = Vector3.new(math.random(-10, 10), 3, math.random(-10, 10))
+                                        hrp.CFrame = CFrame.new(doorPos + offset)
+                                        task.wait(0.5) -- Đợi 0.5s cho Map và Đất đá load xong
                                         
-                                        -- 2. Ép trạng thái nhân vật thành "Rơi Tự Do" để game tính toán vật lý
-                                        humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
-                                        
-                                        -- 3. Đợi 2 giây cho nhân vật rớt cái "bịch" xuống đất và Server nhận tọa độ
-                                        task.wait(2)
+                                        -- 2. Ép nhân vật ĐI BỘ phần quãng đường còn lại vào thẳng tâm cổng
+                                        humanoid:MoveTo(doorPos)
+                                        task.wait(1.5) -- Cho nhân vật 1.5s để chạy tới nơi
                                     else
-                                        -- Nếu đã đứng gần sẵn thì chỉ cần nhích vào giữa cổng
+                                        -- Nếu đứng gần sẵn thì cứ thế chạy vào
                                         humanoid:MoveTo(doorPos)
                                         task.wait(1)
                                     end
 
-                                    -- Bắt đầu gửi Remote sau khi Server đã tin tưởng vị trí
+                                    -- Gửi Remote sau khi nhân vật đã đi bộ đến nơi
                                     currentTeamId = os.time()
                                     pcall(function() DataPullFunc:InvokeServer("DungeonCreateTeamChannel", id, currentTeamId) end)
                                     task.wait(1.5)
@@ -195,6 +195,22 @@ return function(Window, Utils)
                                     
                                     RiftStatus:Set("STATUS: Đang đợi Server dịch chuyển...")
                                     task.wait(4) -- Đợi game load màn hình đen
+                                    
+                                    -- TRẠM KIỂM LÂM (Kiểm tra xem đã vào trong chưa)
+                                    if (hrp.Position - doorPos).Magnitude < 50 then
+                                        print("⚠️ [LỖI REMOTE] Bị kẹt ở ngoài! Server từ chối cổng: " .. tostring(id))
+                                        RiftStatus:Set("STATUS: Bị Server chặn, bỏ qua cổng này!")
+                                        completedRifts[targetRiftKey] = os.time()
+                                        targetRiftId = nil
+                                        targetRiftKey = nil
+                                        riftState = "SCANNING" 
+                                        break
+                                    else
+                                        dungeonStuckTimer = 0
+                                        riftState = "COMBAT"
+                                        break
+                                    end
+                                    -- =========================================
                                     
                                     -- Trạm kiểm tra (Chống Fake Clear)
                                     if (hrp.Position - doorPos).Magnitude < 50 then
