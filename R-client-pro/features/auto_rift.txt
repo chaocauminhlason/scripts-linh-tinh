@@ -1,9 +1,6 @@
 -- ====================================================================
 -- MODULE: AUTO RIFT SYSTEM V4 (SỬA LỖI KẸT XÁC QUÁI & ÉP VÀO CỔNG)
 -- ====================================================================
--- ====================================================================
--- MODULE: AUTO RIFT SYSTEM V4 (SỬA LỖI KẸT XÁC QUÁI & ÉP VÀO CỔNG)
--- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
     local Workspace = game:GetService("Workspace")
@@ -241,5 +238,4 @@ return function(Window, Utils)
             end
         end
     end)
-end
 end
