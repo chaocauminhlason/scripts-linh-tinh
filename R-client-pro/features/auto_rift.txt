@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: AUTO RIFT SYSTEM V6.3 (SỬA LỖI MÙ CỔNG DYNAMIC & THÊM LOG)
+-- MODULE: AUTO RIFT SYSTEM V6.6 (TỐI ƯU ĐỒNG BỘ SERVER & REMOTE THỰC)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -66,18 +66,14 @@ return function(Window, Utils)
     })
 
     -- ==========================================
-    -- HÀM HỖ TRỢ: CHỈ LẤY TỌA ĐỘ TỪ GUI (KHÔNG CHECK ẨN)
-    -- Dùng GetPivot() - Tuyệt chiêu lấy tâm không bao giờ trượt của Roblox
+    -- HÀM HỖ TRỢ ĐỊNH VỊ
     -- ==========================================
     local function GetPositionFromGUI(obj)
         local guiNode = obj:FindFirstChild("GUI")
-        if guiNode then
-            pcall(function() return guiNode:GetPivot().Position end)
-        end
-        return obj:GetPivot().Position -- Fallback lấy tọa độ của cả cái Cổng
+        if guiNode then pcall(function() return guiNode:GetPivot().Position end) end
+        return obj:GetPivot().Position 
     end
 
-    -- Hàm Check Ẩn dành riêng cho Static
     local function IsStaticHidden(obj)
         local guiNode = obj:FindFirstChild("GUI")
         local isHidden = false
@@ -143,7 +139,7 @@ return function(Window, Utils)
                 end
                 
                 -- ==========================================
-                -- 1A. TÌM CỔNG DYNAMIC (ƯU TIÊN 1)
+                -- 1A. TÌM CỔNG DYNAMIC
                 -- ==========================================
                 if scanDynamic then
                     local dynamicFolder = Workspace:FindFirstChild("DynamicDungeon")
@@ -153,91 +149,64 @@ return function(Window, Utils)
                             if idStr then
                                 local id = tonumber(idStr)
                                 
-                                -- TÌM TÊN PORTAL ĐỂ TẠO KEY SỔ ĐEN
                                 local portalName = "UnknownPortal"
                                 for _, child in pairs(obj:GetChildren()) do
                                     if string.match(child.Name, "Portal") then portalName = child.Name break end
                                 end
                                 local dynamicKey = "Dynamic_" .. idStr .. "_" .. portalName
                                 
-                                -- KIỂM TRA SỔ ĐEN
                                 if not completedRifts[dynamicKey] then
                                     targetRiftId = id
                                     targetRiftKey = dynamicKey 
                                     foundNewRift = true
                                     RiftStatus:Set("STATUS: Khóa mục tiêu Dynamic: " .. dynamicKey)
                                     
-                                    -- ÉP LẤY TỌA ĐỘ TỪ GUI BẰNG GETPIVOT (KHÔNG BAO GIỜ LỖI)
                                     local doorPos = GetPositionFromGUI(obj)
+                                    local walkPos = doorPos
+                                    local basePart = obj:IsA("Model") and obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+                                    if basePart then walkPos = basePart.Position end
                                     
-                                    -- ===== KỸ THUẬT ĐI BỘ ÁP SÁT ĐỂ ĐỒNG BỘ MƯỢT =====
-                                    if doorPos and (hrp.Position - doorPos).Magnitude > 20 then
-                                        -- 1. Dịch chuyển an toàn ra xa cổng một chút (cách khoảng 12 stud)
-                                        -- Dùng math.random để tránh việc bị kẹt vào đúng 1 góc chết
-                                        local offset = Vector3.new(math.random(-10, 10), 3, math.random(-10, 10))
-                                        hrp.CFrame = CFrame.new(doorPos + offset)
-                                        task.wait(0.5) -- Đợi 0.5s cho Map và Đất đá load xong
-                                        
-                                        -- 2. Ép nhân vật ĐI BỘ phần quãng đường còn lại vào thẳng tâm cổng
-                                        humanoid:MoveTo(doorPos)
-                                        task.wait(1.5) -- Cho nhân vật 1.5s để chạy tới nơi
+                                    local dist2D = math.sqrt((hrp.Position.X - walkPos.X)^2 + (hrp.Position.Z - walkPos.Z)^2)
+                                    if dist2D > 20 then
+                                        hrp.CFrame = CFrame.new(walkPos + Vector3.new(0, 5, 0)); task.wait(0.5)
+                                        humanoid.Jump = true; task.wait(0.2)
+                                        humanoid:MoveTo(walkPos + Vector3.new(2, 0, 2)); task.wait(0.5)
+                                        humanoid:MoveTo(walkPos); task.wait(1)
                                     else
-                                        -- Nếu đứng gần sẵn thì cứ thế chạy vào
-                                        humanoid:MoveTo(doorPos)
-                                        task.wait(1)
+                                        humanoid:MoveTo(walkPos); task.wait(1)
                                     end
 
-                                    -- Gửi Remote sau khi nhân vật đã đi bộ đến nơi
-                                    currentTeamId = os.time()
-                                    pcall(function() DataPullFunc:InvokeServer("DungeonCreateTeamChannel", id, currentTeamId) end)
-                                    task.wait(1.5)
-                                    pcall(function() DataPullFunc:InvokeServer("DungeonStartChannel", id, currentTeamId) end)
+                                    local teamIdGen = math.random(1111111111, 1999999999) 
+                                    local createArgs = { "DungeonCreateTeamChannel", id, teamIdGen }
+                                    local startArgs = { "DungeonStartChannel", id, teamIdGen }
+
+                                    RiftStatus:Set("STATUS: Đang gửi lệnh Remote...")
+                                    print("📡 [REMOTE] TẠO PHÒNG: ID", id, "| TeamID:", teamIdGen)
+                                    local createResult = DataPullFunc:InvokeServer(unpack(createArgs))
+                                    print("   -> Server phản hồi Create:", tostring(createResult))
                                     
+                                    task.wait(0.3)
+                                    
+                                    print("📡 [REMOTE] BẮT ĐẦU: ID", id, "| TeamID:", teamIdGen)
+                                    local startResult = DataPullFunc:InvokeServer(unpack(startArgs))
+                                    print("   -> Server phản hồi Start:", tostring(startResult))
+
                                     RiftStatus:Set("STATUS: Đang đợi Server dịch chuyển...")
-                                    task.wait(4) -- Đợi game load màn hình đen
+                                    task.wait(4) 
                                     
-                                    -- TRẠM KIỂM LÂM (Kiểm tra xem đã vào trong chưa)
-                                    if (hrp.Position - doorPos).Magnitude < 50 then
-                                        print("⚠️ [LỖI REMOTE] Bị kẹt ở ngoài! Server từ chối cổng: " .. tostring(id))
+                                    if (hrp.Position - walkPos).Magnitude < 50 then
+                                        print("⚠️ [LỖI REMOTE] Bị kẹt ngoài sảnh! Server từ chối cổng: " .. tostring(id))
                                         RiftStatus:Set("STATUS: Bị Server chặn, bỏ qua cổng này!")
                                         completedRifts[targetRiftKey] = os.time()
-                                        targetRiftId = nil
-                                        targetRiftKey = nil
-                                        riftState = "SCANNING" 
+                                        targetRiftId = nil; targetRiftKey = nil; riftState = "SCANNING" 
                                         break
                                     else
-                                        dungeonStuckTimer = 0
-                                        riftState = "COMBAT"
+                                        print("✅ [REMOTE] Vào cổng thành công!")
+                                        currentTeamId = teamIdGen
+                                        dungeonStuckTimer = 0; riftState = "COMBAT"
                                         break
                                     end
-                                    -- =========================================
-                                    
-                                    -- Trạm kiểm tra (Chống Fake Clear)
-                                    if (hrp.Position - doorPos).Magnitude < 50 then
-                                        print("⚠️ [LỖI REMOTE] Bị kẹt ở ngoài! Server từ chối cổng: " .. tostring(id))
-                                        RiftStatus:Set("STATUS: Bị Server chặn, bỏ qua cổng này!")
-                                        completedRifts[targetRiftKey] = os.time()
-                                        targetRiftId = nil
-                                        targetRiftKey = nil
-                                        riftState = "SCANNING" 
-                                        break
-                                    else
-                                        dungeonStuckTimer = 0
-                                        riftState = "COMBAT"
-                                        break
-                                    end
-                                    task.wait(1.5)
-                                    pcall(function() DataPullFunc:InvokeServer("DungeonStartChannel", id, currentTeamId) end)
-                                    task.wait(3.5)
-                                    
-                                    dungeonStuckTimer = 0
-                                    riftState = "COMBAT"
-                                    break
-                                else
-                                    print("⚠️ [RADAR] Đã thấy cổng Dynamic: " .. dynamicKey .. " nhưng nó đang trong Sổ Đen (đợi 2 phút)!")
                                 end
-                            else
-                                print("⚠️ [RADAR] Thấy Object lạ trong DynamicDungeon nhưng không lấy được ID: " .. obj.Name)
                             end
                         end
                     end
@@ -259,7 +228,6 @@ return function(Window, Utils)
                                         if idStr then
                                             local id = tonumber(idStr)
                                             
-                                            -- CHỈ CỔNG STATIC MỚI CHECK ẨN
                                             if IsStaticHidden(obj) then continue end
                                             
                                             if not completedRifts[id] or (currentTime - completedRifts[id] > staticBlacklistTime) then
@@ -267,17 +235,50 @@ return function(Window, Utils)
                                                 RiftStatus:Set("STATUS: Khóa mục tiêu Static ID: " .. id)
                                                 
                                                 local doorPos = GetPositionFromGUI(obj)
+                                                local walkPos = doorPos
+                                                local basePart = obj:IsA("Model") and obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+                                                if basePart then walkPos = basePart.Position end
                                                 
-                                                if doorPos and (hrp.Position - doorPos).Magnitude > 20 then
-                                                    hrp.CFrame = CFrame.new(doorPos + Vector3.new(0, 3, 5)); task.wait(1.5)
+                                                local dist2D = math.sqrt((hrp.Position.X - walkPos.X)^2 + (hrp.Position.Z - walkPos.Z)^2)
+                                                if dist2D > 20 then
+                                                    hrp.CFrame = CFrame.new(walkPos + Vector3.new(0, 5, 0)); task.wait(0.5)
+                                                    humanoid.Jump = true; task.wait(0.2)
+                                                    humanoid:MoveTo(walkPos + Vector3.new(2, 0, 2)); task.wait(0.5)
+                                                    humanoid:MoveTo(walkPos); task.wait(1)
+                                                else
+                                                    humanoid:MoveTo(walkPos); task.wait(1)
                                                 end
-                                                currentTeamId = os.time()
-                                                pcall(function() DataPullFunc:InvokeServer("DungeonCreateTeamChannel", id, currentTeamId) end)
-                                                task.wait(1.5)
-                                                pcall(function() DataPullFunc:InvokeServer("DungeonStartChannel", id, currentTeamId) end)
-                                                task.wait(3.5)
-                                                dungeonStuckTimer = 0; riftState = "COMBAT"
-                                                break
+
+                                                local teamIdGen = math.random(1111111111, 1999999999) 
+                                                local createArgs = { "DungeonCreateTeamChannel", id, teamIdGen }
+                                                local startArgs = { "DungeonStartChannel", id, teamIdGen }
+
+                                                RiftStatus:Set("STATUS: Đang gửi lệnh Remote...")
+                                                print("📡 [REMOTE] TẠO PHÒNG: ID", id, "| TeamID:", teamIdGen)
+                                                local createResult = DataPullFunc:InvokeServer(unpack(createArgs))
+                                                print("   -> Server phản hồi Create:", tostring(createResult))
+                                                
+                                                task.wait(0.3)
+                                                
+                                                print("📡 [REMOTE] BẮT ĐẦU: ID", id, "| TeamID:", teamIdGen)
+                                                local startResult = DataPullFunc:InvokeServer(unpack(startArgs))
+                                                print("   -> Server phản hồi Start:", tostring(startResult))
+
+                                                RiftStatus:Set("STATUS: Đang đợi Server dịch chuyển...")
+                                                task.wait(4) 
+                                                
+                                                if (hrp.Position - walkPos).Magnitude < 50 then
+                                                    print("⚠️ [LỖI REMOTE] Bị kẹt ngoài sảnh! Server từ chối cổng: " .. tostring(id))
+                                                    RiftStatus:Set("STATUS: Bị Server chặn, bỏ qua cổng này!")
+                                                    completedRifts[targetRiftKey] = os.time()
+                                                    targetRiftId = nil; targetRiftKey = nil; riftState = "SCANNING" 
+                                                    break
+                                                else
+                                                    print("✅ [REMOTE] Vào cổng thành công!")
+                                                    currentTeamId = teamIdGen
+                                                    dungeonStuckTimer = 0; riftState = "COMBAT"
+                                                    break
+                                                end
                                             end
                                         end
                                     end
