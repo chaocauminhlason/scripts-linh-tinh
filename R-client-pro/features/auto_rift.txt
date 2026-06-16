@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: AUTO RIFT SYSTEM V6.8 (PURE SIMPLESPY - XÓA BỎ MỌI ĐỘ TRỄ)
+-- MODULE: AUTO RIFT SYSTEM V6.9 (CHÍNH XÁC 100% ĐỊNH DANH DUNGEON START TICK)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -125,43 +125,21 @@ return function(Window, Utils)
                 end
                 
                 -- ==========================================
-                -- HÀM THỰC THI REMOTE CHUẨN SIMPLESPY (CÓ DUMP LOG F9)
+                -- HÀM THỰC THI REMOTE (BẢN UPDATE V6.9 - HỖ TRỢ TRUYỀN ĐÚNG TEAM ID)
                 -- ==========================================
-                local function ExecuteRiftEntry(id, key, targetPos)
+                local function ExecuteRiftEntry(id, key, targetPos, theTeamId)
                     targetRiftId = id
                     targetRiftKey = key
                     foundNewRift = true
                     RiftStatus:Set("STATUS: Đã khóa mục tiêu: " .. tostring(id))
                     
-                    -- Dịch chuyển đơn giản (để chắc chắn ở gần cổng)
                     hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0))
                     task.wait(0.5) 
 
-                    -- TẠO ĐÚNG THỜI GIAN THỰC NHƯ SIMPLESPY
-                    currentTeamId = os.time()
+                    currentTeamId = theTeamId
                     local createArgs = { "DungeonCreateTeamChannel", id, currentTeamId }
                     local startArgs = { "DungeonStartChannel", id, currentTeamId }
 
-                    -- IN RA F9 NGUYÊN BẢN CÂU LỆNH SẼ BẮN (RAW DUMP)
-                    print(" ")
-                    print("========== 📡 RAW REMOTE LOG ==========")
-                    print("local args_create = {")
-                    print("    \"DungeonCreateTeamChannel\",")
-                    print("    " .. tostring(id) .. ",")
-                    print("    " .. tostring(currentTeamId))
-                    print("}")
-                    print("game:GetService(\"ReplicatedStorage\"):WaitForChild(\"CommonLibrary\"):WaitForChild(\"Tool\"):WaitForChild(\"RemoteManager\"):WaitForChild(\"Funcs\"):WaitForChild(\"DataPullFunc\"):InvokeServer(unpack(args_create))")
-                    
-                    print("local args_start = {")
-                    print("    \"DungeonStartChannel\",")
-                    print("    " .. tostring(id) .. ",")
-                    print("    " .. tostring(currentTeamId))
-                    print("}")
-                    print("game:GetService(\"ReplicatedStorage\"):WaitForChild(\"CommonLibrary\"):WaitForChild(\"Tool\"):WaitForChild(\"RemoteManager\"):WaitForChild(\"Funcs\"):WaitForChild(\"DataPullFunc\"):InvokeServer(unpack(args_start))")
-                    print("=======================================")
-                    print(" ")
-
-                    -- Bắn Remote liên tiếp không có Delay ở giữa
                     pcall(function()
                         DataPullFunc:InvokeServer(unpack(createArgs))
                         DataPullFunc:InvokeServer(unpack(startArgs))
@@ -170,7 +148,6 @@ return function(Window, Utils)
                     RiftStatus:Set("STATUS: Đang đợi Server dịch chuyển...")
                     task.wait(3.5)
                     
-                    -- KIỂM TRA BẰNG NHÂN VẬT MỚI NHẤT
                     local checkChar = LocalPlayer.Character
                     local checkHrp = checkChar and checkChar:FindFirstChild("HumanoidRootPart")
                     
@@ -184,7 +161,9 @@ return function(Window, Utils)
                     end
                 end
 
-                -- 1A. TÌM DYNAMIC
+                -- ==========================================
+                -- 1A. TÌM DYNAMIC (LẤY DUNGEON START TICK)
+                -- ==========================================
                 if scanDynamic and not foundNewRift then
                     local dynamicFolder = Workspace:FindFirstChild("DynamicDungeon")
                     if dynamicFolder then
@@ -199,7 +178,23 @@ return function(Window, Utils)
                                 local dynamicKey = "Dynamic_" .. idStr .. "_" .. portalName
                                 
                                 if not completedRifts[dynamicKey] then
-                                    ExecuteRiftEntry(id, dynamicKey, GetPositionFromGUI(obj))
+                                    -- BÓC TÁCH DUNGEON START TICK NHƯ TRONG ẢNH X-QUANG
+                                    local properTeamId = obj:GetAttribute("DungeonStartTick")
+                                    
+                                    -- Nếu vì lý do gì game chưa load kịp thuộc tính thì bóc từ DungeonDynamicKey
+                                    if not properTeamId then
+                                        local dynKey = obj:GetAttribute("DungeonDynamicKey")
+                                        if dynKey then
+                                            local _, tStr, _ = string.match(dynKey, "(%d+)_(%d+)_(%d+)")
+                                            properTeamId = tonumber(tStr)
+                                        end
+                                    end
+                                    
+                                    -- Fallback cuối cùng nếu cổng bị lỗi data (cực hiếm)
+                                    if not properTeamId then properTeamId = os.time() end
+
+                                    print("🔍 [PHÂN TÍCH] Cổng Dynamic " .. idStr .. " có TeamID chuẩn là: " .. tostring(properTeamId))
+                                    ExecuteRiftEntry(id, dynamicKey, GetPositionFromGUI(obj), properTeamId)
                                     break
                                 end
                             end
@@ -207,7 +202,9 @@ return function(Window, Utils)
                     end
                 end
 
-                -- 1B. TÌM STATIC
+                -- ==========================================
+                -- 1B. TÌM STATIC (SỬ DỤNG OS.TIME())
+                -- ==========================================
                 if scanStatic and not foundNewRift then
                     if currentTime - lastStaticScanTime >= staticScanInterval then
                         lastStaticScanTime = currentTime
@@ -222,7 +219,8 @@ return function(Window, Utils)
                                             local id = tonumber(idStr)
                                             if IsStaticHidden(obj) then continue end
                                             if not completedRifts[id] or (currentTime - completedRifts[id] > staticBlacklistTime) then
-                                                ExecuteRiftEntry(id, id, GetPositionFromGUI(obj))
+                                                -- Cổng Static không có StartTick, nên ta tự tạo bằng os.time() như cũ
+                                                ExecuteRiftEntry(id, id, GetPositionFromGUI(obj), os.time())
                                                 break
                                             end
                                         end
