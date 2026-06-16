@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: AUTO RIFT SYSTEM V4 (SỬA LỖI KẸT XÁC QUÁI & ÉP VÀO CỔNG)
+-- MODULE: AUTO RIFT SYSTEM V5 (STRICT STATE MACHINE - CHỐNG ĐÁNH NHẦM QUÁI SẢNH)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -13,19 +13,20 @@ return function(Window, Utils)
     local targetRiftId = nil 
     local targetRiftKey = nil 
     local currentTeamId = 0
-    local inRiftMatch = false
     local riftsClearedCount = 0
 
     local dungeonStuckTimer = 0
     local dungeonLastPosition = nil
-    
-    -- [BIẾN MỚI] Dùng để đếm ngược ép thoát trận
     local clearDelayTimer = 0 
 
     local completedRifts = {} 
     local riftRespawnTime = 300 
     local catchingMemory = {} 
 
+    -- KIẾN TRÚC MỚI: PHÂN LẬP 3 TRẠNG THÁI RÕ RÀNG
+    local riftState = "SCANNING" -- "SCANNING" (Tìm Cổng), "COMBAT" (Đánh Quái), "EXITING" (Thoát Trận)
+
+    local DataPullFunc = nil
 
     local RiftTab = Window:CreateTab("Auto Rift", 4483362458)
     local RiftStatus = RiftTab:CreateLabel("STATUS: AUTO RIFT ĐANG TẮT")
@@ -38,14 +39,25 @@ return function(Window, Utils)
             autoRiftEnabled = Value
             if not Value then 
                 RiftStatus:Set("STATUS: TẮT")
-                inRiftMatch = false
+                riftState = "SCANNING"
                 targetRiftId = nil 
+                targetRiftKey = nil
             else 
                 RiftStatus:Set("STATUS: ĐANG QUÉT MAP...") 
-                clearDelayTimer = 0 -- Reset bộ đếm an toàn
+                riftState = "SCANNING" -- Luôn bắt đầu bằng việc quét cổng
+                clearDelayTimer = 0 
             end
         end
     })
+    
+    RiftTab:CreateButton({ 
+        Name = "Ép vào Combat Mode (Dùng nếu lỡ bật trong Rift)", 
+        Callback = function() 
+            riftState = "COMBAT"
+            RiftStatus:Set("STATUS: Đã ép chuyển sang chế độ Chiến Đấu!")
+        end 
+    })
+
     RiftTab:CreateButton({ 
         Name = "Xóa Trí Nhớ Blacklist (Sửa lỗi kẹt cổng)", 
         Callback = function() 
@@ -57,11 +69,11 @@ return function(Window, Utils)
     })
 
     task.spawn(function()
-        -- DI CHUYỂN DataPullFunc VÀO ĐÂY (Nằm trong luồng chạy ngầm)
-        local DataPullFunc = ReplicatedStorage:WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc")
+        DataPullFunc = ReplicatedStorage:WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc")
 
         while task.wait(0.5) do
             if not autoRiftEnabled then continue end
+
             local char = LocalPlayer.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
             local humanoid = char and char:FindFirstChild("Humanoid")
@@ -74,103 +86,25 @@ return function(Window, Utils)
                 continue 
             end
 
+            -- QUÉT QUÁI VẬT (CHỈ HOẠT ĐỘNG KHI ĐÃ CHÍNH THỨC VÀO TRẬN)
             local monstersFolder = Workspace:FindFirstChild("Monsters")
-            local hasAliveMonsters, deadMonsters, bestTarget, closestDist2D = Utils.ScanMonsters(monstersFolder, hrp)
-
-            -- Đếm xem có con quái chết nào CHƯA ĐƯỢC NÉM BÓNG không?
+            local hasAliveMonsters, deadMonsters, bestTarget, closestDist2D = false, {}, nil, math.huge
             local unhandledDeadCount = 0
-            for _, m in pairs(deadMonsters) do
-                local id = tonumber(m.Name:match("Monster_(%d+)"))
-                if id and not catchingMemory[id] then
-                    unhandledDeadCount = unhandledDeadCount + 1
-                end
-            end
-
-            -- ==========================================
-            -- 1. BẮT QUÁI TRẮNG MÁU
-            -- ==========================================
-            if unhandledDeadCount > 0 then
-                RiftStatus:Set("STATUS: Đang ném bóng bắt quái...")
+            
+            if riftState == "COMBAT" or riftState == "EXITING" then
+                hasAliveMonsters, deadMonsters, bestTarget, closestDist2D = Utils.ScanMonsters(monstersFolder, hrp)
                 for _, m in pairs(deadMonsters) do
                     local id = tonumber(m.Name:match("Monster_(%d+)"))
                     if id and not catchingMemory[id] then
-                        catchingMemory[id] = true
-                        Utils.CatchMonster(DataPullFunc, id) 
+                        unhandledDeadCount = unhandledDeadCount + 1
                     end
                 end
             end
 
             -- ==========================================
-            -- 2. ĐÁNH QUÁI CÒN SỐNG
+            -- GIAI ĐOẠN 1: SCANNING (TÌM CỔNG Ở SẢNH - PHỚT LỜ QUÁI VẬT)
             -- ==========================================
-            if hasAliveMonsters then
-                inRiftMatch = true
-                clearDelayTimer = 0 -- Reset bộ đếm thoát phòng vì vẫn đang đánh
-                
-                if unhandledDeadCount == 0 then RiftStatus:Set("STATUS: Đang trong trận - Chiến đấu!") end
-
-                if bestTarget then
-                    local targetPos = bestTarget:IsA("Model") and bestTarget.PrimaryPart and bestTarget.PrimaryPart.Position or bestTarget.Position
-                    
-                    if closestDist2D > 40 then
-                        Utils.ToggleMount(DataPullFunc, true)
-                        task.wait(0.2)
-                        hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 4))
-                        task.wait(0.2)
-                        humanoid:MoveTo(hrp.Position)
-                        dungeonLastPosition = hrp.Position
-                        dungeonStuckTimer = 0
-                        Utils.SmartDismount(LocalPlayer, DataPullFunc)
-                    elseif closestDist2D > 12 then
-                        humanoid:MoveTo(targetPos)
-                        if dungeonLastPosition and (hrp.Position - dungeonLastPosition).Magnitude < 1 then
-                            dungeonStuckTimer = dungeonStuckTimer + 0.5
-                            if dungeonStuckTimer >= 3 then hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 3)); dungeonStuckTimer = 0 end
-                        else dungeonStuckTimer = 0 end
-                        dungeonLastPosition = hrp.Position
-                    else
-                        humanoid:MoveTo(hrp.Position) 
-                        dungeonStuckTimer = 0 
-                        Utils.SmartDismount(LocalPlayer, DataPullFunc)
-                        
-                        local id = tonumber(bestTarget.Name:match("Monster_(%d+)"))
-                        if id then Utils.AttackMonster(DataPullFunc, id) end 
-                    end
-                end
-
-            -- ==========================================
-            -- 3. THOÁT TRẬN (KHI QUÁI CHẾT HẾT VÀ NÉM BÓNG XONG)
-            -- ==========================================
-            elseif inRiftMatch and not hasAliveMonsters and unhandledDeadCount == 0 then
-                clearDelayTimer = clearDelayTimer + 0.5
-                RiftStatus:Set("STATUS: Đợi Server thu thập Pet... (" .. clearDelayTimer .. "s)")
-
-                -- [FIX LỖI KẸT]: Thoát nếu xác quái đã biến mất HOẶC đã đợi quá 4 giây!
-                if #deadMonsters == 0 or clearDelayTimer >= 4 then
-                    RiftStatus:Set("STATUS: Hoàn thành! Đang thoát...")
-                    Utils.LeaveMatch(DataPullFunc, targetRiftId, currentTeamId)
-
-                    if targetRiftId then
-                        local memoryKey = targetRiftKey or targetRiftId
-                        completedRifts[memoryKey] = os.time()
-                        riftsClearedCount = riftsClearedCount + 1
-                        ClearedLabel:Set("Rift đã dọn dẹp: " .. riftsClearedCount)
-                        print(string.format("🚪 [AUTO RIFT] Đã thoát trận! Ghi nhớ [%s] vào Blacklist.", tostring(memoryKey)))
-                    end
-
-                    inRiftMatch = false
-                    targetRiftId = nil 
-                    targetRiftKey = nil
-                    catchingMemory = {} 
-                    clearDelayTimer = 0
-                    task.wait(3)
-                end
-
-            -- ==========================================
-            -- 4. SẢNH CHỜ QUÉT DYNAMIC RIFT
-            -- ==========================================
-            else
-                inRiftMatch = false -- Failsafe: Ép tắt trạng thái trận đấu nếu kẹt
+            if riftState == "SCANNING" then
                 RiftStatus:Set("STATUS: Sảnh - Radar đang dò tìm Rift...")
                 local foundNewRift = false
                 local currentTime = os.time()
@@ -184,6 +118,7 @@ return function(Window, Utils)
                     end
                 end
                 
+                -- 1A. TÌM CỔNG DYNAMIC
                 local dynamicFolder = Workspace:FindFirstChild("DynamicDungeon")
                 if dynamicFolder then
                     for _, obj in pairs(dynamicFolder:GetChildren()) do
@@ -197,10 +132,7 @@ return function(Window, Utils)
                             end
                             local dynamicKey = "Dynamic_" .. idStr .. "_" .. portalName
                             
-                            -- KIỂM TRA SỔ ĐEN VÀ IN RA LOG NẾU BỊ CHẶN
-                            if completedRifts[dynamicKey] then
-                                -- print("⚠️ Bỏ qua Rift: " .. dynamicKey .. " vì đang trong thời gian Cooldown!")
-                            else
+                            if not completedRifts[dynamicKey] then
                                 targetRiftId = id
                                 targetRiftKey = dynamicKey 
                                 foundNewRift = true
@@ -226,7 +158,54 @@ return function(Window, Utils)
                                 task.wait(1.5)
                                 pcall(function() DataPullFunc:InvokeServer("DungeonStartChannel", id, currentTeamId) end)
                                 task.wait(3.5)
+                                
+                                -- ĐÃ VÀO RIFT THÀNH CÔNG -> CHUYỂN SANG CHẾ ĐỘ ĐÁNH QUÁI
+                                dungeonStuckTimer = 0
+                                riftState = "COMBAT"
                                 break
+                            end
+                        end
+                    end
+                end
+
+                -- 1B. TÌM CỔNG STATIC (NẾU CHƯA CÓ DYNAMIC NÀO)
+                if not foundNewRift then
+                    local areaFolder = Workspace:FindFirstChild("Area")
+                    if areaFolder then
+                        for _, mapFolder in pairs(areaFolder:GetChildren()) do
+                            local serverZone = mapFolder:FindFirstChild("ServerZone")
+                            if serverZone and serverZone:FindFirstChild("Dungeon") then
+                                for _, obj in pairs(serverZone.Dungeon:GetChildren()) do
+                                    local idStr = string.match(obj.Name, "Dungeon_(%d+)")
+                                    if idStr then
+                                        local id = tonumber(idStr)
+                                        if not completedRifts[id] or (currentTime - completedRifts[id] > riftRespawnTime) then
+                                            targetRiftId = id
+                                            targetRiftKey = id
+                                            foundNewRift = true
+                                            RiftStatus:Set("STATUS: Đã khóa mục tiêu Rift ID: " .. id)
+                                            
+                                            local doorPos = obj:IsA("Model") and obj:GetPivot().Position or obj.Position
+                                            
+                                            if doorPos and (hrp.Position - doorPos).Magnitude > 20 then
+                                                hrp.CFrame = CFrame.new(doorPos + Vector3.new(0, 3, 5))
+                                                task.wait(1.5)
+                                            end
+
+                                            currentTeamId = os.time()
+                                            pcall(function() DataPullFunc:InvokeServer("DungeonCreateTeamChannel", id, currentTeamId) end)
+                                            task.wait(1.5)
+                                            pcall(function() DataPullFunc:InvokeServer("DungeonStartChannel", id, currentTeamId) end)
+                                            task.wait(3.5)
+                                            
+                                            -- ĐÃ VÀO RIFT THÀNH CÔNG -> CHUYỂN SANG CHẾ ĐỘ ĐÁNH QUÁI
+                                            dungeonStuckTimer = 0
+                                            riftState = "COMBAT"
+                                            break
+                                        end
+                                    end
+                                end
+                                if foundNewRift then break end
                             end
                         end
                     end
@@ -235,6 +214,84 @@ return function(Window, Utils)
                 if not foundNewRift then
                     RiftStatus:Set("STATUS: Đã dọn sạch Map. Đợi Rift mới xuất hiện...")
                     task.wait(2)
+                end
+
+            -- ==========================================
+            -- GIAI ĐOẠN 2: COMBAT (TRONG TRẬN)
+            -- ==========================================
+            elseif riftState == "COMBAT" then
+                clearDelayTimer = 0 
+
+                if unhandledDeadCount > 0 then
+                    RiftStatus:Set("STATUS: Đang ném bóng bắt quái...")
+                    for _, m in pairs(deadMonsters) do
+                        local id = tonumber(m.Name:match("Monster_(%d+)"))
+                        if id and not catchingMemory[id] then
+                            catchingMemory[id] = true
+                            Utils.CatchMonster(DataPullFunc, id) 
+                        end
+                    end
+                elseif hasAliveMonsters then
+                    RiftStatus:Set("STATUS: Đang trong trận - Chiến đấu!")
+                    if bestTarget then
+                        local targetPos = bestTarget:IsA("Model") and bestTarget.PrimaryPart and bestTarget.PrimaryPart.Position or bestTarget.Position
+                        
+                        if closestDist2D > 40 then
+                            Utils.ToggleMount(DataPullFunc, true)
+                            task.wait(0.2)
+                            hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 4))
+                            task.wait(0.2)
+                            humanoid:MoveTo(hrp.Position)
+                            dungeonLastPosition = hrp.Position
+                            dungeonStuckTimer = 0
+                            Utils.SmartDismount(LocalPlayer, DataPullFunc)
+                        elseif closestDist2D > 12 then
+                            humanoid:MoveTo(targetPos)
+                            if dungeonLastPosition and (hrp.Position - dungeonLastPosition).Magnitude < 1 then
+                                dungeonStuckTimer = dungeonStuckTimer + 0.5
+                                if dungeonStuckTimer >= 3 then hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 3)); dungeonStuckTimer = 0 end
+                            else dungeonStuckTimer = 0 end
+                            dungeonLastPosition = hrp.Position
+                        else
+                            humanoid:MoveTo(hrp.Position) 
+                            dungeonStuckTimer = 0 
+                            Utils.SmartDismount(LocalPlayer, DataPullFunc)
+                            
+                            local id = tonumber(bestTarget.Name:match("Monster_(%d+)"))
+                            if id then Utils.AttackMonster(DataPullFunc, id) end 
+                        end
+                    end
+                else
+                    -- Không còn quái nào sống và quái chết cũng đã bắt xong
+                    riftState = "EXITING"
+                end
+
+            -- ==========================================
+            -- GIAI ĐOẠN 3: EXITING (THOÁT TRẬN VÀ QUAY VỀ SẢNH)
+            -- ==========================================
+            elseif riftState == "EXITING" then
+                clearDelayTimer = clearDelayTimer + 0.5
+                RiftStatus:Set("STATUS: Đợi Server thu thập Pet... (" .. clearDelayTimer .. "s)")
+
+                if #deadMonsters == 0 or clearDelayTimer >= 4 then
+                    RiftStatus:Set("STATUS: Hoàn thành! Đang thoát...")
+                    Utils.LeaveMatch(DataPullFunc, targetRiftId, currentTeamId)
+
+                    if targetRiftKey then
+                        completedRifts[targetRiftKey] = os.time()
+                        riftsClearedCount = riftsClearedCount + 1
+                        ClearedLabel:Set("Rift đã dọn dẹp: " .. riftsClearedCount)
+                        print(string.format("🚪 [AUTO RIFT] Đã thoát trận! Ghi nhớ [%s] vào Blacklist.", tostring(targetRiftKey)))
+                    end
+
+                    targetRiftId = nil 
+                    targetRiftKey = nil
+                    catchingMemory = {} 
+                    clearDelayTimer = 0
+                    
+                    -- QUAY LẠI GIAI ĐOẠN 1 ĐỂ TÌM CỔNG MỚI
+                    riftState = "SCANNING" 
+                    task.wait(3)
                 end
             end
         end
