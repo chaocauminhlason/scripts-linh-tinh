@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: AUTO RIFT SYSTEM V6 (PHÂN LẬP DYNAMIC/STATIC & CUSTOM TIME)
+-- MODULE: AUTO RIFT SYSTEM V6.1 (ĐỊNH VỊ CHUẨN XÁC BẰNG TỌA ĐỘ GUI)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -9,13 +9,10 @@ return function(Window, Utils)
     local LocalPlayer = Players.LocalPlayer
     local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 
-    -- ==========================================
-    -- BIẾN CẤU HÌNH (STATE VARIABLES)
-    -- ==========================================
     local autoRiftMaster = false 
-    local scanDynamic = true    -- Công tắc quét Dynamic
-    local scanStatic = true     -- Công tắc quét Static
-    local riftRespawnTime = 300 -- Thời gian hồi sinh Static (Mặc định 300s = 5 Phút)
+    local scanDynamic = true    
+    local scanStatic = true     
+    local riftRespawnTime = 300 
 
     local targetRiftId = nil 
     local targetRiftKey = nil 
@@ -33,9 +30,6 @@ return function(Window, Utils)
 
     local DataPullFunc = nil
 
-    -- ==========================================
-    -- GIAO DIỆN UI (RAYFIELD)
-    -- ==========================================
     local RiftTab = Window:CreateTab("Auto Rift", 4483362458)
     local RiftStatus = RiftTab:CreateLabel("STATUS: AUTO RIFT ĐANG TẮT")
     local ClearedLabel = RiftTab:CreateLabel("Rift đã dọn dẹp: 0")
@@ -43,9 +37,7 @@ return function(Window, Utils)
     RiftTab:CreateSection("--- CÔNG TẮC ĐIỀU KHIỂN ---")
     
     RiftTab:CreateToggle({
-        Name = "Công Tắc Tổng (Bật/Tắt Auto Rift)", 
-        CurrentValue = false, 
-        Flag = "AutoRiftMasterToggle",
+        Name = "Công Tắc Tổng (Bật/Tắt Auto Rift)", CurrentValue = false, Flag = "AutoRiftMasterToggle",
         Callback = function(Value)
             autoRiftMaster = Value
             if not Value then 
@@ -61,52 +53,58 @@ return function(Window, Utils)
         end
     })
 
-    RiftTab:CreateToggle({
-        Name = "🔍 Săn Cổng Tự Tạo (Dynamic Rift)", 
-        CurrentValue = true, 
-        Flag = "ScanDynamicToggle",
-        Callback = function(Value) scanDynamic = Value end
-    })
-
-    RiftTab:CreateToggle({
-        Name = "🔍 Săn Cổng Mặc Định (Static Rift)", 
-        CurrentValue = true, 
-        Flag = "ScanStaticToggle",
-        Callback = function(Value) scanStatic = Value end
-    })
+    RiftTab:CreateToggle({ Name = "🔍 Săn Cổng Tự Tạo (Dynamic Rift)", CurrentValue = true, Flag = "ScanDynamicToggle", Callback = function(Value) scanDynamic = Value end })
+    RiftTab:CreateToggle({ Name = "🔍 Săn Cổng Mặc Định (Static Rift)", CurrentValue = true, Flag = "ScanStaticToggle", Callback = function(Value) scanStatic = Value end })
 
     RiftTab:CreateSlider({
-        Name = "Thời gian quét lại Static (Phút)",
-        Range = {1, 30},
-        Increment = 1,
-        Suffix = "Phút",
-        CurrentValue = 5,
-        Flag = "StaticRespawnSlider",
-        Callback = function(Value) 
-            riftRespawnTime = Value * 60 -- Đổi từ phút sang giây
-            print("⏳ [AUTO RIFT] Đã chỉnh thời gian vòng lặp Static thành: " .. riftRespawnTime .. " giây.")
-        end,
+        Name = "Thời gian quét lại Static (Phút)", Range = {1, 30}, Increment = 1, Suffix = "Phút", CurrentValue = 5, Flag = "StaticRespawnSlider",
+        Callback = function(Value) riftRespawnTime = Value * 60 end,
     })
 
     RiftTab:CreateSection("--- CÔNG CỤ SỬA LỖI ---")
+    RiftTab:CreateButton({ Name = "Ép vào Combat Mode (Dùng nếu lỡ bật trong Rift)", Callback = function() riftState = "COMBAT" RiftStatus:Set("STATUS: Đã ép chuyển sang chế độ Chiến Đấu!") end })
+    RiftTab:CreateButton({ Name = "Xóa Trí Nhớ Blacklist (Quét lại từ đầu)", Callback = function() completedRifts = {} riftsClearedCount = 0 ClearedLabel:Set("Rift đã dọn dẹp: 0") print("🔄 [AUTO RIFT] Đã reset toàn bộ trí nhớ Blacklist.") end })
 
-    RiftTab:CreateButton({ 
-        Name = "Ép vào Combat Mode (Dùng nếu lỡ bật trong Rift)", 
-        Callback = function() 
-            riftState = "COMBAT"
-            RiftStatus:Set("STATUS: Đã ép chuyển sang chế độ Chiến Đấu!")
-        end 
-    })
+    -- ==========================================
+    -- HÀM HỖ TRỢ: LẤY TỌA ĐỘ VÀ CHECK ẨN BẰNG ĐỐI TƯỢNG GUI
+    -- ==========================================
+    local function GetRiftInfoFromGUI(obj)
+        local guiNode = obj:FindFirstChild("GUI")
+        local isHidden = false
+        local exactPos = nil
 
-    RiftTab:CreateButton({ 
-        Name = "Xóa Trí Nhớ Blacklist (Quét lại từ đầu)", 
-        Callback = function() 
-            completedRifts = {} 
-            riftsClearedCount = 0 
-            ClearedLabel:Set("Rift đã dọn dẹp: 0") 
-            print("🔄 [AUTO RIFT] Đã reset toàn bộ trí nhớ Blacklist.")
-        end 
-    })
+        if guiNode then
+            pcall(function()
+                -- Check ẩn/hiện
+                if guiNode:IsA("BillboardGui") or guiNode:IsA("SurfaceGui") then
+                    if not guiNode.Enabled then isHidden = true end
+                else
+                    if guiNode.Visible == false then isHidden = true end
+                end
+
+                -- Lấy tọa độ chuẩn xác nhất
+                if guiNode:IsA("BasePart") then
+                    exactPos = guiNode.Position
+                elseif guiNode.Parent and guiNode.Parent:IsA("BasePart") then
+                    exactPos = guiNode.Parent.Position
+                end
+            end)
+        end
+        
+        -- Fallback: Nếu không tìm thấy tọa độ từ GUI, quét theo cách cũ
+        if not exactPos then
+            if obj:IsA("Model") and obj.PrimaryPart then exactPos = obj.PrimaryPart.Position
+            elseif obj:IsA("BasePart") then exactPos = obj.Position
+            else
+                for _, desc in pairs(obj:GetDescendants()) do
+                    if desc:IsA("BasePart") then exactPos = desc.Position break end
+                end
+            end
+            if not exactPos and obj:IsA("Model") then exactPos = obj:GetPivot().Position end
+        end
+
+        return isHidden, exactPos
+    end
 
     -- ==========================================
     -- VÒNG LẶP XỬ LÝ CHÍNH
@@ -122,14 +120,12 @@ return function(Window, Utils)
             local humanoid = char and char:FindFirstChild("Humanoid")
             if not (hrp and humanoid and humanoid.Health > 0) then continue end
 
-            -- [BỘ LỌC CHỐNG XUNG ĐỘT ABYSS TRIAL]
             local labStage = Utils.FindUIElementByName(playerGui, "LabStage")
             if labStage and labStage.Text ~= "Unknown" and labStage.Text ~= "" then
                 RiftStatus:Set("STATUS: Đang trong Abyss Trial - Tạm nghỉ!")
                 continue 
             end
 
-            -- QUÉT QUÁI VẬT (CHỈ QUÉT KHI Ở TRONG TRẬN)
             local monstersFolder = Workspace:FindFirstChild("Monsters")
             local hasAliveMonsters, deadMonsters, bestTarget, closestDist2D = false, {}, nil, math.huge
             local unhandledDeadCount = 0
@@ -145,10 +141,9 @@ return function(Window, Utils)
             end
 
             -- ==========================================
-            -- GIAI ĐOẠN 1: SCANNING (TÌM CỔNG Ở SẢNH)
+            -- GIAI ĐOẠN 1: SCANNING
             -- ==========================================
             if riftState == "SCANNING" then
-                -- Cập nhật trạng thái hiển thị
                 local scanningText = "Radar đang dò: "
                 if scanDynamic and scanStatic then scanningText = scanningText .. "Dynamic + Static..."
                 elseif scanDynamic then scanningText = scanningText .. "Chỉ Dynamic..."
@@ -157,22 +152,15 @@ return function(Window, Utils)
                 
                 RiftStatus:Set("STATUS: " .. scanningText)
 
-                -- Bỏ qua nếu không bật công tắc săn nào
-                if not scanDynamic and not scanStatic then
-                    task.wait(1)
-                    continue
-                end
+                if not scanDynamic and not scanStatic then task.wait(1) continue end
 
                 local foundNewRift = false
                 local currentTime = os.time()
                 
-                -- GARBAGE COLLECTOR
                 for key, timeCleared in pairs(completedRifts) do
                     local isDynamic = type(key) == "string" and string.find(key, "Dynamic")
                     local expireTime = isDynamic and 120 or riftRespawnTime
-                    if currentTime - timeCleared > expireTime then
-                        completedRifts[key] = nil 
-                    end
+                    if currentTime - timeCleared > expireTime then completedRifts[key] = nil end
                 end
                 
                 -- 1A. TÌM CỔNG DYNAMIC
@@ -183,6 +171,9 @@ return function(Window, Utils)
                             local idStr = string.match(obj.Name, "Dungeon_(%d+)")
                             if idStr then
                                 local id = tonumber(idStr)
+                                
+                                local isHidden, doorPos = GetRiftInfoFromGUI(obj)
+                                if isHidden then continue end
                                 
                                 local portalName = "UnknownPortal"
                                 for _, child in pairs(obj:GetChildren()) do
@@ -195,16 +186,6 @@ return function(Window, Utils)
                                     targetRiftKey = dynamicKey 
                                     foundNewRift = true
                                     RiftStatus:Set("STATUS: Khóa mục tiêu Dynamic: " .. dynamicKey)
-                                    
-                                    local doorPos = nil
-                                    if obj:IsA("Model") and obj.PrimaryPart then doorPos = obj.PrimaryPart.Position
-                                    elseif obj:IsA("BasePart") then doorPos = obj.Position
-                                    else
-                                        for _, desc in pairs(obj:GetDescendants()) do
-                                            if desc:IsA("BasePart") then doorPos = desc.Position break end
-                                        end
-                                    end
-                                    if not doorPos and obj:IsA("Model") then doorPos = obj:GetPivot().Position end
                                     
                                     if doorPos and (hrp.Position - doorPos).Magnitude > 20 then
                                         hrp.CFrame = CFrame.new(doorPos + Vector3.new(0, 3, 5))
@@ -238,29 +219,14 @@ return function(Window, Utils)
                                     if idStr then
                                         local id = tonumber(idStr)
                                         
-                                        -- [BỘ LỌC CHỐNG LỪA]: BỎ QUA CỔNG BỊ ẨN / KHÓA
-                                        local isHidden = false
-                                        local guiNode = obj:FindFirstChild("GUI")
-                                        
-                                        if guiNode then
-                                            pcall(function()
-                                                if guiNode:IsA("BillboardGui") or guiNode:IsA("SurfaceGui") then
-                                                    if not guiNode.Enabled then isHidden = true end
-                                                else
-                                                    if guiNode.Visible == false then isHidden = true end
-                                                end
-                                            end)
-                                        end
+                                        local isHidden, doorPos = GetRiftInfoFromGUI(obj)
                                         if isHidden then continue end
                                         
-                                        -- TRA SỔ ĐEN (BLACKLIST) DỰA THEO THỜI GIAN TRÊN SLIDER
                                         if not completedRifts[id] or (currentTime - completedRifts[id] > riftRespawnTime) then
                                             targetRiftId = id
                                             targetRiftKey = id
                                             foundNewRift = true
                                             RiftStatus:Set("STATUS: Khóa mục tiêu Static ID: " .. id)
-                                            
-                                            local doorPos = obj:IsA("Model") and obj:GetPivot().Position or obj.Position
                                             
                                             if doorPos and (hrp.Position - doorPos).Magnitude > 20 then
                                                 hrp.CFrame = CFrame.new(doorPos + Vector3.new(0, 3, 5))
@@ -291,7 +257,7 @@ return function(Window, Utils)
                 end
 
             -- ==========================================
-            -- GIAI ĐOẠN 2: COMBAT (TRONG TRẬN)
+            -- GIAI ĐOẠN 2 & 3: COMBAT & EXITING
             -- ==========================================
             elseif riftState == "COMBAT" then
                 clearDelayTimer = 0 
@@ -339,9 +305,6 @@ return function(Window, Utils)
                     riftState = "EXITING"
                 end
 
-            -- ==========================================
-            -- GIAI ĐOẠN 3: EXITING (THOÁT TRẬN VÀ QUAY VỀ SẢNH)
-            -- ==========================================
             elseif riftState == "EXITING" then
                 clearDelayTimer = clearDelayTimer + 0.5
                 RiftStatus:Set("STATUS: Đợi Server thu thập Pet... (" .. clearDelayTimer .. "s)")
