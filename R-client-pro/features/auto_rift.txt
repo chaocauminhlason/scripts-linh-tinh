@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: AUTO RIFT SYSTEM V6.6 (TỐI ƯU ĐỒNG BỘ SERVER & REMOTE THỰC)
+-- MODULE: AUTO RIFT SYSTEM V6.7 (RAW REMOTE PATH - CHUẨN SIMPLESPY)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -31,6 +31,7 @@ return function(Window, Utils)
 
     local riftState = "SCANNING" 
 
+    -- Vẫn giữ biến này cho Utils gọi (đánh quái/bắt thú), nhưng KHÔNG dùng cho việc vào cổng nữa
     local DataPullFunc = nil
 
     local RiftTab = Window:CreateTab("Auto Rift", 4483362458)
@@ -181,14 +182,16 @@ return function(Window, Utils)
                                     local startArgs = { "DungeonStartChannel", id, teamIdGen }
 
                                     RiftStatus:Set("STATUS: Đang gửi lệnh Remote...")
-                                    print("📡 [REMOTE] TẠO PHÒNG: ID", id, "| TeamID:", teamIdGen)
-                                    local createResult = DataPullFunc:InvokeServer(unpack(createArgs))
+                                    print("📡 [REMOTE RAW] TẠO PHÒNG: ID", id, "| TeamID:", teamIdGen)
+                                    
+                                    -- SỬ DỤNG ĐƯỜNG DẪN RAW KHÔNG RÚT GỌN
+                                    local createResult = game:GetService("ReplicatedStorage"):WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc"):InvokeServer(unpack(createArgs))
                                     print("   -> Server phản hồi Create:", tostring(createResult))
                                     
                                     task.wait(0.3)
                                     
-                                    print("📡 [REMOTE] BẮT ĐẦU: ID", id, "| TeamID:", teamIdGen)
-                                    local startResult = DataPullFunc:InvokeServer(unpack(startArgs))
+                                    print("📡 [REMOTE RAW] BẮT ĐẦU: ID", id, "| TeamID:", teamIdGen)
+                                    local startResult = game:GetService("ReplicatedStorage"):WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc"):InvokeServer(unpack(startArgs))
                                     print("   -> Server phản hồi Start:", tostring(startResult))
 
                                     RiftStatus:Set("STATUS: Đang đợi Server dịch chuyển...")
@@ -254,14 +257,16 @@ return function(Window, Utils)
                                                 local startArgs = { "DungeonStartChannel", id, teamIdGen }
 
                                                 RiftStatus:Set("STATUS: Đang gửi lệnh Remote...")
-                                                print("📡 [REMOTE] TẠO PHÒNG: ID", id, "| TeamID:", teamIdGen)
-                                                local createResult = DataPullFunc:InvokeServer(unpack(createArgs))
+                                                print("📡 [REMOTE RAW] TẠO PHÒNG: ID", id, "| TeamID:", teamIdGen)
+                                                
+                                                -- SỬ DỤNG ĐƯỜNG DẪN RAW KHÔNG RÚT GỌN
+                                                local createResult = game:GetService("ReplicatedStorage"):WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc"):InvokeServer(unpack(createArgs))
                                                 print("   -> Server phản hồi Create:", tostring(createResult))
                                                 
                                                 task.wait(0.3)
                                                 
-                                                print("📡 [REMOTE] BẮT ĐẦU: ID", id, "| TeamID:", teamIdGen)
-                                                local startResult = DataPullFunc:InvokeServer(unpack(startArgs))
+                                                print("📡 [REMOTE RAW] BẮT ĐẦU: ID", id, "| TeamID:", teamIdGen)
+                                                local startResult = game:GetService("ReplicatedStorage"):WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc"):InvokeServer(unpack(startArgs))
                                                 print("   -> Server phản hồi Start:", tostring(startResult))
 
                                                 RiftStatus:Set("STATUS: Đang đợi Server dịch chuyển...")
