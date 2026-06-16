@@ -26,7 +26,6 @@ return function(Window, Utils)
     local riftRespawnTime = 300 
     local catchingMemory = {} 
 
-    local DataPullFunc = ReplicatedStorage:WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc")
 
     local RiftTab = Window:CreateTab("Auto Rift", 4483362458)
     local RiftStatus = RiftTab:CreateLabel("STATUS: AUTO RIFT ĐANG TẮT")
@@ -58,9 +57,11 @@ return function(Window, Utils)
     })
 
     task.spawn(function()
+        -- DI CHUYỂN DataPullFunc VÀO ĐÂY (Nằm trong luồng chạy ngầm)
+        local DataPullFunc = ReplicatedStorage:WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc")
+
         while task.wait(0.5) do
             if not autoRiftEnabled then continue end
-
             local char = LocalPlayer.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
             local humanoid = char and char:FindFirstChild("Humanoid")
