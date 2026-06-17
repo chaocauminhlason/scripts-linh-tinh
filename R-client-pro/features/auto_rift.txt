@@ -258,14 +258,25 @@ return function(Window, Utils)
 
             elseif riftState == "EXITING" then
                 clearDelayTimer = clearDelayTimer + 0.5
-                RiftStatus:Set("STATUS: Đợi Server thu thập Pet... (" .. clearDelayTimer .. "s)")
+                RiftStatus:Set("STATUS: Chờ bắt Pet & rớt đồ... (" .. clearDelayTimer .. "s)")
                 
-                if #deadMonsters == 0 or clearDelayTimer >= 1.0 then
-                    RiftStatus:Set("STATUS: Hoàn thành! Đang thoát...")
-                    Utils.LeaveMatch(DataPullFunc, targetRiftId, currentTeamId)
+                -- ĐỢI ĐÚNG 1.0 GIÂY: Đảm bảo Server xử lý xong hàm CatchMonster và rớt đồ
+                if clearDelayTimer >= 0.5 then
+                    RiftStatus:Set("STATUS: Hoàn thành! Đang ép thoát siêu tốc...")
                     
+                    -- Bắn Remote RAW thoát chớp nhoáng
+                    pcall(function()
+                        local leaveArenaArgs = { "ArenaLeaveChannel" }
+                        DataPullFunc:InvokeServer(unpack(leaveArenaArgs))
+                        
+                        if targetRiftId and currentTeamId then
+                            local leaveTeamArgs = { "DungeonLeaveTeamChannel", targetRiftId, currentTeamId }
+                            DataPullFunc:InvokeServer(unpack(leaveTeamArgs))
+                        end
+                    end)
+                    
+                    -- Ghi nhận Sổ Đen Tối Ưu của bản V7.3
                     if targetRiftKey then
-                        -- Ghi Sổ Đen: Thời gian hiện tại + Khung hình phạt
                         completedRifts[targetRiftKey] = os.time() + targetExpireDuration
                         riftsClearedCount = riftsClearedCount + 1
                         ClearedLabel:Set("Rift đã dọn dẹp: " .. riftsClearedCount)
@@ -274,6 +285,7 @@ return function(Window, Utils)
                     targetRiftId = nil; targetRiftKey = nil; targetExpireDuration = 0
                     catchingMemory = {} ; clearDelayTimer = 0
                     
+                    -- Ra ngoài sảnh là lập tức quét cổng mới luôn (0 giây chờ)
                     riftState = "SCANNING"; task.wait(0)
                 end
             end
