@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: AUTO RIFT SYSTEM V7.4 (SMART DISTANCE & STABLE ENTRY)
+-- MODULE: AUTO RIFT SYSTEM V7.5 (ULTIMATE NATIVE LOGIC & SMART POS)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -61,25 +61,22 @@ return function(Window, Utils)
     RiftTab:CreateButton({ Name = "Ép vào Combat Mode (Dùng lỡ bật trong Rift)", Callback = function() riftState = "COMBAT" RiftStatus:Set("STATUS: Đã ép Chiến Đấu!") end })
     RiftTab:CreateButton({ Name = "Xóa Trí Nhớ Blacklist (Quét lại từ đầu)", Callback = function() completedRifts = {} riftsClearedCount = 0 ClearedLabel:Set("Rift đã dọn dẹp: 0") end })
 
+    -- ==========================================
+    -- HÀM LẤY TỌA ĐỘ (Ưu tiên tuyệt đối GUI theo ý User)
+    -- ==========================================
     local function GetPositionFromGUI(obj)
         local guiNode = obj:FindFirstChild("GUI")
-        if guiNode then pcall(function() return guiNode:GetPivot().Position end) end
-        return obj:GetPivot().Position 
-    end
-
-    local function IsStaticHidden(obj)
-        local guiNode = obj:FindFirstChild("GUI")
-        local isHidden = false
-        if guiNode then
-            pcall(function()
-                if guiNode:IsA("BillboardGui") or guiNode:IsA("SurfaceGui") then
-                    if not guiNode.Enabled then isHidden = true end
-                else
-                    if guiNode.Visible == false then isHidden = true end
-                end
-            end)
+        if guiNode then 
+            local pos
+            local success = pcall(function() pos = guiNode:GetPivot().Position end)
+            if success and pos then return pos end
         end
-        return isHidden
+        
+        -- Fallback nếu không có GUI (Lấy PrimaryPart của Model nếu có)
+        if obj:IsA("Model") and obj.PrimaryPart then 
+            return obj.PrimaryPart.Position 
+        end
+        return obj:GetPivot().Position 
     end
 
     task.spawn(function()
@@ -122,7 +119,6 @@ return function(Window, Utils)
                     if currentTime > expireTime then completedRifts[key] = nil end
                 end
                 
-                -- Biến lưu trữ cổng gần nhất
                 local bestPortal = nil
                 local shortestDistance = math.huge
 
@@ -136,23 +132,22 @@ return function(Window, Utils)
                             local idStr = string.match(obj.Name, "Dungeon_(%d+)")
                             if idStr then
                                 local id = tonumber(idStr)
-                                local properTeamId = obj:GetAttribute("DungeonStartTick")
-                                if not properTeamId then
-                                    local dynKey = obj:GetAttribute("DungeonDynamicKey")
-                                    if dynKey then properTeamId = tonumber(string.match(dynKey, "(%d+)_(%d+)_(%d+)") or 0) end
-                                end
-                                if not properTeamId or properTeamId == 0 then properTeamId = os.time() end
-
-                                local dynamicKey = "Dyn_" .. idStr .. "_" .. properTeamId
                                 
-                                if not completedRifts[dynamicKey] then
-                                    local doorPos = GetPositionFromGUI(obj)
-                                    local dist = (hrp.Position - doorPos).Magnitude
+                                -- 🔑 LOGIC CHUẨN DEV GAME: Dùng StartTick
+                                local properTeamId = obj:GetAttribute("DungeonStartTick")
+                                
+                                -- Nếu có StartTick tức là cổng đang Tồn Tại & Mở
+                                if properTeamId and properTeamId > 0 then
+                                    local dynamicKey = "Dyn_" .. idStr .. "_" .. properTeamId
                                     
-                                    -- Chỉ lấy cổng gần nhất
-                                    if dist < shortestDistance then
-                                        shortestDistance = dist
-                                        bestPortal = {id = id, key = dynamicKey, pos = doorPos, teamId = properTeamId, penalty = 120}
+                                    if not completedRifts[dynamicKey] then
+                                        local doorPos = GetPositionFromGUI(obj)
+                                        local dist = (hrp.Position - doorPos).Magnitude
+                                        
+                                        if dist < shortestDistance then
+                                            shortestDistance = dist
+                                            bestPortal = {id = id, key = dynamicKey, pos = doorPos, teamId = properTeamId, penalty = 120}
+                                        end
                                     end
                                 end
                             end
@@ -161,7 +156,7 @@ return function(Window, Utils)
                 end
 
                 -- ==========================================
-                -- BƯỚC 2: NẾU KHÔNG CÓ DYNAMIC, TÌM STATIC GẦN NHẤT
+                -- BƯỚC 2: TÌM STATIC GẦN NHẤT (Nếu Dynamic không có)
                 -- ==========================================
                 if scanStatic and not bestPortal then
                     if currentTime - lastStaticScanTime >= staticScanInterval then
@@ -175,15 +170,22 @@ return function(Window, Utils)
                                         local idStr = string.match(obj.Name, "Dungeon_(%d+)")
                                         if idStr then
                                             local id = tonumber(idStr)
-                                            if IsStaticHidden(obj) then continue end
                                             
-                                            if not completedRifts[id] then
-                                                local doorPos = GetPositionFromGUI(obj)
-                                                local dist = (hrp.Position - doorPos).Magnitude
+                                            -- 🔑 LOGIC CHUẨN DEV GAME: Static cũng có StartTick!
+                                            local properTeamId = obj:GetAttribute("DungeonStartTick")
+                                            
+                                            -- Cổng Static chỉ MỞ khi StartTick tồn tại
+                                            if properTeamId and properTeamId > 0 then
+                                                local staticKey = "Stat_" .. idStr .. "_" .. properTeamId
                                                 
-                                                if dist < shortestDistance then
-                                                    shortestDistance = dist
-                                                    bestPortal = {id = id, key = id, pos = doorPos, teamId = os.time(), penalty = staticBlacklistTime}
+                                                if not completedRifts[staticKey] then
+                                                    local doorPos = GetPositionFromGUI(obj)
+                                                    local dist = (hrp.Position - doorPos).Magnitude
+                                                    
+                                                    if dist < shortestDistance then
+                                                        shortestDistance = dist
+                                                        bestPortal = {id = id, key = staticKey, pos = doorPos, teamId = properTeamId, penalty = staticBlacklistTime}
+                                                    end
                                                 end
                                             end
                                         end
@@ -195,7 +197,7 @@ return function(Window, Utils)
                 end
 
                 -- ==========================================
-                -- BƯỚC 3: THỰC THI (CHỈ LAO VÀO CỔNG TỐT NHẤT ĐÃ CHỌN)
+                -- BƯỚC 3: LAO VÀO CỔNG TỐT NHẤT
                 -- ==========================================
                 if bestPortal then
                     targetRiftId = bestPortal.id
@@ -207,6 +209,7 @@ return function(Window, Utils)
                     hrp.CFrame = CFrame.new(bestPortal.pos + Vector3.new(0, 3, 0))
                     task.wait(0.2) 
 
+                    -- Truyền chuẩn TeamID (StartTick)
                     currentTeamId = bestPortal.teamId
                     local createArgs = { "DungeonCreateTeamChannel", targetRiftId, currentTeamId }
                     local startArgs = { "DungeonStartChannel", targetRiftId, currentTeamId }
@@ -217,21 +220,19 @@ return function(Window, Utils)
                     end)
 
                     RiftStatus:Set("STATUS: Đang đợi Server dịch chuyển...")
-                    
-                    -- ⏳ TRẢ LẠI THỜI GIAN CHỜ LÀ 2.5 GIÂY (Tránh lỗi Fake Clear)
                     task.wait(2.5) 
                     
                     local checkChar = LocalPlayer.Character
                     local checkHrp = checkChar and checkChar:FindFirstChild("HumanoidRootPart")
                     if checkHrp and (checkHrp.Position - bestPortal.pos).Magnitude < 50 then
                         RiftStatus:Set("STATUS: Bị Server chặn, bỏ qua cổng này!")
-                        completedRifts[targetRiftKey] = os.time() + 15 -- Phạt 15s nếu kẹt
+                        completedRifts[targetRiftKey] = os.time() + 15 
                         targetRiftId = nil; targetRiftKey = nil; riftState = "SCANNING"
                     else
                         dungeonStuckTimer = 0; riftState = "COMBAT"
                     end
                 else
-                    task.wait(0.5) -- Nếu không tìm thấy cổng nào thì nghỉ ngơi 0.5s
+                    task.wait(0.5) 
                 end
 
             elseif riftState == "COMBAT" then
