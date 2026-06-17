@@ -275,23 +275,18 @@ return function(Window, Utils)
                 RiftStatus:Set("STATUS: Đợi Server thu thập Pet... (" .. clearDelayTimer .. "s)")
                 
                 if #deadMonsters == 0 or clearDelayTimer >= 4 then
-                    RiftStatus:Set("STATUS: Hoàn thành! Đang bắn lệnh thoát...")
+                    RiftStatus:Set("STATUS: Hoàn thành! Đang dùng Utils để thoát...")
                     
                     -- ========================================================
-                    -- FIX LỖI KẸT TRONG PHÒNG: BẮN REMOTE RAW + UNPACK(ARGS)
+                    -- CAMERA GIÁM SÁT: TRƯỚC KHI GỌI UTILS
                     -- ========================================================
+                    print("🚪 [TEST EXIT] Đang gọi Utils.LeaveMatch...")
+                    print("   👉 ID Cổng (targetRiftId):", tostring(targetRiftId))
+                    print("   👉 Team ID (currentTeamId):", tostring(currentTeamId))
+                    
                     pcall(function()
-                        -- Lệnh 1: Rời khỏi võ đài/trận chiến
-                        local leaveArenaArgs = { "ArenaLeaveChannel" }
-                        game:GetService("ReplicatedStorage"):WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc"):InvokeServer(unpack(leaveArenaArgs))
-                        
-                        task.wait(0.2)
-                        
-                        -- Lệnh 2: Hủy Team/Rời phòng (Sử dụng đúng TeamID/StartTick đã vào)
-                        if targetRiftId and currentTeamId then
-                            local leaveTeamArgs = { "DungeonLeaveTeamChannel", targetRiftId, currentTeamId }
-                            game:GetService("ReplicatedStorage"):WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc"):InvokeServer(unpack(leaveTeamArgs))
-                        end
+                        -- Trả lại nguyên bản gọi qua file Utils.txt
+                        Utils.LeaveMatch(DataPullFunc, targetRiftId, currentTeamId)
                     end)
                     -- ========================================================
                     
@@ -299,6 +294,7 @@ return function(Window, Utils)
                         completedRifts[targetRiftKey] = os.time()
                         riftsClearedCount = riftsClearedCount + 1
                         ClearedLabel:Set("Rift đã dọn dẹp: " .. riftsClearedCount)
+                        print("✅ Đã đưa cổng [" .. tostring(targetRiftKey) .. "] vào Blacklist.")
                     end
                     
                     targetRiftId = nil; targetRiftKey = nil; catchingMemory = {} ; clearDelayTimer = 0
