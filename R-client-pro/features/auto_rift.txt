@@ -275,8 +275,25 @@ return function(Window, Utils)
                 RiftStatus:Set("STATUS: Đợi Server thu thập Pet... (" .. clearDelayTimer .. "s)")
                 
                 if #deadMonsters == 0 or clearDelayTimer >= 4 then
-                    RiftStatus:Set("STATUS: Hoàn thành! Đang thoát...")
-                    Utils.LeaveMatch(DataPullFunc, targetRiftId, currentTeamId)
+                    RiftStatus:Set("STATUS: Hoàn thành! Đang bắn lệnh thoát...")
+                    
+                    -- ========================================================
+                    -- FIX LỖI KẸT TRONG PHÒNG: BẮN REMOTE RAW + UNPACK(ARGS)
+                    -- ========================================================
+                    pcall(function()
+                        -- Lệnh 1: Rời khỏi võ đài/trận chiến
+                        local leaveArenaArgs = { "ArenaLeaveChannel" }
+                        game:GetService("ReplicatedStorage"):WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc"):InvokeServer(unpack(leaveArenaArgs))
+                        
+                        task.wait(0.2)
+                        
+                        -- Lệnh 2: Hủy Team/Rời phòng (Sử dụng đúng TeamID/StartTick đã vào)
+                        if targetRiftId and currentTeamId then
+                            local leaveTeamArgs = { "DungeonLeaveTeamChannel", targetRiftId, currentTeamId }
+                            game:GetService("ReplicatedStorage"):WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc"):InvokeServer(unpack(leaveTeamArgs))
+                        end
+                    end)
+                    -- ========================================================
                     
                     if targetRiftKey then
                         completedRifts[targetRiftKey] = os.time()
