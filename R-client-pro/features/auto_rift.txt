@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: AUTO RIFT SYSTEM V7.0 (CLEAN CODE & FULLY OPTIMIZED)
+-- MODULE: AUTO RIFT SYSTEM V7.2 (MAX SPEEDRUN - ZERO DELAY)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -9,15 +9,13 @@ return function(Window, Utils)
     local LocalPlayer = Players.LocalPlayer
     local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 
-    -- Biến cấu hình Radar
     local autoRiftMaster = false 
     local scanDynamic = true    
     local scanStatic = true     
-    local staticScanInterval = 60 -- Mặc định 1 phút mới quét Static lại (Giảm lag)
+    local staticScanInterval = 60 
     local lastStaticScanTime = 0 
-    local staticBlacklistTime = 300 -- Sổ đen Static 5 phút
+    local staticBlacklistTime = 300 
 
-    -- Biến trạng thái
     local targetRiftId = nil 
     local targetRiftKey = nil 
     local currentTeamId = 0
@@ -32,9 +30,6 @@ return function(Window, Utils)
 
     local DataPullFunc = nil
 
-    -- ==========================================
-    -- GIAO DIỆN UI (RAYFIELD)
-    -- ==========================================
     local RiftTab = Window:CreateTab("Auto Rift", 4483362458)
     local RiftStatus = RiftTab:CreateLabel("STATUS: AUTO RIFT ĐANG TẮT")
     local ClearedLabel = RiftTab:CreateLabel("Rift đã dọn dẹp: 0")
@@ -57,16 +52,13 @@ return function(Window, Utils)
 
     RiftTab:CreateSlider({
         Name = "Tần suất Radar quét Static (Phút/lần)", Range = {1, 30}, Increment = 1, Suffix = " Phút", CurrentValue = 1, Flag = "StaticScanIntervalSlider",
-        Callback = function(Value) staticScanInterval = Value * 60 end, -- Tự đổi sang giây
+        Callback = function(Value) staticScanInterval = Value * 60 end,
     })
 
     RiftTab:CreateSection("--- CÔNG CỤ SỬA LỖI ---")
     RiftTab:CreateButton({ Name = "Ép vào Combat Mode (Dùng lỡ bật trong Rift)", Callback = function() riftState = "COMBAT" RiftStatus:Set("STATUS: Đã ép Chiến Đấu!") end })
     RiftTab:CreateButton({ Name = "Xóa Trí Nhớ Blacklist (Quét lại từ đầu)", Callback = function() completedRifts = {} riftsClearedCount = 0 ClearedLabel:Set("Rift đã dọn dẹp: 0") end })
 
-    -- ==========================================
-    -- HÀM HỖ TRỢ ĐỊNH VỊ CỔNG
-    -- ==========================================
     local function GetPositionFromGUI(obj)
         local guiNode = obj:FindFirstChild("GUI")
         if guiNode then pcall(function() return guiNode:GetPivot().Position end) end
@@ -88,9 +80,6 @@ return function(Window, Utils)
         return isHidden
     end
 
-    -- ==========================================
-    -- VÒNG LẶP CHÍNH
-    -- ==========================================
     task.spawn(function()
         DataPullFunc = ReplicatedStorage:WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc")
 
@@ -127,40 +116,35 @@ return function(Window, Utils)
                 local foundNewRift = false
                 local currentTime = os.time()
                 
-                -- Dọn Sổ Đen
                 for key, timeCleared in pairs(completedRifts) do
                     local isDynamic = type(key) == "string" and string.find(key, "Dynamic")
                     local expireTime = isDynamic and 120 or staticBlacklistTime
                     if currentTime - timeCleared > expireTime then completedRifts[key] = nil end
                 end
                 
-                -- ==========================================
-                -- HÀM THỰC THI REMOTE VÀO CỔNG
-                -- ==========================================
                 local function ExecuteRiftEntry(id, key, targetPos, theTeamId)
                     targetRiftId = id
                     targetRiftKey = key
                     foundNewRift = true
                     RiftStatus:Set("STATUS: Đã khóa mục tiêu: " .. tostring(id))
                     
-                    -- Dịch chuyển thẳng tới mặt cổng (Không cần múa may)
                     hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0))
-                    task.wait(0.5) 
+                    task.wait(0.1) 
 
                     currentTeamId = theTeamId
                     local createArgs = { "DungeonCreateTeamChannel", id, currentTeamId }
                     local startArgs = { "DungeonStartChannel", id, currentTeamId }
 
-                    -- Bắn Remote kép
                     pcall(function()
                         DataPullFunc:InvokeServer(unpack(createArgs))
                         DataPullFunc:InvokeServer(unpack(startArgs))
                     end)
 
                     RiftStatus:Set("STATUS: Đang đợi Server dịch chuyển...")
-                    task.wait(3.5)
                     
-                    -- Check xem đã bay vào phòng chưa
+                    -- ⚡ TỐI ƯU 1: Chờ dịch chuyển vào rút ngắn xuống còn 0.5 giây
+                    task.wait(0.5) 
+                    
                     local checkChar = LocalPlayer.Character
                     local checkHrp = checkChar and checkChar:FindFirstChild("HumanoidRootPart")
                     if checkHrp and (checkHrp.Position - targetPos).Magnitude < 50 then
@@ -172,9 +156,6 @@ return function(Window, Utils)
                     end
                 end
 
-                -- ==========================================
-                -- 1A. TÌM DYNAMIC (LẤY DUNGEON START TICK)
-                -- ==========================================
                 if scanDynamic and not foundNewRift then
                     local dynamicFolder = Workspace:FindFirstChild("DynamicDungeon")
                     if dynamicFolder then
@@ -189,7 +170,6 @@ return function(Window, Utils)
                                 local dynamicKey = "Dynamic_" .. idStr .. "_" .. portalName
                                 
                                 if not completedRifts[dynamicKey] then
-                                    -- Bóc tách thời gian khai sinh cổng làm Mã Phòng
                                     local properTeamId = obj:GetAttribute("DungeonStartTick")
                                     if not properTeamId then
                                         local dynKey = obj:GetAttribute("DungeonDynamicKey")
@@ -205,9 +185,6 @@ return function(Window, Utils)
                     end
                 end
 
-                -- ==========================================
-                -- 1B. TÌM STATIC (SỬ DỤNG OS.TIME())
-                -- ==========================================
                 if scanStatic and not foundNewRift then
                     if currentTime - lastStaticScanTime >= staticScanInterval then
                         lastStaticScanTime = currentTime
@@ -233,7 +210,7 @@ return function(Window, Utils)
                         end
                     end
                 end
-                if not foundNewRift then task.wait(1) end
+                if not foundNewRift then task.wait(0.5) end
 
             elseif riftState == "COMBAT" then
                 clearDelayTimer = 0 
@@ -274,31 +251,21 @@ return function(Window, Utils)
                 clearDelayTimer = clearDelayTimer + 0.5
                 RiftStatus:Set("STATUS: Đợi Server thu thập Pet... (" .. clearDelayTimer .. "s)")
                 
-                if #deadMonsters == 0 or clearDelayTimer >= 4 then
-                    RiftStatus:Set("STATUS: Hoàn thành! Đang dùng Utils để thoát...")
-                    
-                    -- ========================================================
-                    -- CAMERA GIÁM SÁT: TRƯỚC KHI GỌI UTILS
-                    -- ========================================================
-                    print("🚪 [TEST EXIT] Đang gọi Utils.LeaveMatch...")
-                    print("   👉 ID Cổng (targetRiftId):", tostring(targetRiftId))
-                    print("   👉 Team ID (currentTeamId):", tostring(currentTeamId))
-                    
-                    pcall(function()
-                        -- Trả lại nguyên bản gọi qua file Utils.txt
-                        Utils.LeaveMatch(DataPullFunc, targetRiftId, currentTeamId)
-                    end)
-                    -- ========================================================
+                -- ⚡ TỐI ƯU 2: Ép thời gian chờ nhặt đồ / bắt quái xuống đúng 1.0 giây
+                if #deadMonsters == 0 or clearDelayTimer >= 1.0 then
+                    RiftStatus:Set("STATUS: Hoàn thành! Đang thoát...")
+                    Utils.LeaveMatch(DataPullFunc, targetRiftId, currentTeamId)
                     
                     if targetRiftKey then
                         completedRifts[targetRiftKey] = os.time()
                         riftsClearedCount = riftsClearedCount + 1
                         ClearedLabel:Set("Rift đã dọn dẹp: " .. riftsClearedCount)
-                        print("✅ Đã đưa cổng [" .. tostring(targetRiftKey) .. "] vào Blacklist.")
                     end
                     
                     targetRiftId = nil; targetRiftKey = nil; catchingMemory = {} ; clearDelayTimer = 0
-                    riftState = "SCANNING"; task.wait(3)
+                    
+                    -- ⚡ TỐI ƯU 3: Ra khỏi cổng quét ngay lập tức, không nghỉ (Zero Delay)
+                    riftState = "SCANNING"; task.wait(0)
                 end
             end
         end
