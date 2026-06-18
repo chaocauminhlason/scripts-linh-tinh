@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: AUTO RIFT SYSTEM V8.6 (ULTIMATE ANTI-DECEPTION RADAR)
+-- MODULE: AUTO RIFT SYSTEM V8.8 (FULL EDGE CASES & PET SYNC)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -23,6 +23,7 @@ return function(Window, Utils)
 
     local completedRifts = {} 
     local catchingMemory = {} 
+    local catchCount = {} 
     local riftState = "SCANNING" 
 
     local DataPullFunc = nil
@@ -52,7 +53,7 @@ return function(Window, Utils)
     RiftTab:CreateButton({ Name = "Xóa Trí Nhớ Blacklist (Quét lại từ đầu)", Callback = function() completedRifts = {} riftsClearedCount = 0 ClearedLabel:Set("Rift đã dọn dẹp: 0") end })
 
     -- ==========================================
-    -- RADAR QUÉT QUÁI BẢN CHUẨN XÁC 100% (V8.6)
+    -- RADAR QUÉT QUÁI 
     -- ==========================================
     local function SmartScanMonsters(monstersFolder, hrp)
         local hasAlive = false
@@ -64,28 +65,28 @@ return function(Window, Utils)
             for _, m in pairs(monstersFolder:GetChildren()) do
                 if not string.match(m.Name, "Monster_") then continue end
                 
-                -- Game này quái là Part thẳng luôn (không phải Model)
                 local root = m
                 if not root:IsA("BasePart") then continue end
+                local id = tonumber(m.Name:match("Monster_(%d+)"))
                 
-                -- BỘ LỌC 1: Dấu hiệu tử thần "CatchEndTick" (Chắc chắn 100% đang chờ bắt)
+                if id and catchCount[id] and catchCount[id] >= 3 then
+                    continue 
+                end
+
                 if root:GetAttribute("CatchEndTick") ~= nil then
                     table.insert(deadList, m)
                     continue
                 end
                 
-                -- BỘ LỌC 2: Thẻ Máu ẩn dùng dấu phẩy (Ví dụ: "0,4")
                 local hpVal = m:FindFirstChild("Health")
                 if hpVal and hpVal:IsA("StringValue") then
-                    -- Biến đổi "0,4" thành "0.4" để Lua hiểu được là số
                     local hpNum = tonumber((string.gsub(hpVal.Value, ",", ".")))
                     if hpNum and hpNum < 1 then
                         table.insert(deadList, m)
                         continue
                     end
                 end
-                
-                -- Nếu vượt qua được 2 bộ lọc trên => Quái CÒN SỐNG nhăn răng
+
                 hasAlive = true
                 local d = (hrp.Position - root.Position).Magnitude
                 if d < minDist then
@@ -129,6 +130,39 @@ return function(Window, Utils)
                 end
             end
 
+            -- ========================================================
+            -- 🛠️ HOOK: KIỂM TRA TRẠNG THÁI PET 
+            -- ========================================================
+            local isPetDead = false
+            pcall(function()
+                local petsFolder = Workspace:FindFirstChild("Pets")
+                if petsFolder then
+                    local myId = tostring(LocalPlayer.UserId)
+                    for _, pet in pairs(petsFolder:GetChildren()) do
+                        if string.find(pet.Name, myId) then
+                            local hpPart = pet:FindFirstChild("Health")
+                            if hpPart then
+                                -- Đọc máu bằng logic cắt chuỗi gốc
+                                local currentHp = tonumber(string.split(tostring(hpPart.Value), ",")[1])
+                                -- Fallback đề phòng format "0.5"
+                                if not currentHp then currentHp = tonumber((string.gsub(tostring(hpPart.Value), ",", "."))) end
+                                
+                                if currentHp and currentHp <= 0 then 
+                                    isPetDead = true
+                                    break 
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+            
+            if isPetDead and riftState == "COMBAT" then
+                RiftStatus:Set("STATUS: 🚨 Pet đã chết! Đang ép thoát để bảo toàn mạng...")
+                riftState = "EXITING"
+            end
+            -- ========================================================
+
             local monstersFolder = Workspace:FindFirstChild("Monsters")
             local hasAliveMonsters, deadMonsters, bestTarget, closestDist2D = false, {}, nil, math.huge
             local unhandledDeadCount = 0
@@ -147,7 +181,6 @@ return function(Window, Utils)
 
                 local currentTime = os.time()
                 
-                -- DỌN RÁC SỔ ĐEN
                 for key, expireTime in pairs(completedRifts) do
                     if currentTime > expireTime then completedRifts[key] = nil end
                 end
@@ -155,9 +188,6 @@ return function(Window, Utils)
                 local bestPortal = nil
                 local shortestDistance = math.huge
 
-                -- ==========================================
-                -- BƯỚC 1: QUÉT CỔNG DYNAMIC
-                -- ==========================================
                 if scanDynamic then
                     local dynamicFolder = Workspace:FindFirstChild("DynamicDungeon")
                     if dynamicFolder then
@@ -172,13 +202,11 @@ return function(Window, Utils)
                                     if not completedRifts[dynamicKey] then
                                         local doorPos = GetPortalPosition(obj)
                                         local dist = (hrp.Position - doorPos).Magnitude
-                                        
                                         if dist < shortestDistance then
                                             shortestDistance = dist
                                             local endTick = obj:GetAttribute("DungeonEndTick")
                                             local duration = 300
                                             if endTick and endTick > properTeamId then duration = endTick - properTeamId end
-                                            
                                             bestPortal = {id = id, key = dynamicKey, pos = doorPos, teamId = properTeamId, penalty = duration}
                                         end
                                     end
@@ -188,9 +216,6 @@ return function(Window, Utils)
                     end
                 end
 
-                -- ==========================================
-                -- BƯỚC 2: QUÉT CỔNG STATIC
-                -- ==========================================
                 if scanStatic and not bestPortal then
                     local areaFolder = Workspace:FindFirstChild("Area")
                     if areaFolder then
@@ -208,13 +233,11 @@ return function(Window, Utils)
                                             if not completedRifts[staticKey] then
                                                 local doorPos = GetPortalPosition(obj)
                                                 local dist = (hrp.Position - doorPos).Magnitude
-                                                
                                                 if dist < shortestDistance then
                                                     shortestDistance = dist
                                                     local endTick = obj:GetAttribute("DungeonEndTick")
                                                     local duration = 300
                                                     if endTick and endTick > properTeamId then duration = endTick - properTeamId end
-                                                    
                                                     bestPortal = {id = id, key = staticKey, pos = doorPos, teamId = properTeamId, penalty = duration}
                                                 end
                                             end
@@ -226,9 +249,6 @@ return function(Window, Utils)
                     end
                 end
 
-                -- ==========================================
-                -- BƯỚC 3: VÀO CỔNG
-                -- ==========================================
                 if bestPortal then
                     targetRiftId = bestPortal.id
                     targetRiftKey = bestPortal.key
@@ -274,7 +294,9 @@ return function(Window, Utils)
                     for _, m in pairs(deadMonsters) do
                         local id = tonumber(m.Name:match("Monster_(%d+)"))
                         if id and not catchingMemory[id] then
-                            catchingMemory[id] = true
+                            catchCount[id] = (catchCount[id] or 0) + 1
+                            if catchCount[id] >= 3 then catchingMemory[id] = true end
+                            
                             task.spawn(function()
                                 pcall(function() Utils.CatchMonster(DataPullFunc, id) end)
                             end)
@@ -283,7 +305,6 @@ return function(Window, Utils)
                 elseif hasAliveMonsters then
                     RiftStatus:Set("STATUS: Đang trong trận - Chiến đấu!")
                     if bestTarget then
-                        -- Sửa lỗi tham chiếu vị trí do quái giờ là Part
                         local targetPos = bestTarget.Position
                         
                         if closestDist2D > 40 then
@@ -293,9 +314,13 @@ return function(Window, Utils)
                             Utils.SmartDismount(LocalPlayer, DataPullFunc)
                         elseif closestDist2D > 12 then
                             humanoid:MoveTo(targetPos)
+                            
                             if dungeonLastPosition and (hrp.Position - dungeonLastPosition).Magnitude < 1 then
                                 dungeonStuckTimer = dungeonStuckTimer + 0.5
-                                if dungeonStuckTimer >= 3 then hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 3)); dungeonStuckTimer = 0 end
+                                if dungeonStuckTimer >= 3 then 
+                                    hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 5, 0))
+                                    dungeonStuckTimer = 0 
+                                end
                             else dungeonStuckTimer = 0 end
                             dungeonLastPosition = hrp.Position
                         else
@@ -309,7 +334,6 @@ return function(Window, Utils)
                         end
                     end
                 else 
-                    -- Radar báo không còn quái sống, lập tức thoái vị!
                     riftState = "EXITING" 
                 end
 
@@ -339,6 +363,7 @@ return function(Window, Utils)
                 
                 targetRiftId = nil; targetRiftKey = nil; targetExpireDuration = 300
                 catchingMemory = {}
+                catchCount = {} 
                 
                 riftState = "SCANNING"; task.wait(0)
             end
