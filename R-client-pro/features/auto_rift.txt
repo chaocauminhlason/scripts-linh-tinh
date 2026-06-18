@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: AUTO RIFT SYSTEM V7.5 (ULTIMATE NATIVE LOGIC & SMART POS)
+-- MODULE: AUTO RIFT SYSTEM V8.0 (THE MASTERPIECE - 100% START TICK)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -12,10 +12,8 @@ return function(Window, Utils)
     local autoRiftMaster = false 
     local scanDynamic = true    
     local scanStatic = true     
-    local staticScanInterval = 60 
-    local lastStaticScanTime = 0 
-    local staticBlacklistTime = 300 
-
+    local scanInterval = 0 -- Quét liên tục không độ trễ vì thuật toán giờ cực nhẹ
+    
     local targetRiftId = nil 
     local targetRiftKey = nil 
     local targetExpireDuration = 0 
@@ -52,30 +50,22 @@ return function(Window, Utils)
     RiftTab:CreateToggle({ Name = "🔍 Săn Cổng Tự Tạo (Dynamic)", CurrentValue = true, Flag = "ScanDynamicToggle", Callback = function(Value) scanDynamic = Value end })
     RiftTab:CreateToggle({ Name = "🔍 Săn Cổng Mặc Định (Static)", CurrentValue = true, Flag = "ScanStaticToggle", Callback = function(Value) scanStatic = Value end })
 
-    RiftTab:CreateSlider({
-        Name = "Tần suất Radar quét Static (Phút/lần)", Range = {1, 30}, Increment = 1, Suffix = " Phút", CurrentValue = 1, Flag = "StaticScanIntervalSlider",
-        Callback = function(Value) staticScanInterval = Value * 60 end,
-    })
-
     RiftTab:CreateSection("--- CÔNG CỤ SỬA LỖI ---")
     RiftTab:CreateButton({ Name = "Ép vào Combat Mode (Dùng lỡ bật trong Rift)", Callback = function() riftState = "COMBAT" RiftStatus:Set("STATUS: Đã ép Chiến Đấu!") end })
     RiftTab:CreateButton({ Name = "Xóa Trí Nhớ Blacklist (Quét lại từ đầu)", Callback = function() completedRifts = {} riftsClearedCount = 0 ClearedLabel:Set("Rift đã dọn dẹp: 0") end })
 
     -- ==========================================
-    -- HÀM LẤY TỌA ĐỘ (Ưu tiên tuyệt đối GUI theo ý User)
+    -- HÀM LẤY TỌA ĐỘ
     -- ==========================================
-    local function GetPositionFromGUI(obj)
+    local function GetPortalPosition(obj)
         local guiNode = obj:FindFirstChild("GUI")
         if guiNode then 
+            if guiNode:IsA("Attachment") then return guiNode.WorldPosition end
             local pos
             local success = pcall(function() pos = guiNode:GetPivot().Position end)
             if success and pos then return pos end
         end
-        
-        -- Fallback nếu không có GUI (Lấy PrimaryPart của Model nếu có)
-        if obj:IsA("Model") and obj.PrimaryPart then 
-            return obj.PrimaryPart.Position 
-        end
+        if obj:IsA("Model") and obj.PrimaryPart then return obj.PrimaryPart.Position end
         return obj:GetPivot().Position 
     end
 
@@ -114,7 +104,7 @@ return function(Window, Utils)
 
                 local currentTime = os.time()
                 
-                -- Dọn rác Sổ đen
+                -- Dọn rác Sổ đen để tránh tràn RAM (Để 10 phút tự xóa cho nhẹ máy)
                 for key, expireTime in pairs(completedRifts) do
                     if currentTime > expireTime then completedRifts[key] = nil end
                 end
@@ -123,7 +113,7 @@ return function(Window, Utils)
                 local shortestDistance = math.huge
 
                 -- ==========================================
-                -- BƯỚC 1: LỌC TẤT CẢ CỔNG DYNAMIC & TÌM CỔNG GẦN NHẤT
+                -- BƯỚC 1: QUÉT CỔNG DYNAMIC
                 -- ==========================================
                 if scanDynamic then
                     local dynamicFolder = Workspace:FindFirstChild("DynamicDungeon")
@@ -132,21 +122,18 @@ return function(Window, Utils)
                             local idStr = string.match(obj.Name, "Dungeon_(%d+)")
                             if idStr then
                                 local id = tonumber(idStr)
-                                
-                                -- 🔑 LOGIC CHUẨN DEV GAME: Dùng StartTick
                                 local properTeamId = obj:GetAttribute("DungeonStartTick")
                                 
-                                -- Nếu có StartTick tức là cổng đang Tồn Tại & Mở
                                 if properTeamId and properTeamId > 0 then
                                     local dynamicKey = "Dyn_" .. idStr .. "_" .. properTeamId
                                     
                                     if not completedRifts[dynamicKey] then
-                                        local doorPos = GetPositionFromGUI(obj)
+                                        local doorPos = GetPortalPosition(obj)
                                         local dist = (hrp.Position - doorPos).Magnitude
                                         
                                         if dist < shortestDistance then
                                             shortestDistance = dist
-                                            bestPortal = {id = id, key = dynamicKey, pos = doorPos, teamId = properTeamId, penalty = 120}
+                                            bestPortal = {id = id, key = dynamicKey, pos = doorPos, teamId = properTeamId}
                                         end
                                     end
                                 end
@@ -156,36 +143,32 @@ return function(Window, Utils)
                 end
 
                 -- ==========================================
-                -- BƯỚC 2: TÌM STATIC GẦN NHẤT (Nếu Dynamic không có)
+                -- BƯỚC 2: QUÉT CỔNG STATIC (Tập trung thẳng vào thư mục AREA)
                 -- ==========================================
                 if scanStatic and not bestPortal then
-                    if currentTime - lastStaticScanTime >= staticScanInterval then
-                        lastStaticScanTime = currentTime
-                        local areaFolder = Workspace:FindFirstChild("Area")
-                        if areaFolder then
-                            for _, mapFolder in pairs(areaFolder:GetChildren()) do
-                                local serverZone = mapFolder:FindFirstChild("ServerZone")
-                                if serverZone and serverZone:FindFirstChild("Dungeon") then
-                                    for _, obj in pairs(serverZone.Dungeon:GetChildren()) do
-                                        local idStr = string.match(obj.Name, "Dungeon_(%d+)")
-                                        if idStr then
-                                            local id = tonumber(idStr)
+                    local areaFolder = Workspace:FindFirstChild("Area")
+                    if areaFolder then
+                        for _, mapFolder in pairs(areaFolder:GetChildren()) do
+                            -- Chỉ soi nhánh Area, phớt lờ ServerZone
+                            local arDungeon = mapFolder:FindFirstChild("Area") and mapFolder.Area:FindFirstChild("Dungeon")
+                            if arDungeon then
+                                for _, obj in pairs(arDungeon:GetChildren()) do
+                                    local idStr = string.match(obj.Name, "Dungeon_(%d+)")
+                                    if idStr then
+                                        local id = tonumber(idStr)
+                                        local properTeamId = obj:GetAttribute("DungeonStartTick")
+                                        
+                                        -- Cổng có StartTick thì mới tính là MỞ
+                                        if properTeamId and properTeamId > 0 then
+                                            local staticKey = "Stat_" .. idStr .. "_" .. properTeamId
                                             
-                                            -- 🔑 LOGIC CHUẨN DEV GAME: Static cũng có StartTick!
-                                            local properTeamId = obj:GetAttribute("DungeonStartTick")
-                                            
-                                            -- Cổng Static chỉ MỞ khi StartTick tồn tại
-                                            if properTeamId and properTeamId > 0 then
-                                                local staticKey = "Stat_" .. idStr .. "_" .. properTeamId
+                                            if not completedRifts[staticKey] then
+                                                local doorPos = GetPortalPosition(obj)
+                                                local dist = (hrp.Position - doorPos).Magnitude
                                                 
-                                                if not completedRifts[staticKey] then
-                                                    local doorPos = GetPositionFromGUI(obj)
-                                                    local dist = (hrp.Position - doorPos).Magnitude
-                                                    
-                                                    if dist < shortestDistance then
-                                                        shortestDistance = dist
-                                                        bestPortal = {id = id, key = staticKey, pos = doorPos, teamId = properTeamId, penalty = staticBlacklistTime}
-                                                    end
+                                                if dist < shortestDistance then
+                                                    shortestDistance = dist
+                                                    bestPortal = {id = id, key = staticKey, pos = doorPos, teamId = properTeamId}
                                                 end
                                             end
                                         end
@@ -197,19 +180,18 @@ return function(Window, Utils)
                 end
 
                 -- ==========================================
-                -- BƯỚC 3: LAO VÀO CỔNG TỐT NHẤT
+                -- BƯỚC 3: THỰC THI CHUI VÀO CỔNG
                 -- ==========================================
                 if bestPortal then
                     targetRiftId = bestPortal.id
                     targetRiftKey = bestPortal.key
-                    targetExpireDuration = bestPortal.penalty
                     
                     RiftStatus:Set("STATUS: Đã khóa mục tiêu: " .. tostring(targetRiftId))
                     
                     hrp.CFrame = CFrame.new(bestPortal.pos + Vector3.new(0, 3, 0))
                     task.wait(0.2) 
 
-                    -- Truyền chuẩn TeamID (StartTick)
+                    -- Truyền chuẩn 100% StartTick vào TeamID
                     currentTeamId = bestPortal.teamId
                     local createArgs = { "DungeonCreateTeamChannel", targetRiftId, currentTeamId }
                     local startArgs = { "DungeonStartChannel", targetRiftId, currentTeamId }
@@ -226,6 +208,7 @@ return function(Window, Utils)
                     local checkHrp = checkChar and checkChar:FindFirstChild("HumanoidRootPart")
                     if checkHrp and (checkHrp.Position - bestPortal.pos).Magnitude < 50 then
                         RiftStatus:Set("STATUS: Bị Server chặn, bỏ qua cổng này!")
+                        -- Chỉ block 15s nếu kẹt vật lý
                         completedRifts[targetRiftKey] = os.time() + 15 
                         targetRiftId = nil; targetRiftKey = nil; riftState = "SCANNING"
                     else
@@ -288,12 +271,14 @@ return function(Window, Utils)
                     end)
                     
                     if targetRiftKey then
-                        completedRifts[targetRiftKey] = os.time() + targetExpireDuration
+                        -- Không cần tính toán thời gian phạt nữa. Key cổng giờ là duy nhất (ID + StartTick).
+                        -- Ghi đè vào blacklist 10 phút để tránh quay lại quét nhầm khi cổng chưa sập hẳn.
+                        completedRifts[targetRiftKey] = os.time() + 600
                         riftsClearedCount = riftsClearedCount + 1
                         ClearedLabel:Set("Rift đã dọn dẹp: " .. riftsClearedCount)
                     end
                     
-                    targetRiftId = nil; targetRiftKey = nil; targetExpireDuration = 0
+                    targetRiftId = nil; targetRiftKey = nil; 
                     catchingMemory = {} ; clearDelayTimer = 0
                     
                     riftState = "SCANNING"; task.wait(0)
