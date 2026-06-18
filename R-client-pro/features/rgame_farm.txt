@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: R-GAME (AUTO BẮT, ĐÁNH, HỒI MÁU) - ĐÃ FIX LOGIC LỌC TÊN
+-- MODULE: R-GAME (AUTO BẮT, ĐÁNH, HỒI MÁU) - BẢN SỬA LỖI (FIXED)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -20,7 +20,7 @@ return function(Window, Utils)
     local MonsterSystem = nil
     pcall(function() MonsterSystem = require(ReplicatedStorage.CommonLogic.Monster.MonsterSystem) end)
 
-    -- Bộ đệm tên quái (Chống lag khi phải check file config liên tục)
+    -- Bộ đệm tên quái
     local MonsterNameCache = {}
     local function GetCachedMonsterName(monster)
         local tmplId = monster:GetAttribute("TmplId")
@@ -43,10 +43,10 @@ return function(Window, Utils)
         return monster.Name
     end
 
-    -- Hàm kiểm tra xem quái có nằm trong danh sách ưu tiên không
+    -- Hàm lọc ưu tiên
     local function IsMonsterInFilter(monster)
         if not camSettings.targetMonsterNames or #camSettings.targetMonsterNames == 0 or camSettings.targetMonsterNames[1] == "" then
-            return true -- Nếu không chọn gì -> Bắt tất cả
+            return true 
         end
         local realName = GetCachedMonsterName(monster)
         return table.find(camSettings.targetMonsterNames, realName) ~= nil
@@ -97,117 +97,145 @@ return function(Window, Utils)
     })
 
     -- ==========================================
-    -- LOGIC AUTO ATTACK & CATCH & HEAL
+    -- LUỒNG 1: AUTO ATTACK (Đánh Quái)
     -- ==========================================
     task.spawn(function()
         while task.wait(0.2) do
+            if not camSettings.autoAttack or camSettings.isHealing then continue end
             local monstersFolder = Workspace:FindFirstChild("Monsters")
-            if camSettings.autoAttack and not camSettings.isHealing and monstersFolder then
-                for _, monster in pairs(monstersFolder:GetChildren()) do
+            if not monstersFolder then continue end
+
+            for _, monster in pairs(monstersFolder:GetChildren()) do
+                -- Không đánh quái tàng hình hoặc quái có thuộc tính chờ bắt
+                local root = monster:IsA("Model") and monster.PrimaryPart or monster
+                if root and root:IsA("BasePart") and root.Transparency < 1 and monster:GetAttribute("CatchEndTick") == nil then
                     if IsMonsterInFilter(monster) then
                         local id = tonumber(monster.Name:match("Monster_(%d+)"))
-                        if id and MonsterSystem then pcall(MonsterSystem.ClientAttackMonster, id) end
+                        if id and MonsterSystem then 
+                            -- SỬA LỖI: Gọi qua một function bọc ngoài để truyền đúng self
+                            pcall(function() MonsterSystem:ClientAttackMonster(id) end)
+                        end
                     end
                 end
             end
         end
     end)
 
+    -- ==========================================
+    -- LUỒNG 2: AUTO CATCH (Bắt Quái)
+    -- ==========================================
     task.spawn(function()
         while task.wait(0.5) do
-            if camSettings.autoCatch and not camSettings.isHealing then
-                local char = LocalPlayer.Character
-                local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    local playerId = Utils.GetPlayerId()
-                    local monstersFolder = Workspace:FindFirstChild("Monsters")
-                    if monstersFolder then
-                        local targetCatch, closestDist = nil, math.huge
-                        for _, monster in pairs(monstersFolder:GetChildren()) do
-                            if monster:IsA("BasePart") or monster:IsA("Model") then
-                                if IsMonsterInFilter(monster) then
-                                    local id = tonumber(monster.Name:match("Monster_(%d+)"))
-                                    if id then
-                                        local catchTaken = monster:GetAttribute("CatchTakenPlayerId")
-                                        if not catchTaken or catchTaken == playerId then
-                                            local pos = monster:IsA("Model") and monster.PrimaryPart and monster.PrimaryPart.Position or monster.Position
-                                            local dist = (pos - hrp.Position).Magnitude
-                                            if dist < closestDist then closestDist = dist; targetCatch = monster end
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                        if targetCatch and MonsterSystem then
-                            local targetId = tonumber(targetCatch.Name:match("Monster_(%d+)"))
-                            local targetPos = targetCatch:IsA("Model") and targetCatch.PrimaryPart and targetCatch.PrimaryPart.Position or targetCatch.Position
-                            hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0))
-                            
-                            local success, isStarted = pcall(MonsterSystem.ClientCatchMonsterStart, targetId)
-                            if success and isStarted == false then
-                                task.wait(5) 
-                            elseif success then
-                                task.wait(1.5)
-                                pcall(MonsterSystem.ClientCatchMonsterComplete, targetId)
+            if not camSettings.autoCatch or camSettings.isHealing then continue end
+            
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if not hrp then continue end
+
+            local playerId = LocalPlayer.UserId
+            local monstersFolder = Workspace:FindFirstChild("Monsters")
+            if not monstersFolder then continue end
+
+            local targetCatch, closestDist = nil, math.huge
+            for _, monster in pairs(monstersFolder:GetChildren()) do
+                if monster:IsA("BasePart") or monster:IsA("Model") then
+                    if IsMonsterInFilter(monster) then
+                        local id = tonumber(monster.Name:match("Monster_(%d+)"))
+                        if id then
+                            -- Chỉ bắt quái có thuộc tính chờ bắt (CatchTakenPlayerId) của mình
+                            local catchTaken = monster:GetAttribute("CatchTakenPlayerId")
+                            if catchTaken and catchTaken == playerId then
+                                local pos = monster:IsA("Model") and monster.PrimaryPart and monster.PrimaryPart.Position or monster.Position
+                                local dist = (pos - hrp.Position).Magnitude
+                                if dist < closestDist then closestDist = dist; targetCatch = monster end
                             end
                         end
                     end
                 end
             end
+
+            if targetCatch and MonsterSystem then
+                local targetId = tonumber(targetCatch.Name:match("Monster_(%d+)"))
+                local targetPos = targetCatch:IsA("Model") and targetCatch.PrimaryPart and targetCatch.PrimaryPart.Position or targetCatch.Position
+                
+                -- Nhảy tới quái
+                hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0))
+                
+                -- SỬA LỖI: Dùng task.spawn để không bị kẹt luồng quét quái 5 giây
+                task.spawn(function()
+                    local success, isStarted = pcall(function() return MonsterSystem:ClientCatchMonsterStart(targetId) end)
+                    if success then
+                        if isStarted == false then
+                            task.wait(5)
+                        else
+                            task.wait(1.5)
+                            pcall(function() MonsterSystem:ClientCatchMonsterComplete(targetId) end)
+                        end
+                    end
+                end)
+            end
         end
     end)
 
+    -- ==========================================
+    -- LUỒNG 3: AUTO HEAL (Hồi Máu)
+    -- ==========================================
     task.spawn(function()
         while task.wait(1) do
-            if camSettings.autoHeal and not camSettings.isHealing then
-                pcall(function()
-                    local petsFolder = Workspace:FindFirstChild("Pets")
-                    if not petsFolder then return end
-                    local myId = tostring(LocalPlayer.UserId)
-                    local hasDead = false
+            if not camSettings.autoHeal or camSettings.isHealing then continue end
+
+            local hasDead = false
+            pcall(function()
+                local gamePlayer = _G.PathTool and _G.PathTool.ClientPlayerManager and _G.PathTool.ClientPlayerManager.GetGamePlayer()
+                if gamePlayer and gamePlayer.pet then
+                    gamePlayer.pet:IterBagItem(function(petItem)
+                        if petItem:GetEquipedIndex() ~= nil and petItem:IsDead() then
+                            hasDead = true
+                        end
+                    end)
+                end
+            end)
+
+            if hasDead then
+                camSettings.isHealing = true
+                local char = LocalPlayer.Character
+                local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                
+                if hrp then
+                    camSettings.savedPosition = hrp.CFrame
+                    local bestRecoverPos, minDist = nil, math.huge
+                    local areaFolder = Workspace:FindFirstChild("Area")
                     
-                    for _, pet in pairs(petsFolder:GetChildren()) do
-                        if string.find(pet.Name, myId) then
-                            local hpPart = pet:FindFirstChild("Health")
-                            if hpPart then
-                                local currentHp = tonumber(string.split(tostring(hpPart.Value), ",")[1])
-                                if currentHp and currentHp <= 0 then hasDead = true; break end
+                    if areaFolder then
+                        for _, mapFolder in ipairs(areaFolder:GetChildren()) do
+                            local recFolder = mapFolder:FindFirstChild("ServerZone") and mapFolder.ServerZone:FindFirstChild("Recover")
+                            if recFolder then
+                                for _, recPart in ipairs(recFolder:GetDescendants()) do
+                                    if recPart:IsA("BasePart") then
+                                        local dist = (hrp.Position - recPart.Position).Magnitude
+                                        if dist < minDist then minDist = dist; bestRecoverPos = recPart.Position end
+                                    end
+                                end
                             end
                         end
                     end
 
-                    if hasDead then
-                        camSettings.isHealing = true
-                        local char = LocalPlayer.Character
-                        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                        if hrp then
-                            camSettings.savedPosition = hrp.CFrame
-                            local bestRecoverPos, minDist = nil, math.huge
-                            local areaFolder = Workspace:FindFirstChild("Area")
-                            if areaFolder then
-                                for _, mapFolder in ipairs(areaFolder:GetChildren()) do
-                                    local recFolder = mapFolder:FindFirstChild("ServerZone") and mapFolder.ServerZone:FindFirstChild("Recover")
-                                    if recFolder then
-                                        for _, recPart in ipairs(recFolder:GetDescendants()) do
-                                            if recPart:IsA("BasePart") then
-                                                local dist = (hrp.Position - recPart.Position).Magnitude
-                                                if dist < minDist then minDist = dist; bestRecoverPos = recPart.Position end
-                                            end
-                                        end
-                                    end
-                                end
-                            end
-                            if bestRecoverPos then
-                                hrp.CFrame = CFrame.new(bestRecoverPos + Vector3.new(0, 3, 0))
-                                task.wait(9)
-                                hrp.CFrame = camSettings.savedPosition
-                            end
-                        end
-                        camSettings.isHealing = false
-                        camSettings.savedPosition = nil
+                    if bestRecoverPos then
+                        -- Neo nhân vật lại để tránh bị rơi xuống map
+                        hrp.Anchored = true
+                        hrp.CFrame = CFrame.new(bestRecoverPos + Vector3.new(0, 3, 0))
+                        
+                        -- Chờ 9 giây để hồi máu xong
+                        task.wait(9)
+                        
+                        -- Về lại chỗ cũ và gỡ neo
+                        hrp.CFrame = camSettings.savedPosition
+                        task.wait(0.1)
+                        hrp.Anchored = false
                     end
-                end)
-                if camSettings.isHealing then camSettings.isHealing = false end
+                end
+                camSettings.isHealing = false
+                camSettings.savedPosition = nil
             end
         end
     end)
