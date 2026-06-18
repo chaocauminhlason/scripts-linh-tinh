@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: AUTO RIFT SYSTEM V8.5 (ANTI-ZOMBIE & TIME DESYNC FIX)
+-- MODULE: AUTO RIFT SYSTEM V8.6 (WAIT FOR SPAWN & ANTI-ZOMBIE)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -14,7 +14,7 @@ return function(Window, Utils)
     
     local targetRiftId = nil 
     local targetRiftKey = nil 
-    local targetExpireDuration = 300 -- Chuyển lại dùng Duration để tránh lệch giờ PC
+    local targetExpireDuration = 300 
     local currentTeamId = 0
     local riftsClearedCount = 0
     
@@ -24,6 +24,10 @@ return function(Window, Utils)
     local completedRifts = {} 
     local catchingMemory = {} 
     local riftState = "SCANNING" 
+    
+    -- Cờ kiểm soát Spawn Quái
+    local monstersSeen = false
+    local combatEnterTime = 0
 
     local DataPullFunc = nil
 
@@ -48,12 +52,9 @@ return function(Window, Utils)
     RiftTab:CreateToggle({ Name = "🔍 Săn Cổng Mặc Định (Static)", CurrentValue = true, Flag = "ScanStaticToggle", Callback = function(Value) scanStatic = Value end })
 
     RiftTab:CreateSection("--- CÔNG CỤ SỬA LỖI ---")
-    RiftTab:CreateButton({ Name = "Ép vào Combat Mode (Dùng lỡ bật trong Rift)", Callback = function() riftState = "COMBAT" RiftStatus:Set("STATUS: Đã ép Chiến Đấu!") end })
+    RiftTab:CreateButton({ Name = "Ép vào Combat Mode (Dùng lỡ bật trong Rift)", Callback = function() riftState = "COMBAT"; monstersSeen = true RiftStatus:Set("STATUS: Đã ép Chiến Đấu!") end })
     RiftTab:CreateButton({ Name = "Xóa Trí Nhớ Blacklist (Quét lại từ đầu)", Callback = function() completedRifts = {} riftsClearedCount = 0 ClearedLabel:Set("Rift đã dọn dẹp: 0") end })
 
-    -- ==========================================
-    -- HÀM QUÉT QUÁI THÔNG MINH (CHỐNG ZOMBIE 100%)
-    -- ==========================================
     local function SmartScanMonsters(monstersFolder, hrp)
         local hasAlive = false
         local deadList = {}
@@ -64,17 +65,14 @@ return function(Window, Utils)
             for _, m in pairs(monstersFolder:GetChildren()) do
                 if not string.match(m.Name, "Monster_") then continue end
                 
-                -- Hỗ trợ cả quái là Part và quái là Model
                 local root = m:IsA("Model") and m:FindFirstChild("HumanoidRootPart") or m
                 if not root or not root:IsA("BasePart") then continue end
                 
-                -- BỘ LỌC 1: Tàng hình = Chết/Đang bắt
                 if root.Transparency >= 1 then
                     table.insert(deadList, m)
                     continue
                 end
                 
-                -- BỘ LỌC 2: Thẻ Máu 0,5 khét tiếng
                 local hpVal = m:FindFirstChild("Health")
                 if hpVal and hpVal:IsA("StringValue") then
                     if hpVal.Value == "0,5" or string.match(hpVal.Value, "^0") then
@@ -83,7 +81,6 @@ return function(Window, Utils)
                     end
                 end
                 
-                -- BỘ LỌC 3: Máu Humanoid truyền thống
                 local hum = m:FindFirstChild("Humanoid")
                 if hum and hum.Health <= 0 then
                     table.insert(deadList, m)
@@ -139,6 +136,12 @@ return function(Window, Utils)
             
             if riftState == "COMBAT" or riftState == "EXITING" then
                 hasAliveMonsters, deadMonsters, bestTarget, closestDist2D = SmartScanMonsters(monstersFolder, hrp)
+                
+                -- Đánh dấu là đã thấy quái nếu quét ra bất cứ thứ gì
+                if hasAliveMonsters or #deadMonsters > 0 then
+                    monstersSeen = true
+                end
+
                 for _, m in pairs(deadMonsters) do
                     local id = tonumber(m.Name:match("Monster_(%d+)"))
                     if id and not catchingMemory[id] then unhandledDeadCount = unhandledDeadCount + 1 end
@@ -151,7 +154,6 @@ return function(Window, Utils)
 
                 local currentTime = os.time()
                 
-                -- DỌN RÁC (Sử dụng giờ PC)
                 for key, expireTime in pairs(completedRifts) do
                     if currentTime > expireTime then completedRifts[key] = nil end
                 end
@@ -159,9 +161,6 @@ return function(Window, Utils)
                 local bestPortal = nil
                 local shortestDistance = math.huge
 
-                -- ==========================================
-                -- BƯỚC 1: QUÉT CỔNG DYNAMIC
-                -- ==========================================
                 if scanDynamic then
                     local dynamicFolder = Workspace:FindFirstChild("DynamicDungeon")
                     if dynamicFolder then
@@ -179,7 +178,6 @@ return function(Window, Utils)
                                         
                                         if dist < shortestDistance then
                                             shortestDistance = dist
-                                            -- Tính thời lượng sống của cổng để cộng vào giờ PC
                                             local endTick = obj:GetAttribute("DungeonEndTick")
                                             local duration = 300
                                             if endTick and endTick > properTeamId then duration = endTick - properTeamId end
@@ -193,9 +191,6 @@ return function(Window, Utils)
                     end
                 end
 
-                -- ==========================================
-                -- BƯỚC 2: QUÉT CỔNG STATIC
-                -- ==========================================
                 if scanStatic and not bestPortal then
                     local areaFolder = Workspace:FindFirstChild("Area")
                     if areaFolder then
@@ -231,9 +226,6 @@ return function(Window, Utils)
                     end
                 end
 
-                -- ==========================================
-                -- BƯỚC 3: VÀO CỔNG
-                -- ==========================================
                 if bestPortal then
                     targetRiftId = bestPortal.id
                     targetRiftKey = bestPortal.key
@@ -264,11 +256,14 @@ return function(Window, Utils)
                     local checkHrp = checkChar and checkChar:FindFirstChild("HumanoidRootPart")
                     if checkHrp and (checkHrp.Position - bestPortal.pos).Magnitude < 50 then
                         RiftStatus:Set("STATUS: Bị Server chặn, bỏ qua cổng này!")
-                        -- Block cổng bị lỗi lâu hơn (60s) để tránh đứng chờ spam vào mãi 1 cổng
                         completedRifts[targetRiftKey] = os.time() + 60 
                         targetRiftId = nil; targetRiftKey = nil; riftState = "SCANNING"
                     else
-                        dungeonStuckTimer = 0; riftState = "COMBAT"
+                        -- Reset cờ Spawn và chuẩn bị Chiến đấu
+                        dungeonStuckTimer = 0
+                        monstersSeen = false
+                        combatEnterTime = os.clock()
+                        riftState = "COMBAT"
                     end
                 else
                     task.wait(0.5) 
@@ -314,8 +309,19 @@ return function(Window, Utils)
                         end
                     end
                 else 
-                    -- Hết quái sống, lập tức thoái vị!
-                    riftState = "EXITING" 
+                    -- XỬ LÝ ĐỢI SPAWN QUÁI HOẶC KẾT THÚC
+                    if monstersSeen then
+                        -- Đã từng có quái và giờ đã dọn sạch -> Thoát ngay!
+                        riftState = "EXITING" 
+                    else
+                        -- Quái chưa load xong, đứng đợi
+                        RiftStatus:Set("STATUS: Đang đợi quái xuất hiện...")
+                        if os.clock() - combatEnterTime > 15 then
+                            -- Nếu đợi 15 giây mà không thấy con nào, phòng bị lỗi, ép thoát
+                            RiftStatus:Set("STATUS: Phòng trống, ép thoát...")
+                            riftState = "EXITING"
+                        end
+                    end
                 end
 
             elseif riftState == "EXITING" then
@@ -337,13 +343,13 @@ return function(Window, Utils)
                 end)
                 
                 if targetRiftKey then
-                    -- Lưu sổ đen bằng: Giờ PC hiện tại + Thời lượng sống của cổng
                     completedRifts[targetRiftKey] = os.time() + targetExpireDuration
                     riftsClearedCount = riftsClearedCount + 1
                     ClearedLabel:Set("Rift đã dọn dẹp: " .. riftsClearedCount)
                 end
                 
                 targetRiftId = nil; targetRiftKey = nil; targetExpireDuration = 300
+                monstersSeen = false
                 catchingMemory = {}
                 
                 riftState = "SCANNING"; task.wait(0)
