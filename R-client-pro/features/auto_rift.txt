@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: AUTO RIFT SYSTEM V8.1 (END-TICK SYNC & INSTANT EXIT)
+-- MODULE: AUTO RIFT SYSTEM V8.2 (INSTANT EXIT & TASK.SPAWN OPTIMIZED)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -15,7 +15,7 @@ return function(Window, Utils)
     
     local targetRiftId = nil 
     local targetRiftKey = nil 
-    local targetEndTick = 0 -- Thay thế biến đếm tay bằng EndTick của Server
+    local targetEndTick = 0 
     local currentTeamId = 0
     local riftsClearedCount = 0
     
@@ -53,7 +53,7 @@ return function(Window, Utils)
     RiftTab:CreateButton({ Name = "Xóa Trí Nhớ Blacklist (Quét lại từ đầu)", Callback = function() completedRifts = {} riftsClearedCount = 0 ClearedLabel:Set("Rift đã dọn dẹp: 0") end })
 
     -- ==========================================
-    -- HÀM LẤY TỌA ĐỘ 
+    -- HÀM LẤY TỌA ĐỘ
     -- ==========================================
     local function GetPortalPosition(obj)
         local guiNode = obj:FindFirstChild("GUI")
@@ -131,7 +131,6 @@ return function(Window, Utils)
                                         
                                         if dist < shortestDistance then
                                             shortestDistance = dist
-                                            -- Lấy EndTick, dự phòng cộng thêm 5 phút nếu lỗi game
                                             local endTick = obj:GetAttribute("DungeonEndTick") or (os.time() + 300)
                                             bestPortal = {id = id, key = dynamicKey, pos = doorPos, teamId = properTeamId, eTick = endTick}
                                         end
@@ -179,7 +178,7 @@ return function(Window, Utils)
                 end
 
                 -- ==========================================
-                -- BƯỚC 3: LAO VÀO CỔNG TỐT NHẤT
+                -- BƯỚC 3: THỰC THI CHUI VÀO CỔNG
                 -- ==========================================
                 if bestPortal then
                     targetRiftId = bestPortal.id
@@ -195,9 +194,11 @@ return function(Window, Utils)
                     local createArgs = { "DungeonCreateTeamChannel", targetRiftId, currentTeamId }
                     local startArgs = { "DungeonStartChannel", targetRiftId, currentTeamId }
 
-                    pcall(function()
-                        DataPullFunc:InvokeServer(unpack(createArgs))
-                        DataPullFunc:InvokeServer(unpack(startArgs))
+                    task.spawn(function()
+                        pcall(function()
+                            DataPullFunc:InvokeServer(unpack(createArgs))
+                            DataPullFunc:InvokeServer(unpack(startArgs))
+                        end)
                     end)
 
                     RiftStatus:Set("STATUS: Đang đợi Server dịch chuyển...")
@@ -216,16 +217,16 @@ return function(Window, Utils)
                     task.wait(0.5) 
                 end
 
-elseif riftState == "COMBAT" then
+            elseif riftState == "COMBAT" then
                 if unhandledDeadCount > 0 then
                     RiftStatus:Set("STATUS: Đang ném bóng bắt quái...")
                     for _, m in pairs(deadMonsters) do
                         local id = tonumber(m.Name:match("Monster_(%d+)"))
                         if id and not catchingMemory[id] then
                             catchingMemory[id] = true
-                            print(string.format("[%.2f] 🎾 Gọi lệnh ném bóng bắt quái: %d", os.clock(), id))
+                            print(string.format("[%.2f] 🎾 Gọi lệnh ném bóng bắt quái ID: %d", os.clock(), id))
                             
-                            -- Ép chạy luồng riêng để InvokeServer không block Tool
+                            -- Ép chạy luồng riêng để Remote không block Tool
                             task.spawn(function()
                                 pcall(function() Utils.CatchMonster(DataPullFunc, id) end)
                             end)
@@ -252,7 +253,9 @@ elseif riftState == "COMBAT" then
                             humanoid:MoveTo(hrp.Position); dungeonStuckTimer = 0; Utils.SmartDismount(LocalPlayer, DataPullFunc)
                             local id = tonumber(bestTarget.Name:match("Monster_(%d+)"))
                             if id then 
-                                task.spawn(function() pcall(function() Utils.AttackMonster(DataPullFunc, id) end) end)
+                                task.spawn(function()
+                                    pcall(function() Utils.AttackMonster(DataPullFunc, id) end)
+                                end)
                             end 
                         end
                     end
@@ -262,10 +265,10 @@ elseif riftState == "COMBAT" then
                 end
 
             elseif riftState == "EXITING" then
-                print(string.format("[%.2f] 🚪 Đã vào State EXITING. Bắn Remote thoát...", os.clock()))
+                print(string.format("[%.2f] 🚪 Đã vào State EXITING. Ép thoát siêu tốc...", os.clock()))
                 RiftStatus:Set("STATUS: Hoàn thành! Đang ép thoát siêu tốc...")
                 
-                -- BỌC VÀO TASK.SPAWN: Lệnh thoát bắn đi rồi Tool chạy tiếp ngay, không chờ Server duyệt!
+                -- BỌC VÀO TASK.SPAWN: Lệnh thoát bắn đi lập tức, Tool không bị block!
                 task.spawn(function()
                     pcall(function()
                         local leaveArenaArgs = { "ArenaLeaveChannel" }
@@ -278,16 +281,19 @@ elseif riftState == "COMBAT" then
                     end)
                 end)
                 
-                print(string.format("[%.2f] 🚀 Đã bắn lệnh thoát! Ghi sổ đen và dọn dẹp biến.", os.clock()))
-                
                 if targetRiftKey then
                     completedRifts[targetRiftKey] = targetEndTick
                     riftsClearedCount = riftsClearedCount + 1
                     ClearedLabel:Set("Rift đã dọn dẹp: " .. riftsClearedCount)
+                    print(string.format("[%.2f] ✅ Ghi Sổ Đen cổng [%s] tới EndTick: %s", os.clock(), targetRiftKey, tostring(targetEndTick)))
                 end
                 
                 targetRiftId = nil; targetRiftKey = nil; targetEndTick = 0
                 catchingMemory = {}
                 
+                -- Thoát xong lập tức quét cổng tiếp theo, thời gian chờ là 0
                 riftState = "SCANNING"; task.wait(0)
             end
+        end
+    end)
+end
