@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: R-GAME (AUTO BẮT, ĐÁNH, HỒI MÁU) - BẢN SỬA LỖI (FIXED)
+-- MODULE: R-GAME (AUTO BẮT, ĐÁNH, HỒI MÁU) - BẢN FIXED V2 (CHUẨN XÁC)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -7,7 +7,6 @@ return function(Window, Utils)
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local LocalPlayer = Players.LocalPlayer
 
-    -- Các biến quản lý State
     local camSettings = {
         autoAttack = false,
         autoCatch = false,
@@ -20,7 +19,6 @@ return function(Window, Utils)
     local MonsterSystem = nil
     pcall(function() MonsterSystem = require(ReplicatedStorage.CommonLogic.Monster.MonsterSystem) end)
 
-    -- Bộ đệm tên quái
     local MonsterNameCache = {}
     local function GetCachedMonsterName(monster)
         local tmplId = monster:GetAttribute("TmplId")
@@ -43,7 +41,6 @@ return function(Window, Utils)
         return monster.Name
     end
 
-    -- Hàm lọc ưu tiên
     local function IsMonsterInFilter(monster)
         if not camSettings.targetMonsterNames or #camSettings.targetMonsterNames == 0 or camSettings.targetMonsterNames[1] == "" then
             return true 
@@ -106,13 +103,11 @@ return function(Window, Utils)
             if not monstersFolder then continue end
 
             for _, monster in pairs(monstersFolder:GetChildren()) do
-                -- Không đánh quái tàng hình hoặc quái có thuộc tính chờ bắt
                 local root = monster:IsA("Model") and monster.PrimaryPart or monster
                 if root and root:IsA("BasePart") and root.Transparency < 1 and monster:GetAttribute("CatchEndTick") == nil then
                     if IsMonsterInFilter(monster) then
                         local id = tonumber(monster.Name:match("Monster_(%d+)"))
                         if id and MonsterSystem then 
-                            -- SỬA LỖI: Gọi qua một function bọc ngoài để truyền đúng self
                             pcall(function() MonsterSystem:ClientAttackMonster(id) end)
                         end
                     end
@@ -142,7 +137,6 @@ return function(Window, Utils)
                     if IsMonsterInFilter(monster) then
                         local id = tonumber(monster.Name:match("Monster_(%d+)"))
                         if id then
-                            -- Chỉ bắt quái có thuộc tính chờ bắt (CatchTakenPlayerId) của mình
                             local catchTaken = monster:GetAttribute("CatchTakenPlayerId")
                             if catchTaken and catchTaken == playerId then
                                 local pos = monster:IsA("Model") and monster.PrimaryPart and monster.PrimaryPart.Position or monster.Position
@@ -158,10 +152,8 @@ return function(Window, Utils)
                 local targetId = tonumber(targetCatch.Name:match("Monster_(%d+)"))
                 local targetPos = targetCatch:IsA("Model") and targetCatch.PrimaryPart and targetCatch.PrimaryPart.Position or targetCatch.Position
                 
-                -- Nhảy tới quái
                 hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0))
                 
-                -- SỬA LỖI: Dùng task.spawn để không bị kẹt luồng quét quái 5 giây
                 task.spawn(function()
                     local success, isStarted = pcall(function() return MonsterSystem:ClientCatchMonsterStart(targetId) end)
                     if success then
@@ -186,13 +178,27 @@ return function(Window, Utils)
 
             local hasDead = false
             pcall(function()
-                local gamePlayer = _G.PathTool and _G.PathTool.ClientPlayerManager and _G.PathTool.ClientPlayerManager.GetGamePlayer()
-                if gamePlayer and gamePlayer.pet then
-                    gamePlayer.pet:IterBagItem(function(petItem)
-                        if petItem:GetEquipedIndex() ~= nil and petItem:IsDead() then
-                            hasDead = true
+                local petsFolder = Workspace:FindFirstChild("Pets")
+                if not petsFolder then return end
+                
+                local myId = tostring(LocalPlayer.UserId)
+                for _, pet in pairs(petsFolder:GetChildren()) do
+                    if string.find(pet.Name, myId) then
+                        local hpPart = pet:FindFirstChild("Health")
+                        if hpPart then
+                            -- Đọc máu bằng logic cắt chuỗi y hệt bản gốc
+                            local hpStr = tostring(hpPart.Value)
+                            local currentHp = tonumber(string.split(hpStr, ",")[1])
+                            
+                            -- Xử lý an toàn nếu game đổi dấu phẩy thành dấu chấm
+                            if not currentHp then currentHp = tonumber((string.gsub(hpStr, ",", "."))) end
+                            
+                            if currentHp and currentHp <= 0 then 
+                                hasDead = true
+                                break 
+                            end
                         end
-                    end)
+                    end
                 end
             end)
 
@@ -221,17 +227,25 @@ return function(Window, Utils)
                     end
 
                     if bestRecoverPos then
-                        -- Neo nhân vật lại để tránh bị rơi xuống map
-                        hrp.Anchored = true
+                        -- Lót một bệ đỡ tàng hình dưới chân để chống rơi rớt map
+                        local plat = Instance.new("Part")
+                        plat.Size = Vector3.new(20, 1, 20)
+                        plat.Position = bestRecoverPos - Vector3.new(0, 3, 0)
+                        plat.Anchored = true
+                        plat.Transparency = 1
+                        plat.CanCollide = true
+                        plat.Parent = Workspace
+
+                        -- Dịch chuyển nhân vật (Vật lý vẫn hoạt động để kích hoạt suối máu)
                         hrp.CFrame = CFrame.new(bestRecoverPos + Vector3.new(0, 3, 0))
                         
-                        -- Chờ 9 giây để hồi máu xong
                         task.wait(9)
                         
-                        -- Về lại chỗ cũ và gỡ neo
-                        hrp.CFrame = camSettings.savedPosition
-                        task.wait(0.1)
-                        hrp.Anchored = false
+                        -- Dọn dẹp và về chỗ cũ
+                        plat:Destroy()
+                        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                            LocalPlayer.Character.HumanoidRootPart.CFrame = camSettings.savedPosition
+                        end
                     end
                 end
                 camSettings.isHealing = false
