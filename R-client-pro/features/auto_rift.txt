@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: AUTO RIFT SYSTEM V8.0 (THE MASTERPIECE - 100% START TICK)
+-- MODULE: AUTO RIFT SYSTEM V8.1 (END-TICK SYNC & INSTANT EXIT)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -12,17 +12,15 @@ return function(Window, Utils)
     local autoRiftMaster = false 
     local scanDynamic = true    
     local scanStatic = true     
-    local scanInterval = 0 -- Quét liên tục không độ trễ vì thuật toán giờ cực nhẹ
     
     local targetRiftId = nil 
     local targetRiftKey = nil 
-    local targetExpireDuration = 0 
+    local targetEndTick = 0 -- Thay thế biến đếm tay bằng EndTick của Server
     local currentTeamId = 0
     local riftsClearedCount = 0
     
     local dungeonStuckTimer = 0
     local dungeonLastPosition = nil
-    local clearDelayTimer = 0 
 
     local completedRifts = {} 
     local catchingMemory = {} 
@@ -42,7 +40,7 @@ return function(Window, Utils)
             if not Value then 
                 RiftStatus:Set("STATUS: TẮT"); riftState = "SCANNING"; targetRiftId = nil; targetRiftKey = nil
             else 
-                RiftStatus:Set("STATUS: ĐANG CHUẨN BỊ QUÉT..."); riftState = "SCANNING"; clearDelayTimer = 0 
+                RiftStatus:Set("STATUS: ĐANG CHUẨN BỊ QUÉT..."); riftState = "SCANNING"
             end
         end
     })
@@ -55,7 +53,7 @@ return function(Window, Utils)
     RiftTab:CreateButton({ Name = "Xóa Trí Nhớ Blacklist (Quét lại từ đầu)", Callback = function() completedRifts = {} riftsClearedCount = 0 ClearedLabel:Set("Rift đã dọn dẹp: 0") end })
 
     -- ==========================================
-    -- HÀM LẤY TỌA ĐỘ
+    -- HÀM LẤY TỌA ĐỘ 
     -- ==========================================
     local function GetPortalPosition(obj)
         local guiNode = obj:FindFirstChild("GUI")
@@ -104,7 +102,7 @@ return function(Window, Utils)
 
                 local currentTime = os.time()
                 
-                -- Dọn rác Sổ đen để tránh tràn RAM (Để 10 phút tự xóa cho nhẹ máy)
+                -- ĐỒNG BỘ RÁC THEO END TICK CỦA SERVER
                 for key, expireTime in pairs(completedRifts) do
                     if currentTime > expireTime then completedRifts[key] = nil end
                 end
@@ -133,7 +131,9 @@ return function(Window, Utils)
                                         
                                         if dist < shortestDistance then
                                             shortestDistance = dist
-                                            bestPortal = {id = id, key = dynamicKey, pos = doorPos, teamId = properTeamId}
+                                            -- Lấy EndTick, dự phòng cộng thêm 5 phút nếu lỗi game
+                                            local endTick = obj:GetAttribute("DungeonEndTick") or (os.time() + 300)
+                                            bestPortal = {id = id, key = dynamicKey, pos = doorPos, teamId = properTeamId, eTick = endTick}
                                         end
                                     end
                                 end
@@ -143,13 +143,12 @@ return function(Window, Utils)
                 end
 
                 -- ==========================================
-                -- BƯỚC 2: QUÉT CỔNG STATIC (Tập trung thẳng vào thư mục AREA)
+                -- BƯỚC 2: QUÉT CỔNG STATIC
                 -- ==========================================
                 if scanStatic and not bestPortal then
                     local areaFolder = Workspace:FindFirstChild("Area")
                     if areaFolder then
                         for _, mapFolder in pairs(areaFolder:GetChildren()) do
-                            -- Chỉ soi nhánh Area, phớt lờ ServerZone
                             local arDungeon = mapFolder:FindFirstChild("Area") and mapFolder.Area:FindFirstChild("Dungeon")
                             if arDungeon then
                                 for _, obj in pairs(arDungeon:GetChildren()) do
@@ -158,7 +157,6 @@ return function(Window, Utils)
                                         local id = tonumber(idStr)
                                         local properTeamId = obj:GetAttribute("DungeonStartTick")
                                         
-                                        -- Cổng có StartTick thì mới tính là MỞ
                                         if properTeamId and properTeamId > 0 then
                                             local staticKey = "Stat_" .. idStr .. "_" .. properTeamId
                                             
@@ -168,7 +166,8 @@ return function(Window, Utils)
                                                 
                                                 if dist < shortestDistance then
                                                     shortestDistance = dist
-                                                    bestPortal = {id = id, key = staticKey, pos = doorPos, teamId = properTeamId}
+                                                    local endTick = obj:GetAttribute("DungeonEndTick") or (os.time() + 300)
+                                                    bestPortal = {id = id, key = staticKey, pos = doorPos, teamId = properTeamId, eTick = endTick}
                                                 end
                                             end
                                         end
@@ -180,18 +179,18 @@ return function(Window, Utils)
                 end
 
                 -- ==========================================
-                -- BƯỚC 3: THỰC THI CHUI VÀO CỔNG
+                -- BƯỚC 3: LAO VÀO CỔNG TỐT NHẤT
                 -- ==========================================
                 if bestPortal then
                     targetRiftId = bestPortal.id
                     targetRiftKey = bestPortal.key
+                    targetEndTick = bestPortal.eTick
                     
                     RiftStatus:Set("STATUS: Đã khóa mục tiêu: " .. tostring(targetRiftId))
                     
                     hrp.CFrame = CFrame.new(bestPortal.pos + Vector3.new(0, 3, 0))
                     task.wait(0.2) 
 
-                    -- Truyền chuẩn 100% StartTick vào TeamID
                     currentTeamId = bestPortal.teamId
                     local createArgs = { "DungeonCreateTeamChannel", targetRiftId, currentTeamId }
                     local startArgs = { "DungeonStartChannel", targetRiftId, currentTeamId }
@@ -208,7 +207,6 @@ return function(Window, Utils)
                     local checkHrp = checkChar and checkChar:FindFirstChild("HumanoidRootPart")
                     if checkHrp and (checkHrp.Position - bestPortal.pos).Magnitude < 50 then
                         RiftStatus:Set("STATUS: Bị Server chặn, bỏ qua cổng này!")
-                        -- Chỉ block 15s nếu kẹt vật lý
                         completedRifts[targetRiftKey] = os.time() + 15 
                         targetRiftId = nil; targetRiftKey = nil; riftState = "SCANNING"
                     else
@@ -219,7 +217,6 @@ return function(Window, Utils)
                 end
 
             elseif riftState == "COMBAT" then
-                clearDelayTimer = 0 
                 if unhandledDeadCount > 0 then
                     RiftStatus:Set("STATUS: Đang ném bóng bắt quái...")
                     for _, m in pairs(deadMonsters) do
@@ -251,38 +248,36 @@ return function(Window, Utils)
                             if id then Utils.AttackMonster(DataPullFunc, id) end 
                         end
                     end
-                else riftState = "EXITING" end
+                else 
+                    -- Hết quái sống, bắt xong toàn bộ quái chết -> Lập tức thoát
+                    riftState = "EXITING" 
+                end
 
             elseif riftState == "EXITING" then
-                clearDelayTimer = clearDelayTimer + 0.5
-                RiftStatus:Set("STATUS: Chờ bắt Pet & rớt đồ... (" .. clearDelayTimer .. "s)")
+                RiftStatus:Set("STATUS: Hoàn thành! Đang ép thoát siêu tốc...")
                 
-                if clearDelayTimer >= 1.0 then
-                    RiftStatus:Set("STATUS: Hoàn thành! Đang ép thoát siêu tốc...")
+                -- KHÔNG CẦN CHỜ NỮA, BẮN REMOTE THOÁT NGAY LẬP TỨC
+                pcall(function()
+                    local leaveArenaArgs = { "ArenaLeaveChannel" }
+                    DataPullFunc:InvokeServer(unpack(leaveArenaArgs))
                     
-                    pcall(function()
-                        local leaveArenaArgs = { "ArenaLeaveChannel" }
-                        DataPullFunc:InvokeServer(unpack(leaveArenaArgs))
-                        
-                        if targetRiftId and currentTeamId then
-                            local leaveTeamArgs = { "DungeonLeaveTeamChannel", targetRiftId, currentTeamId }
-                            DataPullFunc:InvokeServer(unpack(leaveTeamArgs))
-                        end
-                    end)
-                    
-                    if targetRiftKey then
-                        -- Không cần tính toán thời gian phạt nữa. Key cổng giờ là duy nhất (ID + StartTick).
-                        -- Ghi đè vào blacklist 10 phút để tránh quay lại quét nhầm khi cổng chưa sập hẳn.
-                        completedRifts[targetRiftKey] = os.time() + 600
-                        riftsClearedCount = riftsClearedCount + 1
-                        ClearedLabel:Set("Rift đã dọn dẹp: " .. riftsClearedCount)
+                    if targetRiftId and currentTeamId then
+                        local leaveTeamArgs = { "DungeonLeaveTeamChannel", targetRiftId, currentTeamId }
+                        DataPullFunc:InvokeServer(unpack(leaveTeamArgs))
                     end
-                    
-                    targetRiftId = nil; targetRiftKey = nil; 
-                    catchingMemory = {} ; clearDelayTimer = 0
-                    
-                    riftState = "SCANNING"; task.wait(0)
+                end)
+                
+                if targetRiftKey then
+                    -- Ghi sổ đen bằng chính thời gian "Hết hạn" của cổng trên Server
+                    completedRifts[targetRiftKey] = targetEndTick
+                    riftsClearedCount = riftsClearedCount + 1
+                    ClearedLabel:Set("Rift đã dọn dẹp: " .. riftsClearedCount)
                 end
+                
+                targetRiftId = nil; targetRiftKey = nil; targetEndTick = 0
+                catchingMemory = {}
+                
+                riftState = "SCANNING"; task.wait(0)
             end
         end
     end)
