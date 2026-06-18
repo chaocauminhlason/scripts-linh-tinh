@@ -216,13 +216,19 @@ return function(Window, Utils)
                     task.wait(0.5) 
                 end
 
-            elseif riftState == "COMBAT" then
+elseif riftState == "COMBAT" then
                 if unhandledDeadCount > 0 then
                     RiftStatus:Set("STATUS: Đang ném bóng bắt quái...")
                     for _, m in pairs(deadMonsters) do
                         local id = tonumber(m.Name:match("Monster_(%d+)"))
                         if id and not catchingMemory[id] then
-                            catchingMemory[id] = true; Utils.CatchMonster(DataPullFunc, id) 
+                            catchingMemory[id] = true
+                            print(string.format("[%.2f] 🎾 Gọi lệnh ném bóng bắt quái: %d", os.clock(), id))
+                            
+                            -- Ép chạy luồng riêng để InvokeServer không block Tool
+                            task.spawn(function()
+                                pcall(function() Utils.CatchMonster(DataPullFunc, id) end)
+                            end)
                         end
                     end
                 elseif hasAliveMonsters then
@@ -245,30 +251,36 @@ return function(Window, Utils)
                         else
                             humanoid:MoveTo(hrp.Position); dungeonStuckTimer = 0; Utils.SmartDismount(LocalPlayer, DataPullFunc)
                             local id = tonumber(bestTarget.Name:match("Monster_(%d+)"))
-                            if id then Utils.AttackMonster(DataPullFunc, id) end 
+                            if id then 
+                                task.spawn(function() pcall(function() Utils.AttackMonster(DataPullFunc, id) end) end)
+                            end 
                         end
                     end
                 else 
-                    -- Hết quái sống, bắt xong toàn bộ quái chết -> Lập tức thoát
+                    print(string.format("[%.2f] 🏁 Hết quái sống và chết! Chuyển sang EXITING...", os.clock()))
                     riftState = "EXITING" 
                 end
 
             elseif riftState == "EXITING" then
+                print(string.format("[%.2f] 🚪 Đã vào State EXITING. Bắn Remote thoát...", os.clock()))
                 RiftStatus:Set("STATUS: Hoàn thành! Đang ép thoát siêu tốc...")
                 
-                -- KHÔNG CẦN CHỜ NỮA, BẮN REMOTE THOÁT NGAY LẬP TỨC
-                pcall(function()
-                    local leaveArenaArgs = { "ArenaLeaveChannel" }
-                    DataPullFunc:InvokeServer(unpack(leaveArenaArgs))
-                    
-                    if targetRiftId and currentTeamId then
-                        local leaveTeamArgs = { "DungeonLeaveTeamChannel", targetRiftId, currentTeamId }
-                        DataPullFunc:InvokeServer(unpack(leaveTeamArgs))
-                    end
+                -- BỌC VÀO TASK.SPAWN: Lệnh thoát bắn đi rồi Tool chạy tiếp ngay, không chờ Server duyệt!
+                task.spawn(function()
+                    pcall(function()
+                        local leaveArenaArgs = { "ArenaLeaveChannel" }
+                        DataPullFunc:InvokeServer(unpack(leaveArenaArgs))
+                        
+                        if targetRiftId and currentTeamId then
+                            local leaveTeamArgs = { "DungeonLeaveTeamChannel", targetRiftId, currentTeamId }
+                            DataPullFunc:InvokeServer(unpack(leaveTeamArgs))
+                        end
+                    end)
                 end)
                 
+                print(string.format("[%.2f] 🚀 Đã bắn lệnh thoát! Ghi sổ đen và dọn dẹp biến.", os.clock()))
+                
                 if targetRiftKey then
-                    -- Ghi sổ đen bằng chính thời gian "Hết hạn" của cổng trên Server
                     completedRifts[targetRiftKey] = targetEndTick
                     riftsClearedCount = riftsClearedCount + 1
                     ClearedLabel:Set("Rift đã dọn dẹp: " .. riftsClearedCount)
@@ -279,6 +291,3 @@ return function(Window, Utils)
                 
                 riftState = "SCANNING"; task.wait(0)
             end
-        end
-    end)
-end
