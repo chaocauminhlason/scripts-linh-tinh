@@ -351,19 +351,31 @@ return function(Window, Utils)
                         
                         if closestDist2D > 40 then
                             Utils.ToggleMount(DataPullFunc, true); task.wait(0.2)
-                            hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 4)); task.wait(0.2)
+                            
+                            -- SỬA LỖI 1: Tính toán Vector hướng để Teleport luôn rơi vào khoảng trống giữa mình và quái
+                            local direction = (hrp.Position - targetPos).Unit
+                            -- Tọa độ mới: Cách quái 4 studs về phía mình, cao 3 studs để không lún đất
+                            local safeOffset = Vector3.new(direction.X * 4, 3, direction.Z * 4) 
+                            
+                            hrp.CFrame = CFrame.new(targetPos + safeOffset); task.wait(0.2)
                             humanoid:MoveTo(hrp.Position); dungeonLastPosition = hrp.Position; dungeonStuckTimer = 0
                             Utils.SmartDismount(LocalPlayer, DataPullFunc)
+                            
                         elseif closestDist2D > 12 then
                             humanoid:MoveTo(targetPos)
                             
                             if dungeonLastPosition and (hrp.Position - dungeonLastPosition).Magnitude < 1 then
                                 dungeonStuckTimer = dungeonStuckTimer + 0.5
                                 if dungeonStuckTimer >= 3 then 
-                                    hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 5, 0))
+                                    -- SỬA LỖI 2: Giảm độ cao hất tung từ 5 xuống 3, cộng thêm offset hướng an toàn
+                                    local direction = (hrp.Position - targetPos).Unit
+                                    local unstickOffset = Vector3.new(direction.X * 2, 3, direction.Z * 2)
+                                    hrp.CFrame = CFrame.new(targetPos + unstickOffset)
                                     dungeonStuckTimer = 0 
                                 end
-                            else dungeonStuckTimer = 0 end
+                            else 
+                                dungeonStuckTimer = 0 
+                            end
                             dungeonLastPosition = hrp.Position
                         else
                             humanoid:MoveTo(hrp.Position); dungeonStuckTimer = 0; Utils.SmartDismount(LocalPlayer, DataPullFunc)
