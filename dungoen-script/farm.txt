@@ -911,16 +911,41 @@ local function coreAutoSystem()
                         hum:MoveTo(rootPart.Position)
                         
                         task.wait(0.05) 
-                        statusText.Text = "TALENT: ĐANG MỞ BẢNG BUFF..."
-                        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-                        task.wait(0.05)
-                        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                        logTalent.Text = "TALENT: ĐANG MỞ BẢNG BUFF..."
                         
-                        task.wait(0.15) 
-                        AutoPickBuff()
+                        -- ===== THÊM LOGIC RETRY NHẬN BUFF CHỐNG MISS =====
+                        local isBuffClaimed = false
+                        local buffRetryTimeout = tick() + 5 -- Cho phép thử lại tối đa 5 giây để tránh kẹt vĩnh viễn
                         
-                        statusText.Text = "TALENT: ĐÃ LẤY XONG.\nRA CỬA!"
-                        statusText.TextColor3 = Color3.fromRGB(0, 255, 100)
+                        while tick() < buffRetryTimeout do
+                            -- 1. Nhấn E để mở bảng
+                            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                            task.wait(0.05)
+                            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                            
+                            -- 2. Đợi 0.3s cho UI kịp render (khi lag)
+                            task.wait(0.3) 
+                            
+                            -- 3. Kiểm tra xem có nhận được buff không
+                            if AutoPickBuff() then
+                                isBuffClaimed = true
+                                break -- Đã click thành công -> Thoát vòng lặp
+                            end
+                            
+                            -- Nếu chưa click được (UI chưa mở), lặp lại việc nhấn E
+                            task.wait(0.2)
+                        end
+                        
+                        -- Chốt kết quả
+                        if isBuffClaimed then
+                            logTalent.Text = "TALENT: ĐÃ LẤY XONG.\nRA CỬA!"
+                            logTalent.TextColor3 = Color3.fromRGB(0, 255, 100)
+                        else
+                            -- Fallback: Nếu lag quá 5 giây mà không lấy được, tự động bỏ qua để khỏi kẹt phòng
+                            logTalent.Text = "TALENT: LỖI BẢNG BUFF!\nÉP BỎ QUA RA CỬA."
+                            logTalent.TextColor3 = Color3.fromRGB(255, 100, 100)
+                        end
+                        -- =================================================
                     end
                 else
                     statusText.Text = "TALENT: LỖI TỌA ĐỘ TRỤ."
