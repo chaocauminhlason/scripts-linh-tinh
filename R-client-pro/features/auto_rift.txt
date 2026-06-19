@@ -131,34 +131,58 @@ return function(Window, Utils)
             end
 
             -- ========================================================
-            -- 🛠️ HOOK: KIỂM TRA TRẠNG THÁI PET 
+            -- 🛠️ HOOK: KIỂM TRA TRẠNG THÁI PET (ĐÃ NÂNG CẤP)
             -- ========================================================
-            local isPetDead = false
+            local isAllPetsDead = false
             pcall(function()
+                -- Bước 1: Đếm tổng số Pet đang được trang bị trên UI
+                local petListUI = LocalPlayer:FindFirstChild("PlayerGui")
+                    and LocalPlayer.PlayerGui:FindFirstChild("MainGui")
+                    and LocalPlayer.PlayerGui.MainGui:FindFirstChild("ScreenGui")
+                    and LocalPlayer.PlayerGui.MainGui.ScreenGui:FindFirstChild("MainLeftView")
+                    and LocalPlayer.PlayerGui.MainGui.ScreenGui.MainLeftView:FindFirstChild("PetList")
+
+                local totalPetsUI = 0
+                if petListUI then
+                    for _, cell in pairs(petListUI:GetChildren()) do
+                        if cell.Name == "ItemCell" then
+                            local hp0 = cell:FindFirstChild("hp0", true)
+                            local labName = cell:FindFirstChild("LabName", true)
+                            if hp0 and labName and labName.Text ~= "Label" and labName.Text ~= "" then
+                                totalPetsUI = totalPetsUI + 1
+                            end
+                        end
+                    end
+                end
+
+                -- Bước 2: Đếm số Pet CÒN SỐNG đang xuất hiện trên Map
+                local alivePetsMap = 0
                 local petsFolder = Workspace:FindFirstChild("Pets")
+                local myId = tostring(LocalPlayer.UserId)
+                
                 if petsFolder then
-                    local myId = tostring(LocalPlayer.UserId)
                     for _, pet in pairs(petsFolder:GetChildren()) do
                         if string.find(pet.Name, myId) then
                             local hpPart = pet:FindFirstChild("Health")
                             if hpPart then
-                                -- Đọc máu bằng logic cắt chuỗi gốc
-                                local currentHp = tonumber(string.split(tostring(hpPart.Value), ",")[1])
-                                -- Fallback đề phòng format "0.5"
-                                if not currentHp then currentHp = tonumber((string.gsub(tostring(hpPart.Value), ",", "."))) end
-                                
-                                if currentHp and currentHp <= 0 then 
-                                    isPetDead = true
-                                    break 
+                                local hpStr = tostring(hpPart.Value)
+                                local currentHp = tonumber(string.split(hpStr, ",")[1]) or tonumber((string.gsub(hpStr, ",", ".")))
+                                if currentHp and currentHp > 0 then
+                                    alivePetsMap = alivePetsMap + 1
                                 end
                             end
                         end
                     end
                 end
+
+                -- Bước 3: Chỉ khi có mang Pet đi VÀ không còn con nào sống trên map
+                if totalPetsUI > 0 and alivePetsMap == 0 then
+                    isAllPetsDead = true
+                end
             end)
             
-            if isPetDead and riftState == "COMBAT" then
-                RiftStatus:Set("STATUS: 🚨 Pet đã chết! Đang ép thoát để bảo toàn mạng...")
+            if isAllPetsDead and riftState == "COMBAT" then
+                RiftStatus:Set("STATUS: 🚨 Toàn bộ Pet đã chết! Đang ép thoát để bảo toàn mạng...")
                 riftState = "EXITING"
             end
             -- ========================================================
@@ -263,27 +287,45 @@ return function(Window, Utils)
                     local safe_team = bestPortal.teamId
                     currentTeamId = safe_team
 
-                    task.spawn(function()
+                    -- ========================================================
+                    -- 🛠️ HOOK: HÀM GỬI LỆNH RETRY
+                    -- ========================================================
+                    local function SendEnterRemote()
                         pcall(function()
                             local createArgs = { "DungeonCreateTeamChannel", safe_id, safe_team }
                             local startArgs = { "DungeonStartChannel", safe_id, safe_team }
                             DataPullFunc:InvokeServer(unpack(createArgs))
                             DataPullFunc:InvokeServer(unpack(startArgs))
                         end)
-                    end)
+                    end
 
-                    RiftStatus:Set("STATUS: Đang đợi Server dịch chuyển...")
-                    task.wait(2.5) 
+                    -- GỬI LẦN 1
+                    task.spawn(SendEnterRemote)
+                    RiftStatus:Set("STATUS: Đang đợi Server dịch chuyển (Lần 1)...")
+                    task.wait(1.5) 
                     
                     local checkChar = LocalPlayer.Character
                     local checkHrp = checkChar and checkChar:FindFirstChild("HumanoidRootPart")
+                    
+                    -- KIỂM TRA LẦN 1 VÀ GỬI LẠI LẦN 2 NẾU CẦN
                     if checkHrp and (checkHrp.Position - bestPortal.pos).Magnitude < 50 then
-                        RiftStatus:Set("STATUS: Bị Server chặn, bỏ qua cổng này!")
-                        completedRifts[targetRiftKey] = os.time() + 60 
-                        targetRiftId = nil; targetRiftKey = nil; riftState = "SCANNING"
+                        RiftStatus:Set("STATUS: Chưa vào được, đang gửi lại Remote (Lần 2)...")
+                        task.spawn(SendEnterRemote)
+                        task.wait(1.5)
+                        
+                        -- KIỂM TRA LẦN 2 (CHỐT KẾT QUẢ)
+                        if checkHrp and (checkHrp.Position - bestPortal.pos).Magnitude < 50 then
+                            RiftStatus:Set("STATUS: Bị Server chặn, bỏ qua cổng này!")
+                            completedRifts[targetRiftKey] = os.time() + 60 
+                            targetRiftId = nil; targetRiftKey = nil; riftState = "SCANNING"
+                        else
+                            dungeonStuckTimer = 0; riftState = "COMBAT"
+                        end
                     else
                         dungeonStuckTimer = 0; riftState = "COMBAT"
                     end
+                    -- ========================================================
+
                 else
                     task.wait(0.5) 
                 end
