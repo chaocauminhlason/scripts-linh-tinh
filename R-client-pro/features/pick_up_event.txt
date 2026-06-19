@@ -1,0 +1,44 @@
+-- ==========================================================
+-- SCRIPT TÌM RƯƠNG "PET_baoxiang..." VÀ SPAM PHÍM E
+-- ==========================================================
+local Workspace = game:GetService("Workspace")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+
+local isSpamming = true -- Đổi thành false nếu muốn dừng
+
+task.spawn(function()
+    while task.wait(0.1) do -- Tốc độ spam: 10 lần/giây (có thể chỉnh nhỏ hơn nếu muốn nhanh hơn)
+        if not isSpamming then continue end
+        
+        pcall(function()
+            -- Trỏ tới thư mục chứa object
+            local commonModel = Workspace.Area.center.Area.CommonModel
+            local targetObj = nil
+
+            -- Quét qua tất cả object bên trong để tìm tên bắt đầu bằng "PET_baoxiang"
+            for _, obj in pairs(commonModel:GetChildren()) do
+                if string.match(obj.Name, "^PET_baoxiang") then
+                    targetObj = obj
+                    break -- Đã tìm thấy thì thoát vòng lặp quét
+                end
+            end
+
+            -- Nếu tìm thấy object
+            if targetObj then
+                -- CÁCH 1: (Khuyên dùng) Tìm xem rương có ProximityPrompt (Vòng tròn E) không
+                local prompt = targetObj:FindFirstChildWhichIsA("ProximityPrompt", true)
+                
+                if prompt and fireproximityprompt then
+                    -- Ép game kích hoạt vòng tròn E ngay lập tức (Xuyên thủng mọi delay)
+                    fireproximityprompt(prompt)
+                else
+                    -- CÁCH 2: Giả lập thao tác bấm phím E vật lý
+                    -- *Yêu cầu: Nhân vật của bạn phải đang đứng đủ gần cái rương đó
+                    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                    task.wait(0.02)
+                    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                end
+            end
+        end)
+    end
+end)
