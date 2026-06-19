@@ -1,378 +1,301 @@
 -- ====================================================================
--- MODULE: AUTO RIFT SYSTEM V8.9 (ALL PETS DEAD LOGIC & SAFE EXECUTION)
+-- MODULE: R-GAME (AUTO BẮT, ĐÁNH, HỒI MÁU) - SMART HEAL V3
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
     local Workspace = game:GetService("Workspace")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    
     local LocalPlayer = Players.LocalPlayer
 
-    local autoRiftMaster = false 
-    local scanDynamic = true    
-    local scanStatic = true     
-    
-    local targetRiftId = nil 
-    local targetRiftKey = nil 
-    local targetExpireDuration = 300 
-    local currentTeamId = 0
-    local riftsClearedCount = 0
-    
-    local dungeonStuckTimer = 0
-    local dungeonLastPosition = nil
+    -- Quản lý trạng thái cài đặt
+    local camSettings = {
+        autoAttack = false,
+        autoCatch = false,
+        autoHeal = false,
+        healThreshold = 1, -- Ngưỡng số Pet chết để kích hoạt hồi máu
+        isHealing = false,
+        savedPosition = nil,
+        targetMonsterNames = {}
+    }
 
-    local completedRifts = {} 
-    local catchingMemory = {} 
-    local catchCount = {} 
-    local riftState = "SCANNING" 
+    local MonsterSystem = nil
+    pcall(function() MonsterSystem = require(ReplicatedStorage.CommonLogic.Monster.MonsterSystem) end)
 
-    local DataPullFunc = nil
-
-    local RiftTab = Window:CreateTab("Auto Rift", 4483362458)
-    local RiftStatus = RiftTab:CreateLabel("STATUS: AUTO RIFT ĐANG TẮT")
-    local ClearedLabel = RiftTab:CreateLabel("Rift đã dọn dẹp: 0")
-
-    RiftTab:CreateSection("--- CÔNG TẮC ĐIỀU KHIỂN ---")
-    RiftTab:CreateToggle({
-        Name = "Công Tắc Tổng (Bật/Tắt Auto Rift)", CurrentValue = false, Flag = "AutoRiftMasterToggle",
-        Callback = function(Value)
-            autoRiftMaster = Value
-            if not Value then 
-                RiftStatus:Set("STATUS: TẮT"); riftState = "SCANNING"; targetRiftId = nil; targetRiftKey = nil
-            else 
-                RiftStatus:Set("STATUS: ĐANG CHUẨN BỊ QUÉT..."); riftState = "SCANNING"
+    -- Bộ đệm tên quái (Tối ưu hóa lag)
+    local MonsterNameCache = {}
+    local function GetCachedMonsterName(monster)
+        local tmplId = monster:GetAttribute("TmplId")
+        if not tmplId then return monster.Name end
+        
+        if MonsterNameCache[tmplId] then return MonsterNameCache[tmplId] end
+        
+        local MonsterConfigFolder = ReplicatedStorage:FindFirstChild("CommonConfig") and ReplicatedStorage.CommonConfig:FindFirstChild("Monster")
+        if MonsterConfigFolder then
+            local configFile = MonsterConfigFolder:FindFirstChild("Monster" .. tostring(tmplId))
+            if configFile then
+                local success, configData = pcall(require, configFile)
+                if success and type(configData) == "table" then
+                    local realName = configData.Name or monster.Name
+                    MonsterNameCache[tmplId] = realName
+                    return realName
+                end
             end
         end
+        return monster.Name
+    end
+
+    local function IsMonsterInFilter(monster)
+        if not camSettings.targetMonsterNames or #camSettings.targetMonsterNames == 0 or camSettings.targetMonsterNames[1] == "" then
+            return true 
+        end
+        local realName = GetCachedMonsterName(monster)
+        return table.find(camSettings.targetMonsterNames, realName) ~= nil
+    end
+
+    -- ==========================================
+    -- GIAO DIỆN UI
+    -- ==========================================
+    local CamTab = Window:CreateTab("Auto farm", 4483345998)
+
+    CamTab:CreateSection("--- THIẾT LẬP CƠ BẢN ---")
+    CamTab:CreateToggle({ Name = "Tự Động Đánh Quái", CurrentValue = false, Flag = "CamAutoAttack", Callback = function(V) camSettings.autoAttack = V end })
+    CamTab:CreateToggle({ Name = "Tự Động Bắt Quái", CurrentValue = false, Flag = "CamAutoCatch", Callback = function(V) camSettings.autoCatch = V end })
+    
+    CamTab:CreateSection("--- CẤU HÌNH HỒI MÁU ---")
+    CamTab:CreateToggle({ Name = "Tự Động Hồi Máu Pet", CurrentValue = false, Flag = "CamAutoHeal", Callback = function(V) camSettings.autoHeal = V end })
+    CamTab:CreateSlider({
+        Name = "Ngưỡng Pet chết để Hồi Máu",
+        Range = {1, 5},
+        Increment = 1,
+        Suffix = " Pet",
+        CurrentValue = 1,
+        Flag = "HealThresholdSlider",
+        Callback = function(Value)
+            camSettings.healThreshold = Value
+        end,
     })
 
-    RiftTab:CreateToggle({ Name = "🔍 Săn Cổng Tự Tạo (Dynamic)", CurrentValue = true, Flag = "ScanDynamicToggle", Callback = function(Value) scanDynamic = Value end })
-    RiftTab:CreateToggle({ Name = "🔍 Săn Cổng Mặc Định (Static)", CurrentValue = true, Flag = "ScanStaticToggle", Callback = function(Value) scanStatic = Value end })
+    CamTab:CreateSection("--- LỌC QUÁI THEO TÊN ---")
+    local MonsterDropdown = CamTab:CreateDropdown({
+        Name = "Chọn Quái Ưu Tiên (Trống = Bắt Tất Cả)", 
+        Options = {"(Trống)"}, 
+        CurrentOption = {""}, 
+        MultipleOptions = true, 
+        Flag = "TargetMonstersDropdown",
+        Callback = function(Options) 
+            camSettings.targetMonsterNames = Options 
+        end,
+    })
 
-    RiftTab:CreateSection("--- CÔNG CỤ SỬA LỖI ---")
-    RiftTab:CreateButton({ Name = "Ép vào Combat Mode (Dùng lỡ bật trong Rift)", Callback = function() riftState = "COMBAT" RiftStatus:Set("STATUS: Đã ép Chiến Đấu!") end })
-    RiftTab:CreateButton({ Name = "Xóa Trí Nhớ Blacklist (Quét lại từ đầu)", Callback = function() completedRifts = {} riftsClearedCount = 0 ClearedLabel:Set("Rift đã dọn dẹp: 0") end })
+    CamTab:CreateButton({
+        Name = "🔄 Quét Quái Trên Map",
+        Callback = function()
+            local monstersFolder = Workspace:FindFirstChild("Monsters")
+            if not monstersFolder then return end
+            
+            local foundNames = {}
+            local dict = {} 
+            for _, monster in pairs(monstersFolder:GetChildren()) do
+                local realName = GetCachedMonsterName(monster)
+                if realName and not dict[realName] then 
+                    dict[realName] = true
+                    table.insert(foundNames, realName) 
+                end
+            end
+            if #foundNames > 0 then
+                MonsterDropdown:Refresh(foundNames)
+                game.StarterGui:SetCore("SendNotification", {Title = "Thành Công!", Text = "Đã tìm thấy " .. #foundNames .. " loài quái!", Duration = 3})
+            end
+        end,
+    })
 
     -- ==========================================
-    -- RADAR QUÉT QUÁI 
+    -- LUỒNG 1: AUTO ATTACK
     -- ==========================================
-    local function SmartScanMonsters(monstersFolder, hrp)
-        local hasAlive = false
-        local deadList = {}
-        local best = nil
-        local minDist = math.huge
+    task.spawn(function()
+        while task.wait(0.2) do
+            if not camSettings.autoAttack or camSettings.isHealing then continue end
+            local monstersFolder = Workspace:FindFirstChild("Monsters")
+            if not monstersFolder then continue end
 
-        if monstersFolder then
-            for _, m in pairs(monstersFolder:GetChildren()) do
-                if not string.match(m.Name, "Monster_") then continue end
-                
-                local root = m
-                if not root:IsA("BasePart") then continue end
-                local id = tonumber(m.Name:match("Monster_(%d+)"))
-                
-                if id and catchCount[id] and catchCount[id] >= 3 then
-                    continue 
+            for _, monster in pairs(monstersFolder:GetChildren()) do
+                local root = monster:IsA("Model") and monster.PrimaryPart or monster
+                if root and root:IsA("BasePart") and root.Transparency < 1 and monster:GetAttribute("CatchEndTick") == nil then
+                    if IsMonsterInFilter(monster) then
+                        local id = tonumber(monster.Name:match("Monster_(%d+)"))
+                        if id and MonsterSystem then 
+                            pcall(function() MonsterSystem:ClientAttackMonster(id) end)
+                        end
+                    end
                 end
+            end
+        end
+    end)
 
-                if root:GetAttribute("CatchEndTick") ~= nil then
-                    table.insert(deadList, m)
-                    continue
+    -- ==========================================
+    -- LUỒNG 2: AUTO CATCH
+    -- ==========================================
+    task.spawn(function()
+        while task.wait(0.5) do
+            if not camSettings.autoCatch or camSettings.isHealing then continue end
+            
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if not hrp then continue end
+
+            local playerId = LocalPlayer.UserId
+            local monstersFolder = Workspace:FindFirstChild("Monsters")
+            if not monstersFolder then continue end
+
+            local targetCatch, closestDist = nil, math.huge
+            for _, monster in pairs(monstersFolder:GetChildren()) do
+                if monster:IsA("BasePart") or monster:IsA("Model") then
+                    if IsMonsterInFilter(monster) then
+                        local id = tonumber(monster.Name:match("Monster_(%d+)"))
+                        if id then
+                            local catchTaken = monster:GetAttribute("CatchTakenPlayerId")
+                            if catchTaken and catchTaken == playerId then
+                                local pos = monster:IsA("Model") and monster.PrimaryPart and monster.PrimaryPart.Position or monster.Position
+                                local dist = (pos - hrp.Position).Magnitude
+                                if dist < closestDist then closestDist = dist; targetCatch = monster end
+                            end
+                        end
+                    end
                 end
+            end
+
+            if targetCatch and MonsterSystem then
+                local targetId = tonumber(targetCatch.Name:match("Monster_(%d+)"))
+                local targetPos = targetCatch:IsA("Model") and targetCatch.PrimaryPart and targetCatch.PrimaryPart.Position or targetCatch.Position
                 
-                local hpVal = m:FindFirstChild("Health")
-                if hpVal and hpVal:IsA("StringValue") then
-                    local hpNum = tonumber((string.gsub(hpVal.Value, ",", ".")))
-                    if hpNum and hpNum < 1 then
-                        table.insert(deadList, m)
-                        continue
+                hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0))
+                
+                task.spawn(function()
+                    local success, isStarted = pcall(function() return MonsterSystem:ClientCatchMonsterStart(targetId) end)
+                    if success then
+                        if isStarted == false then
+                            task.wait(5)
+                        else
+                            task.wait(1.5)
+                            pcall(function() MonsterSystem:ClientCatchMonsterComplete(targetId) end)
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+
+    -- ==========================================
+    -- LUỒNG 3: SMART AUTO HEAL (UI + MAP CROSS-CHECK)
+    -- ==========================================
+    task.spawn(function()
+        while task.wait(1) do
+            if not camSettings.autoHeal or camSettings.isHealing then continue end
+
+            local triggerHeal = false
+
+            pcall(function()
+                -- Bước 1: Đếm số Pet trên UI (Kỳ vọng) - Đã đổi thành MainLeftView
+                local petListUI = LocalPlayer:FindFirstChild("PlayerGui")
+                    and LocalPlayer.PlayerGui:FindFirstChild("MainGui")
+                    and LocalPlayer.PlayerGui.MainGui:FindFirstChild("ScreenGui")
+                    and LocalPlayer.PlayerGui.MainGui.ScreenGui:FindFirstChild("MainLeftView")
+                    and LocalPlayer.PlayerGui.MainGui.ScreenGui.MainLeftView:FindFirstChild("PetList")
+
+                local totalPetsUI = 0
+                if petListUI then
+                    for _, cell in pairs(petListUI:GetChildren()) do
+                        if cell.Name == "ItemCell" then
+                            local hp0 = cell:FindFirstChild("hp0", true)
+                            local labName = cell:FindFirstChild("LabName", true)
+                            if hp0 and labName and labName.Text ~= "Label" and labName.Text ~= "" then
+                                totalPetsUI = totalPetsUI + 1
+                            end
+                        end
                     end
                 end
 
-                hasAlive = true
-                local d = (hrp.Position - root.Position).Magnitude
-                if d < minDist then
-                    minDist = d
-                    best = m
-                end
-            end
-        end
-        return hasAlive, deadList, best, minDist
-    end
-
-    local function GetPortalPosition(obj)
-        local guiNode = obj:FindFirstChild("GUI")
-        if guiNode then 
-            if guiNode:IsA("Attachment") then return guiNode.WorldPosition end
-            local pos
-            local success = pcall(function() pos = guiNode:GetPivot().Position end)
-            if success and pos then return pos end
-        end
-        if obj:IsA("Model") and obj.PrimaryPart then return obj.PrimaryPart.Position end
-        return obj:GetPivot().Position 
-    end
-
-    task.spawn(function()
-        DataPullFunc = ReplicatedStorage:WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc")
-
-        while task.wait(0.5) do
-            if not autoRiftMaster then continue end
-
-            local char = LocalPlayer.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            local humanoid = char and char:FindFirstChild("Humanoid")
-            if not (hrp and humanoid and humanoid.Health > 0) then continue end
-
-            local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-            if playerGui then
-                local labStage = Utils.FindUIElementByName(playerGui, "LabStage")
-                if labStage and labStage.Text ~= "Unknown" and labStage.Text ~= "" then
-                    RiftStatus:Set("STATUS: Đang trong Abyss Trial - Tạm nghỉ!")
-                    continue 
-                end
-            end
-
-            -- ========================================================
-            -- 🛠️ HOOK: KIỂM TRA TRẠNG THÁI TỬ CHIẾN (ALL PETS DEAD)
-            -- ========================================================
-            local allPetsDead = false
-            pcall(function()
+                -- Bước 2: Đếm số Pet sống trên Map (Thực tế)
+                local alivePetsMap = 0
                 local petsFolder = Workspace:FindFirstChild("Pets")
+                local myId = tostring(LocalPlayer.UserId)
+                
                 if petsFolder then
-                    local myId = tostring(LocalPlayer.UserId)
-                    local equippedCount = 0
-                    local deadCount = 0
-                    
                     for _, pet in pairs(petsFolder:GetChildren()) do
                         if string.find(pet.Name, myId) then
-                            equippedCount = equippedCount + 1
                             local hpPart = pet:FindFirstChild("Health")
                             if hpPart then
                                 local hpStr = tostring(hpPart.Value)
-                                local currentHp = tonumber(string.split(hpStr, ",")[1])
-                                if not currentHp then currentHp = tonumber((string.gsub(hpStr, ",", "."))) end
-                                
-                                if currentHp and currentHp <= 0 then 
-                                    deadCount = deadCount + 1
+                                local currentHp = tonumber(string.split(hpStr, ",")[1]) or tonumber((string.gsub(hpStr, ",", ".")))
+                                if currentHp and currentHp > 0 then
+                                    alivePetsMap = alivePetsMap + 1
                                 end
                             end
                         end
                     end
-                    
-                    -- Chỉ báo động khi có mang Pet vào và TẤT CẢ đều đã chết
-                    if equippedCount > 0 and deadCount >= equippedCount then
-                        allPetsDead = true
+                end
+
+                -- Bước 3: Tính toán thiệt hại và đối chiếu ngưỡng
+                if totalPetsUI > 0 then
+                    local deadPets = totalPetsUI - alivePetsMap
+                    -- Kích hoạt hồi máu nếu số Pet chết đạt ngưỡng cài đặt
+                    if deadPets >= camSettings.healThreshold then
+                        triggerHeal = true
                     end
                 end
             end)
-            
-            if allPetsDead and riftState == "COMBAT" then
-                RiftStatus:Set("STATUS: 🚨 TOÀN BỘ ĐỘI HÌNH đã chết! Đang ép thoát để bảo toàn mạng...")
-                riftState = "EXITING"
-            end
-            -- ========================================================
 
-            local monstersFolder = Workspace:FindFirstChild("Monsters")
-            local hasAliveMonsters, deadMonsters, bestTarget, closestDist2D = false, {}, nil, math.huge
-            local unhandledDeadCount = 0
-            
-            if riftState == "COMBAT" or riftState == "EXITING" then
-                hasAliveMonsters, deadMonsters, bestTarget, closestDist2D = SmartScanMonsters(monstersFolder, hrp)
-                for _, m in pairs(deadMonsters) do
-                    local id = tonumber(m.Name:match("Monster_(%d+)"))
-                    if id and not catchingMemory[id] then unhandledDeadCount = unhandledDeadCount + 1 end
-                end
-            end
-
-            if riftState == "SCANNING" then
-                RiftStatus:Set("STATUS: Radar đang quét tìm Rift...")
-                if not scanDynamic and not scanStatic then task.wait(1) continue end
-
-                local currentTime = os.time()
+            -- Xử lý Hồi máu (Dịch chuyển và tạo bệ đỡ)
+            if triggerHeal then
+                camSettings.isHealing = true
+                local char = LocalPlayer.Character
+                local hrp = char and char:FindFirstChild("HumanoidRootPart")
                 
-                for key, expireTime in pairs(completedRifts) do
-                    if currentTime > expireTime then completedRifts[key] = nil end
-                end
-                
-                local bestPortal = nil
-                local shortestDistance = math.huge
-
-                if scanDynamic then
-                    local dynamicFolder = Workspace:FindFirstChild("DynamicDungeon")
-                    if dynamicFolder then
-                        for _, obj in pairs(dynamicFolder:GetChildren()) do
-                            local idStr = string.match(obj.Name, "Dungeon_(%d+)")
-                            if idStr then
-                                local id = tonumber(idStr)
-                                local properTeamId = obj:GetAttribute("DungeonStartTick")
-                                
-                                if properTeamId and properTeamId > 0 then
-                                    local dynamicKey = "Dyn_" .. idStr .. "_" .. properTeamId
-                                    if not completedRifts[dynamicKey] then
-                                        local doorPos = GetPortalPosition(obj)
-                                        local dist = (hrp.Position - doorPos).Magnitude
-                                        if dist < shortestDistance then
-                                            shortestDistance = dist
-                                            local endTick = obj:GetAttribute("DungeonEndTick")
-                                            local duration = 300
-                                            if endTick and endTick > properTeamId then duration = endTick - properTeamId end
-                                            bestPortal = {id = id, key = dynamicKey, pos = doorPos, teamId = properTeamId, penalty = duration}
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-
-                if scanStatic and not bestPortal then
+                if hrp then
+                    camSettings.savedPosition = hrp.CFrame
+                    local bestRecoverPos, minDist = nil, math.huge
                     local areaFolder = Workspace:FindFirstChild("Area")
+                    
                     if areaFolder then
-                        for _, mapFolder in pairs(areaFolder:GetChildren()) do
-                            local arDungeon = mapFolder:FindFirstChild("Area") and mapFolder.Area:FindFirstChild("Dungeon")
-                            if arDungeon then
-                                for _, obj in pairs(arDungeon:GetChildren()) do
-                                    local idStr = string.match(obj.Name, "Dungeon_(%d+)")
-                                    if idStr then
-                                        local id = tonumber(idStr)
-                                        local properTeamId = obj:GetAttribute("DungeonStartTick")
-                                        
-                                        if properTeamId and properTeamId > 0 then
-                                            local staticKey = "Stat_" .. idStr .. "_" .. properTeamId
-                                            if not completedRifts[staticKey] then
-                                                local doorPos = GetPortalPosition(obj)
-                                                local dist = (hrp.Position - doorPos).Magnitude
-                                                if dist < shortestDistance then
-                                                    shortestDistance = dist
-                                                    local endTick = obj:GetAttribute("DungeonEndTick")
-                                                    local duration = 300
-                                                    if endTick and endTick > properTeamId then duration = endTick - properTeamId end
-                                                    bestPortal = {id = id, key = staticKey, pos = doorPos, teamId = properTeamId, penalty = duration}
-                                                end
-                                            end
-                                        end
+                        for _, mapFolder in ipairs(areaFolder:GetChildren()) do
+                            local recFolder = mapFolder:FindFirstChild("ServerZone") and mapFolder.ServerZone:FindFirstChild("Recover")
+                            if recFolder then
+                                for _, recPart in ipairs(recFolder:GetDescendants()) do
+                                    if recPart:IsA("BasePart") then
+                                        local dist = (hrp.Position - recPart.Position).Magnitude
+                                        if dist < minDist then minDist = dist; bestRecoverPos = recPart.Position end
                                     end
                                 end
                             end
                         end
                     end
-                end
 
-                if bestPortal then
-                    targetRiftId = bestPortal.id
-                    targetRiftKey = bestPortal.key
-                    targetExpireDuration = bestPortal.penalty
-                    
-                    RiftStatus:Set("STATUS: Đã khóa mục tiêu: " .. tostring(targetRiftId))
-                    
-                    hrp.CFrame = CFrame.new(bestPortal.pos + Vector3.new(0, 3, 0))
-                    task.wait(0.2) 
+                    if bestRecoverPos then
+                        -- Lót một bệ đỡ tàng hình dưới chân để chống rớt map khi ngâm suối
+                        local plat = Instance.new("Part")
+                        plat.Size = Vector3.new(20, 1, 20)
+                        plat.Position = bestRecoverPos - Vector3.new(0, 3, 0)
+                        plat.Anchored = true
+                        plat.Transparency = 1
+                        plat.CanCollide = true
+                        plat.Parent = Workspace
 
-                    local safe_id = targetRiftId
-                    local safe_team = bestPortal.teamId
-                    currentTeamId = safe_team
-
-                    task.spawn(function()
-                        pcall(function()
-                            local createArgs = { "DungeonCreateTeamChannel", safe_id, safe_team }
-                            local startArgs = { "DungeonStartChannel", safe_id, safe_team }
-                            DataPullFunc:InvokeServer(unpack(createArgs))
-                            DataPullFunc:InvokeServer(unpack(startArgs))
-                        end)
-                    end)
-
-                    RiftStatus:Set("STATUS: Đang đợi Server dịch chuyển...")
-                    task.wait(2.5) 
-                    
-                    local checkChar = LocalPlayer.Character
-                    local checkHrp = checkChar and checkChar:FindFirstChild("HumanoidRootPart")
-                    if checkHrp and (checkHrp.Position - bestPortal.pos).Magnitude < 50 then
-                        RiftStatus:Set("STATUS: Bị Server chặn, bỏ qua cổng này!")
-                        completedRifts[targetRiftKey] = os.time() + 60 
-                        targetRiftId = nil; targetRiftKey = nil; riftState = "SCANNING"
-                    else
-                        dungeonStuckTimer = 0; riftState = "COMBAT"
-                    end
-                else
-                    task.wait(0.5) 
-                end
-
-            elseif riftState == "COMBAT" then
-                if unhandledDeadCount > 0 then
-                    RiftStatus:Set("STATUS: Đang ném bóng bắt quái...")
-                    for _, m in pairs(deadMonsters) do
-                        local id = tonumber(m.Name:match("Monster_(%d+)"))
-                        if id and not catchingMemory[id] then
-                            catchCount[id] = (catchCount[id] or 0) + 1
-                            if catchCount[id] >= 3 then catchingMemory[id] = true end
-                            
-                            task.spawn(function()
-                                pcall(function() Utils.CatchMonster(DataPullFunc, id) end)
-                            end)
-                        end
-                    end
-                elseif hasAliveMonsters then
-                    RiftStatus:Set("STATUS: Đang trong trận - Chiến đấu!")
-                    if bestTarget then
-                        local targetPos = bestTarget.Position
+                        -- Dịch chuyển nhân vật
+                        hrp.CFrame = CFrame.new(bestRecoverPos + Vector3.new(0, 3, 0))
                         
-                        if closestDist2D > 40 then
-                            Utils.ToggleMount(DataPullFunc, true); task.wait(0.2)
-                            hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 4)); task.wait(0.2)
-                            humanoid:MoveTo(hrp.Position); dungeonLastPosition = hrp.Position; dungeonStuckTimer = 0
-                            Utils.SmartDismount(LocalPlayer, DataPullFunc)
-                        elseif closestDist2D > 12 then
-                            humanoid:MoveTo(targetPos)
-                            
-                            if dungeonLastPosition and (hrp.Position - dungeonLastPosition).Magnitude < 1 then
-                                dungeonStuckTimer = dungeonStuckTimer + 0.5
-                                if dungeonStuckTimer >= 3 then 
-                                    hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 5, 0))
-                                    dungeonStuckTimer = 0 
-                                end
-                            else dungeonStuckTimer = 0 end
-                            dungeonLastPosition = hrp.Position
-                        else
-                            humanoid:MoveTo(hrp.Position); dungeonStuckTimer = 0; Utils.SmartDismount(LocalPlayer, DataPullFunc)
-                            local id = tonumber(bestTarget.Name:match("Monster_(%d+)"))
-                            if id then 
-                                task.spawn(function()
-                                    pcall(function() Utils.AttackMonster(DataPullFunc, id) end)
-                                end)
-                            end 
+                        -- Nghỉ ngơi 9 giây chờ hồi đầy máu
+                        task.wait(9)
+                        
+                        -- Dọn dẹp bệ đỡ và quay về vị trí chiến đấu cũ
+                        plat:Destroy()
+                        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                            LocalPlayer.Character.HumanoidRootPart.CFrame = camSettings.savedPosition
                         end
                     end
-                else 
-                    riftState = "EXITING" 
-                end
-
-            elseif riftState == "EXITING" then
-                RiftStatus:Set("STATUS: Hoàn thành! Đang ép thoát siêu tốc...")
-                
-                local exit_id = targetRiftId
-                local exit_team = currentTeamId
-                
-                task.spawn(function()
-                    pcall(function()
-                        local leaveArenaArgs = { "ArenaLeaveChannel" }
-                        DataPullFunc:InvokeServer(unpack(leaveArenaArgs))
-                        
-                        if exit_id and exit_team then
-                            local leaveTeamArgs = { "DungeonLeaveTeamChannel", exit_id, exit_team }
-                            DataPullFunc:InvokeServer(unpack(leaveTeamArgs))
-                        end
-                    end)
-                end)
-                
-                if targetRiftKey then
-                    completedRifts[targetRiftKey] = os.time() + targetExpireDuration
-                    riftsClearedCount = riftsClearedCount + 1
-                    ClearedLabel:Set("Rift đã dọn dẹp: " .. riftsClearedCount)
                 end
                 
-                targetRiftId = nil; targetRiftKey = nil; targetExpireDuration = 300
-                catchingMemory = {}
-                catchCount = {} 
-                
-                riftState = "SCANNING"; task.wait(0)
+                camSettings.isHealing = false
+                camSettings.savedPosition = nil
             end
         end
     end)
