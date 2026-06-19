@@ -11,15 +11,12 @@ local character = player.Character or player.CharacterAdded:Wait()
 local isAutoEnabled = true
 local isProcessing = false 
 local hasHandledTalentThisRoom = false 
-
 local waveCleared = false 
 local roomEnterTime = tick()
 local clearConfirmTimer = 0 
-
 local lastPosition = nil
 local TELEPORT_THRESHOLD = 150 
 local isWaitingForTeleport = false
-
 local EXTRA_SPEED = 8
 
 -- ==========================================
@@ -36,11 +33,22 @@ local STAGES_WITH_BUFF = {
 -- DANH SÁCH ƯU TIÊN 
 -- ==========================================
 local PRIORITY_BUFF_LIST = {
-    "Critical Damage IV", "Attack IV", "Critical IV", "HP Boost IV", "Shield Effect IV",
-    "Critical Damage III", "Attack III", "Critical III", "HP Boost III", "Shield Effect III",
-    "Critical Damage II", "Attack II", "Critical II", "HP Boost II", "Shield Effect II",
     "Emergency Bandage", "Stun Immunity", "Reflect damage",
-    "Critical Damage I", "Attack I", "Critical I", "HP Boost I", "Shield Effect I"
+    "Critical Damage IV", 
+    "Critical Damage III", 
+    "Critical Damage II", 
+    "Critical Damage I", 
+    "Attack IV", 
+    "Attack III", 
+    "Attack II", 
+    "Attack I", 
+    "Critical I",
+    "Critical IV", 
+    "HP Boost IV", "Shield Effect IV",
+    "Critical III", "HP Boost III", "Shield Effect III",
+    "Critical II", "HP Boost II", "Shield Effect II",
+    "HP Boost I", "Shield Effect I"
+
 }
 
 local ITEM_DATA = {
@@ -71,352 +79,628 @@ local PriorityList = {
 local PriorityScores = {}
 
 -- ==========================================
--- GIAO DIỆN UI
+-- GIAO DIỆN UI ABYSS STRATEGY - BẢN CHUẨN
 -- ==========================================
-if player:WaitForChild("PlayerGui"):FindFirstChild("AbyssStrategyUI") then
+
+-- Xóa UI cũ nếu tồn tại
+if player.PlayerGui:FindFirstChild("AbyssStrategyUI") then
     player.PlayerGui.AbyssStrategyUI:Destroy()
 end
 
+-- Tạo ScreenGui chính
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "AbyssStrategyUI"
 screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.Parent = player.PlayerGui
 
+-- ==========================================
+-- MAIN FRAME
+-- ==========================================
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 380, 0, 200)
-mainFrame.Position = UDim2.new(0.05, 0, 0.2, 0) 
-mainFrame.BackgroundColor3 = Color3.fromRGB(20, 22, 28) 
-mainFrame.Active = true 
-mainFrame.ClipsDescendants = true 
+mainFrame.Size = UDim2.new(0, 400, 0, 280)
+mainFrame.Position = UDim2.new(0.05, 0, 0.2, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(18, 20, 26)
+mainFrame.BackgroundTransparency = 0
+mainFrame.BorderSizePixel = 0
+mainFrame.ClipsDescendants = true
 mainFrame.Parent = screenGui
 
-local mDragging, mDragInput, mDragStart, mStartPos
-mainFrame.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        mDragging = true mDragStart = input.Position mStartPos = mainFrame.Position
-        input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then mDragging = false end end)
+-- Drop shadow cho main frame
+local shadow = Instance.new("Frame")
+shadow.Size = UDim2.new(1, 10, 1, 10)
+shadow.Position = UDim2.new(0, -5, 0, -5)
+shadow.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+shadow.BackgroundTransparency = 0.6
+shadow.BorderSizePixel = 0
+shadow.Parent = mainFrame
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 12)
+corner.Parent = mainFrame
+
+-- ==========================================
+-- HEADER (thanh tiêu đề và kéo thả)
+-- ==========================================
+local header = Instance.new("Frame")
+header.Size = UDim2.new(1, 0, 0, 48)
+header.BackgroundColor3 = Color3.fromRGB(25, 28, 36)
+header.BackgroundTransparency = 0
+header.BorderSizePixel = 0
+header.Parent = mainFrame
+
+local headerCorner = Instance.new("UICorner")
+headerCorner.CornerRadius = UDim.new(0, 12)
+headerCorner.Parent = header
+
+-- Icon và title
+local icon = Instance.new("TextLabel")
+icon.Size = UDim2.new(0, 32, 0, 32)
+icon.Position = UDim2.new(0, 12, 0, 8)
+icon.BackgroundTransparency = 1
+icon.Text = "⚔️"
+icon.TextColor3 = Color3.fromRGB(255, 100, 100)
+icon.TextSize = 20
+icon.Font = Enum.Font.SourceSansBold
+icon.Parent = header
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(0.6, 0, 0, 32)
+title.Position = UDim2.new(0, 50, 0, 8)
+title.BackgroundTransparency = 1
+title.Text = "ABYSS STRATEGY"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.TextSize = 16
+title.Font = Enum.Font.GothamBold
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = header
+
+-- Nút toggle AUTO
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(0, 100, 0, 32)
+toggleBtn.Position = UDim2.new(1, -112, 0, 8)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(34, 197, 94)
+toggleBtn.BackgroundTransparency = 0
+toggleBtn.Text = "🔴 AUTO ON"
+toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleBtn.TextSize = 12
+toggleBtn.Font = Enum.Font.GothamBold
+toggleBtn.BorderSizePixel = 0
+toggleBtn.Parent = header
+
+local toggleCorner = Instance.new("UICorner")
+toggleCorner.CornerRadius = UDim.new(0, 6)
+toggleCorner.Parent = toggleBtn
+
+-- ==========================================
+-- STATUS BAR (thanh trạng thái)
+-- ==========================================
+local statusBar = Instance.new("Frame")
+statusBar.Size = UDim2.new(1, -24, 0, 40)
+statusBar.Position = UDim2.new(0, 12, 0, 56)
+statusBar.BackgroundColor3 = Color3.fromRGB(30, 33, 42)
+statusBar.BackgroundTransparency = 0
+statusBar.BorderSizePixel = 0
+statusBar.Parent = mainFrame
+
+local statusCorner = Instance.new("UICorner")
+statusCorner.CornerRadius = UDim.new(0, 8)
+statusCorner.Parent = statusBar
+
+local statusIcon = Instance.new("TextLabel")
+statusIcon.Size = UDim2.new(0, 24, 0, 24)
+statusIcon.Position = UDim2.new(0, 10, 0, 8)
+statusIcon.BackgroundTransparency = 1
+statusIcon.Text = "📊"
+statusIcon.TextColor3 = Color3.fromRGB(255, 200, 100)
+statusIcon.TextSize = 14
+statusIcon.Parent = statusBar
+
+local statusText = Instance.new("TextLabel")
+statusText.Size = UDim2.new(1, -40, 0, 24)
+statusText.Position = UDim2.new(0, 40, 0, 8)
+statusText.BackgroundTransparency = 1
+statusText.Text = "ĐANG CHỜ PHÒNG..."
+statusText.TextColor3 = Color3.fromRGB(200, 200, 200)
+statusText.TextSize = 12
+statusText.Font = Enum.Font.SourceSansBold
+statusText.TextXAlignment = Enum.TextXAlignment.Left
+statusText.Parent = statusBar
+
+-- ==========================================
+-- DOOR PRIORITY SECTION (Ưu tiên cửa)
+-- ==========================================
+local doorSection = Instance.new("Frame")
+doorSection.Size = UDim2.new(1, -24, 0, 160)
+doorSection.Position = UDim2.new(0, 12, 0, 104)
+doorSection.BackgroundColor3 = Color3.fromRGB(22, 25, 32)
+doorSection.BackgroundTransparency = 0
+doorSection.BorderSizePixel = 0
+doorSection.ClipsDescendants = true
+doorSection.Parent = mainFrame
+
+local doorCorner = Instance.new("UICorner")
+doorCorner.CornerRadius = UDim.new(0, 8)
+doorCorner.Parent = doorSection
+
+-- Header của door section (có thể click để mở/rộng)
+local doorHeader = Instance.new("TextButton")
+doorHeader.Size = UDim2.new(1, 0, 0, 32)
+doorHeader.BackgroundColor3 = Color3.fromRGB(35, 38, 48)
+doorHeader.BackgroundTransparency = 0
+doorHeader.Text = "  🚪  ƯU TIÊN CỬA  ▼"
+doorHeader.TextColor3 = Color3.fromRGB(100, 255, 150)
+doorHeader.TextSize = 12
+doorHeader.Font = Enum.Font.GothamBold
+doorHeader.TextXAlignment = Enum.TextXAlignment.Left
+doorHeader.BorderSizePixel = 0
+doorHeader.Parent = doorSection
+
+local doorHeaderCorner = Instance.new("UICorner")
+doorHeaderCorner.CornerRadius = UDim.new(0, 8)
+doorHeaderCorner.Parent = doorHeader
+
+-- Scroll frame cho danh sách cửa
+local doorScroll = Instance.new("ScrollingFrame")
+doorScroll.Size = UDim2.new(1, -8, 0, 120)
+doorScroll.Position = UDim2.new(0, 4, 0, 36)
+doorScroll.BackgroundColor3 = Color3.fromRGB(18, 20, 26)
+doorScroll.BackgroundTransparency = 0
+doorScroll.BorderSizePixel = 0
+doorScroll.ScrollBarThickness = 4
+doorScroll.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 120)
+doorScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+doorScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+doorScroll.Visible = true
+doorScroll.Parent = doorSection
+
+local doorScrollCorner = Instance.new("UICorner")
+doorScrollCorner.CornerRadius = UDim.new(0, 6)
+doorScrollCorner.Parent = doorScroll
+
+local doorLayout = Instance.new("UIListLayout")
+doorLayout.Padding = UDim.new(0, 4)
+doorLayout.Parent = doorScroll
+
+-- ==========================================
+-- BUFF PRIORITY SECTION (Ưu tiên Buff)
+-- ==========================================
+local buffSection = Instance.new("Frame")
+buffSection.Size = UDim2.new(1, -24, 0, 160)
+buffSection.Position = UDim2.new(0, 12, 0, 272)
+buffSection.BackgroundColor3 = Color3.fromRGB(22, 25, 32)
+buffSection.BackgroundTransparency = 0
+buffSection.BorderSizePixel = 0
+buffSection.ClipsDescendants = true
+buffSection.Parent = mainFrame
+
+local buffCorner = Instance.new("UICorner")
+buffCorner.CornerRadius = UDim.new(0, 8)
+buffCorner.Parent = buffSection
+
+-- Header của buff section
+local buffHeader = Instance.new("TextButton")
+buffHeader.Size = UDim2.new(1, 0, 0, 32)
+buffHeader.BackgroundColor3 = Color3.fromRGB(35, 38, 48)
+buffHeader.BackgroundTransparency = 0
+buffHeader.Text = "  ✨  ƯU TIÊN BUFF  ▼"
+buffHeader.TextColor3 = Color3.fromRGB(255, 170, 0)
+buffHeader.TextSize = 12
+buffHeader.Font = Enum.Font.GothamBold
+buffHeader.TextXAlignment = Enum.TextXAlignment.Left
+buffHeader.BorderSizePixel = 0
+buffHeader.Parent = buffSection
+
+local buffHeaderCorner = Instance.new("UICorner")
+buffHeaderCorner.CornerRadius = UDim.new(0, 8)
+buffHeaderCorner.Parent = buffHeader
+
+-- Scroll frame cho danh sách buff
+local buffScroll = Instance.new("ScrollingFrame")
+buffScroll.Size = UDim2.new(1, -8, 0, 120)
+buffScroll.Position = UDim2.new(0, 4, 0, 36)
+buffScroll.BackgroundColor3 = Color3.fromRGB(18, 20, 26)
+buffScroll.BackgroundTransparency = 0
+buffScroll.BorderSizePixel = 0
+buffScroll.ScrollBarThickness = 4
+buffScroll.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 120)
+buffScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+buffScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+buffScroll.Visible = true
+buffScroll.Parent = buffSection
+
+local buffScrollCorner = Instance.new("UICorner")
+buffScrollCorner.CornerRadius = UDim.new(0, 6)
+buffScrollCorner.Parent = buffScroll
+
+local buffLayout = Instance.new("UIListLayout")
+buffLayout.Padding = UDim.new(0, 4)
+buffLayout.Parent = buffScroll
+
+-- ==========================================
+-- HÀM CẬP NHẬT UI LAYOUT
+-- ==========================================
+local isDoorExpanded = true
+local isBuffExpanded = false
+
+local function UpdateUILayout()
+    local currentY = 104 -- Vị trí bắt đầu của door section
+    
+    -- Door section
+    doorSection.Position = UDim2.new(0, 12, 0, currentY)
+    doorSection.Size = UDim2.new(1, -24, 0, isDoorExpanded and 160 or 40)
+    doorScroll.Visible = isDoorExpanded
+    doorHeader.Text = isDoorExpanded and "  🚪  ƯU TIÊN CỬA  ▲" or "  🚪  ƯU TIÊN CỬA  ▼"
+    
+    currentY = currentY + (isDoorExpanded and 160 or 40) + 8
+    
+    -- Buff section
+    buffSection.Position = UDim2.new(0, 12, 0, currentY)
+    buffSection.Size = UDim2.new(1, -24, 0, isBuffExpanded and 160 or 40)
+    buffScroll.Visible = isBuffExpanded
+    buffHeader.Text = isBuffExpanded and "  ✨  ƯU TIÊN BUFF  ▲" or "  ✨  ƯU TIÊN BUFF  ▼"
+    
+    currentY = currentY + (isBuffExpanded and 160 or 40) + 12
+    
+    -- Cập nhật kích thước main frame
+    mainFrame.Size = UDim2.new(0, 400, 0, currentY)
+end
+
+-- Sự kiện click cho door header
+doorHeader.MouseButton1Click:Connect(function()
+    isDoorExpanded = not isDoorExpanded
+    UpdateUILayout()
+end)
+
+-- Sự kiện click cho buff header
+buffHeader.MouseButton1Click:Connect(function()
+    isBuffExpanded = not isBuffExpanded
+    UpdateUILayout()
+end)
+
+-- ==========================================
+-- HỆ THỐNG KÉO THẢ MAIN FRAME
+-- ==========================================
+local dragging = false
+local dragStart = nil
+local startPos = nil
+
+header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = mainFrame.Position
     end
 end)
-mainFrame.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then mDragInput = input end
+
+header.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
 end)
+
 UserInputService.InputChanged:Connect(function(input)
-    if input == mDragInput and mDragging then
-        local delta = input.Position - mDragStart
-        mainFrame.Position = UDim2.new(mStartPos.X.Scale, mStartPos.X.Offset + delta.X, mStartPos.Y.Scale, mStartPos.Y.Offset + delta.Y)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - dragStart
+        mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end
 end)
 
-Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 12)
-
-local title = Instance.new("TextLabel") title.Size = UDim2.new(0.6, 0, 0, 50) title.Position = UDim2.new(0, 12, 0, 0) title.BackgroundTransparency = 1 title.Text = "⚙️ AUTO CLAIM REWARDS" title.TextColor3 = Color3.fromRGB(0, 210, 255) title.TextSize = 12 title.Font = Enum.Font.SourceSansBold title.TextXAlignment = Enum.TextXAlignment.Left title.Parent = mainFrame
-local toggleBtn = Instance.new("TextButton") toggleBtn.Size = UDim2.new(0, 95, 0, 30) toggleBtn.Position = UDim2.new(0.72, 0, 0, 10) toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 90) toggleBtn.Text = "🔴 AUTO: ON" toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255) toggleBtn.Font = Enum.Font.SourceSansBold toggleBtn.TextSize = 11 toggleBtn.Parent = mainFrame
-Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 6)
-
-local logTalent = Instance.new("TextLabel") logTalent.Size = UDim2.new(1, -20, 0, 35) logTalent.Position = UDim2.new(0, 10, 0, 55) logTalent.BackgroundColor3 = Color3.fromRGB(35, 40, 50) logTalent.Text = "TALENT: ĐANG CHỜ PHÒNG..." logTalent.TextColor3 = Color3.fromRGB(200, 200, 200) logTalent.TextSize = 12 logTalent.Font = Enum.Font.SourceSansBold logTalent.Parent = mainFrame
-Instance.new("UICorner", logTalent).CornerRadius = UDim.new(0, 6)
-local logDoor = Instance.new("TextLabel") logDoor.Size = UDim2.new(1, -20, 0, 35) logDoor.Position = UDim2.new(0, 10, 0, 95) logDoor.BackgroundColor3 = Color3.fromRGB(35, 40, 50) logDoor.Text = "CỬA: ĐANG QUÉT..." logDoor.TextColor3 = Color3.fromRGB(200, 200, 200) logDoor.TextSize = 12 logDoor.Font = Enum.Font.SourceSansBold logDoor.Parent = mainFrame
-Instance.new("UICorner", logDoor).CornerRadius = UDim.new(0, 6)
-
 -- ==========================================
--- HỆ THỐNG KÉO THẢ DRAG & DROP
+-- DRAG & DROP SYSTEM VỚI PREVIEW (FIXED)
 -- ==========================================
-local draggingItem = nil
-local dragVisual = nil
-local dragOffset = Vector2.new(0, 0)
-local dragTargetList = nil
-local dragTargetIndex = nil
+local DragDrop = {
+    active = false,
+    sourceIndex = nil,
+    sourceList = nil,
+    ghost = nil,
+    offset = Vector2.new(),
+    scrollFrame = nil,
+    isDoor = false,
+    previewTargetIndex = nil
+}
 
-local function RenderList(scrollFrame, dataList, isDoor)
+-- Tạo row cho danh sách
+local function CreateDragRow(index, name, isGhost, isHighlight)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, -8, 0, 32)
+    
+    if isGhost then
+        row.BackgroundColor3 = Color3.fromRGB(80, 85, 105)
+        row.BackgroundTransparency = 0.8
+    elseif isHighlight then
+        row.BackgroundColor3 = Color3.fromRGB(50, 150, 200)  -- Màu xanh preview
+        row.BackgroundTransparency = 0.3
+    else
+        row.BackgroundColor3 = Color3.fromRGB(35, 38, 48)
+        row.BackgroundTransparency = 0
+    end
+    
+    row.BorderSizePixel = 0
+    row.ClipsDescendants = true
+    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
+    
+    local dragHandle = Instance.new("TextButton")
+    dragHandle.Size = UDim2.new(0, 32, 1, 0)
+    dragHandle.BackgroundColor3 = isGhost and Color3.fromRGB(60, 65, 80) or Color3.fromRGB(50, 55, 70)
+    dragHandle.Text = "⋮⋮"
+    dragHandle.TextColor3 = isGhost and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(180, 180, 200)
+    dragHandle.TextSize = 14
+    dragHandle.Font = Enum.Font.SourceSansBold
+    dragHandle.AutoButtonColor = false
+    dragHandle.Parent = row
+    Instance.new("UICorner", dragHandle).CornerRadius = UDim.new(0, 6)
+    
+    local txt = Instance.new("TextLabel")
+    txt.Size = UDim2.new(1, -40, 1, 0)
+    txt.Position = UDim2.new(0, 38, 0, 0)
+    txt.BackgroundTransparency = 1
+    txt.Text = string.format("%d. %s", index, name)
+    txt.TextColor3 = isGhost and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(220, 220, 220)
+    txt.Font = Enum.Font.SourceSans
+    txt.TextSize = 11
+    txt.TextXAlignment = Enum.TextXAlignment.Left
+    txt.TextTruncate = Enum.TextTruncate.AtEnd
+    txt.Parent = row
+    
+    return row
+end
+
+-- Render danh sách cơ bản (không preview)
+local function RenderListBasic(scrollFrame, dataList, isDoor)
     for _, child in ipairs(scrollFrame:GetChildren()) do
         if child:IsA("Frame") then child:Destroy() end
     end
     
     if isDoor then
         for k in pairs(PriorityScores) do PriorityScores[k] = nil end
-        for index, name in ipairs(dataList) do PriorityScores[name] = index end
+        for i, name in ipairs(dataList) do PriorityScores[name] = i end
     end
     
-    for index, name in ipairs(dataList) do
-        local row = Instance.new("Frame")
-        row.Size = UDim2.new(1, -10, 0, 32)
-        row.BackgroundColor3 = Color3.fromRGB(35, 38, 48)
+    for i, name in ipairs(dataList) do
+        local row = CreateDragRow(i, name, false, false)
+        row:SetAttribute("Index", i)
         row.Parent = scrollFrame
-        row:SetAttribute("Index", index)
-        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
         
-        -- Vùng kéo thả (nút kéo 3 gạch)
-        local dragHandle = Instance.new("TextButton")
-        dragHandle.Size = UDim2.new(0, 35, 1, 0)
-        dragHandle.Position = UDim2.new(0, 0, 0, 0)
-        dragHandle.BackgroundColor3 = Color3.fromRGB(60, 65, 80)
-        dragHandle.Text = "☰"
-        dragHandle.TextColor3 = Color3.fromRGB(200, 200, 200)
-        dragHandle.TextSize = 16
-        dragHandle.Font = Enum.Font.SourceSansBold
-        dragHandle.AutoButtonColor = false
-        dragHandle.Parent = row
-        Instance.new("UICorner", dragHandle).CornerRadius = UDim.new(0, 6)
-        
-        -- Text hiển thị
-        local txt = Instance.new("TextLabel")
-        txt.Size = UDim2.new(1, -45, 1, 0)
-        txt.Position = UDim2.new(0, 40, 0, 0)
-        txt.BackgroundTransparency = 1
-        txt.Text = string.format("%d. %s", index, name)
-        txt.TextColor3 = Color3.fromRGB(220, 220, 220)
-        txt.Font = Enum.Font.SourceSansBold
-        txt.TextSize = 12
-        txt.TextXAlignment = Enum.TextXAlignment.Left
-        txt.Parent = row
-        
-        -- Sự kiện kéo thả
-        dragHandle.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                draggingItem = row
-                dragTargetList = dataList
-                dragTargetIndex = row:GetAttribute("Index")
+        local handle = row:FindFirstChildWhichIsA("TextButton")
+        if handle then
+            handle.MouseButton1Down:Connect(function()
+                if DragDrop.active then return end
+                
+                -- Bắt đầu kéo
+                DragDrop.active = true
+                DragDrop.sourceIndex = i
+                DragDrop.sourceList = dataList
+                DragDrop.scrollFrame = scrollFrame
+                DragDrop.isDoor = isDoor
+                DragDrop.previewTargetIndex = i
                 
                 local mousePos = UserInputService:GetMouseLocation()
-                local rowAbsolutePos = row.AbsolutePosition
-                local rowSize = row.AbsoluteSize
+                local rowPos = row.AbsolutePosition
+                DragDrop.offset = Vector2.new(mousePos.X - rowPos.X, mousePos.Y - rowPos.Y)
                 
-                dragOffset = Vector2.new(
-                    mousePos.X - rowAbsolutePos.X,
-                    mousePos.Y - rowAbsolutePos.Y
-                )
+                -- Tạo ghost
+                DragDrop.ghost = CreateDragRow(i, name, true, false)
+                DragDrop.ghost.Size = UDim2.new(0, row.AbsoluteSize.X, 0, 32)
+                DragDrop.ghost.ZIndex = 100
+                DragDrop.ghost.Position = UDim2.new(0, mousePos.X - DragDrop.offset.X, 0, mousePos.Y - DragDrop.offset.Y)
+                DragDrop.ghost.Parent = screenGui
                 
-                dragVisual = row:Clone()
-                dragVisual.AnchorPoint = Vector2.new(0, 0)
-                dragVisual.Size = UDim2.fromOffset(rowSize.X, rowSize.Y)
-                dragVisual.Position = UDim2.fromOffset(mousePos.X - dragOffset.X, mousePos.Y - dragOffset.Y)
-                dragVisual.BackgroundColor3 = Color3.fromRGB(80, 85, 105)
-                dragVisual.ZIndex = 10
-                dragVisual.Parent = screenGui
-                
+                -- Highlight row đang kéo
                 row.BackgroundTransparency = 0.5
-                for _, child in ipairs(row:GetChildren()) do
+                for _, child in ipairs(row:GetDescendants()) do
                     if child:IsA("TextLabel") or child:IsA("TextButton") then
                         child.TextTransparency = 0.5
                     end
                 end
-                
-                input.Changed:Connect(function()
-                    if input.UserInputState == Enum.UserInputState.End then
-                        if dragVisual then
-                            TweenService:Create(dragVisual, TweenInfo.new(0.1), {BackgroundTransparency = 1}):Play()
-                            task.wait(0.1)
-                            dragVisual:Destroy()
-                            dragVisual = nil
-                        end
-                        
-                        row.BackgroundTransparency = 0
-                        for _, child in ipairs(row:GetChildren()) do
-                            if child:IsA("TextLabel") or child:IsA("TextButton") then
-                                child.TextTransparency = 0
-                            end
-                        end
-                        
-                        draggingItem = nil
-                        dragTargetList = nil
-                        dragTargetIndex = nil
-                        RenderList(scrollFrame, dataList, isDoor)
-                    end
-                end)
-            end
-        end)
+            end)
+        end
     end
 end
 
--- Xử lý di chuyển chuột để hoán đổi vị trí
+-- Cập nhật UI preview (không render lại toàn bộ)
+local function UpdatePreviewUI(targetIndex)
+    if not DragDrop.scrollFrame then return end
+    
+    -- Reset tất cả row về màu bình thường
+    for _, child in ipairs(DragDrop.scrollFrame:GetChildren()) do
+        if child:IsA("Frame") then
+            child.BackgroundColor3 = Color3.fromRGB(35, 38, 48)
+            child.BackgroundTransparency = 0
+            -- Xóa highlight cũ
+            local highlight = child:FindFirstChild("HighlightBorder")
+            if highlight then highlight:Destroy() end
+        end
+    end
+    
+    -- Highlight row tại vị trí target
+    local targetRow = nil
+    for _, child in ipairs(DragDrop.scrollFrame:GetChildren()) do
+        if child:IsA("Frame") and child:GetAttribute("Index") == targetIndex then
+            targetRow = child
+            break
+        end
+    end
+    
+    if targetRow and targetIndex ~= DragDrop.sourceIndex then
+        targetRow.BackgroundColor3 = Color3.fromRGB(50, 150, 200)
+        targetRow.BackgroundTransparency = 0.3
+        
+        -- Thêm border highlight
+        local border = Instance.new("Frame")
+        border.Name = "HighlightBorder"
+        border.Size = UDim2.new(1, 0, 1, 0)
+        border.Position = UDim2.new(0, 0, 0, 0)
+        border.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        border.BackgroundTransparency = 0.5
+        border.BorderSizePixel = 0
+        border.Parent = targetRow
+    end
+end
+
+-- Xử lý di chuyển chuột
 UserInputService.InputChanged:Connect(function(input)
-    if draggingItem and dragVisual and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+    if not DragDrop.active or not DragDrop.ghost then return end
+    if input.UserInputType == Enum.UserInputType.MouseMovement then
         local mousePos = UserInputService:GetMouseLocation()
-        dragVisual.Position = UDim2.fromOffset(mousePos.X - dragOffset.X, mousePos.Y - dragOffset.Y)
+        DragDrop.ghost.Position = UDim2.new(0, mousePos.X - DragDrop.offset.X, 0, mousePos.Y - DragDrop.offset.Y)
         
-        local visualCenterY = dragVisual.AbsolutePosition.Y + (dragVisual.AbsoluteSize.Y / 2)
+        -- Tìm vị trí target dựa vào ghost
+        local ghostY = DragDrop.ghost.AbsolutePosition.Y + 16
+        local targetIndex = nil
         
-        local rows = {}
-        for _, child in ipairs(draggingItem.Parent:GetChildren()) do
-            if child:IsA("Frame") and child ~= draggingItem then
-                table.insert(rows, child)
+        if DragDrop.scrollFrame then
+            local rows = {}
+            for _, child in ipairs(DragDrop.scrollFrame:GetChildren()) do
+                if child:IsA("Frame") then
+                    table.insert(rows, child)
+                end
+            end
+            
+            table.sort(rows, function(a, b)
+                return a.AbsolutePosition.Y < b.AbsolutePosition.Y
+            end)
+            
+            for i, row in ipairs(rows) do
+                local rowCenterY = row.AbsolutePosition.Y + (row.AbsoluteSize.Y / 2)
+                if ghostY < rowCenterY then
+                    targetIndex = row:GetAttribute("Index")
+                    break
+                end
+            end
+            
+            if not targetIndex and #rows > 0 then
+                targetIndex = #DragDrop.sourceList
             end
         end
         
-        table.sort(rows, function(a, b)
-            return a.AbsolutePosition.Y < b.AbsolutePosition.Y
-        end)
-        
-        local newIndex = nil
-        for i, otherRow in ipairs(rows) do
-            local otherCenterY = otherRow.AbsolutePosition.Y + (otherRow.AbsoluteSize.Y / 2)
-            if visualCenterY < otherCenterY then
-                newIndex = otherRow:GetAttribute("Index")
-                break
-            end
-        end
-        
-        if newIndex and newIndex ~= dragTargetIndex then
-            local temp = dragTargetList[dragTargetIndex]
-            dragTargetList[dragTargetIndex] = dragTargetList[newIndex]
-            dragTargetList[newIndex] = temp
-            
-            dragTargetIndex = newIndex
-            
-            local isDoorList = (dragTargetList == PriorityList)
-            RenderList(draggingItem.Parent, dragTargetList, isDoorList)
+        -- Cập nhật preview nếu target thay đổi
+        if targetIndex and targetIndex ~= DragDrop.previewTargetIndex then
+            DragDrop.previewTargetIndex = targetIndex
+            UpdatePreviewUI(targetIndex)
         end
     end
 end)
 
--- ==========================================
--- TẠO UI DROP DOWN
--- ==========================================
-local isDoorOpen = false
-local isBuffOpen = false
-
-local doorToggleBtn = Instance.new("TextButton")
-doorToggleBtn.Size = UDim2.new(1, -20, 0, 25)
-doorToggleBtn.BackgroundColor3 = Color3.fromRGB(45, 50, 65)
-doorToggleBtn.Text = "🚪 BẢNG ƯU TIÊN CỬA ▼"
-doorToggleBtn.TextColor3 = Color3.fromRGB(0, 255, 150)
-doorToggleBtn.TextSize = 11
-doorToggleBtn.Font = Enum.Font.SourceSansBold
-doorToggleBtn.Parent = mainFrame
-Instance.new("UICorner", doorToggleBtn).CornerRadius = UDim.new(0, 6)
-
-local doorScroll = Instance.new("ScrollingFrame")
-doorScroll.Size = UDim2.new(1, -20, 0, 130)
-doorScroll.BackgroundColor3 = Color3.fromRGB(25, 27, 35)
-doorScroll.BorderSizePixel = 0
-doorScroll.ScrollBarThickness = 4
-doorScroll.Visible = false
-doorScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-doorScroll.Parent = mainFrame
-local doorLayout = Instance.new("UIListLayout", doorScroll) doorLayout.Padding = UDim.new(0, 4)
-Instance.new("UICorner", doorScroll).CornerRadius = UDim.new(0, 6)
-
-local buffToggleBtn = Instance.new("TextButton")
-buffToggleBtn.Size = UDim2.new(1, -20, 0, 25)
-buffToggleBtn.BackgroundColor3 = Color3.fromRGB(45, 50, 65)
-buffToggleBtn.Text = "✨ BẢNG ƯU TIÊN BUFF ▼"
-buffToggleBtn.TextColor3 = Color3.fromRGB(255, 170, 0)
-buffToggleBtn.TextSize = 11
-buffToggleBtn.Font = Enum.Font.SourceSansBold
-buffToggleBtn.Parent = mainFrame
-Instance.new("UICorner", buffToggleBtn).CornerRadius = UDim.new(0, 6)
-
-local buffScroll = Instance.new("ScrollingFrame")
-buffScroll.Size = UDim2.new(1, -20, 0, 130)
-buffScroll.BackgroundColor3 = Color3.fromRGB(25, 27, 35)
-buffScroll.BorderSizePixel = 0
-buffScroll.ScrollBarThickness = 4
-buffScroll.Visible = false
-buffScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-buffScroll.Parent = mainFrame
-local buffLayout = Instance.new("UIListLayout", buffScroll) buffLayout.Padding = UDim.new(0, 4)
-Instance.new("UICorner", buffScroll).CornerRadius = UDim.new(0, 6)
-
-local function UpdateUILayout()
-    local startY = 135
-    doorToggleBtn.Position = UDim2.new(0, 10, 0, startY)
-    startY = startY + 25 + 5
-    if isDoorOpen then
-        doorScroll.Visible = true
-        doorScroll.Position = UDim2.new(0, 10, 0, startY)
-        startY = startY + 130 + 5
-    else doorScroll.Visible = false end
-    
-    buffToggleBtn.Position = UDim2.new(0, 10, 0, startY)
-    startY = startY + 25 + 5
-    if isBuffOpen then
-        buffScroll.Visible = true
-        buffScroll.Position = UDim2.new(0, 10, 0, startY)
-        startY = startY + 130 + 5
-    else buffScroll.Visible = false end
-    
-    mainFrame.Size = UDim2.new(0, 380, 0, startY + 5)
-end
-
-doorToggleBtn.MouseButton1Click:Connect(function()
-    isDoorOpen = not isDoorOpen
-    doorToggleBtn.Text = isDoorOpen and "🚪 BẢNG ƯU TIÊN CỬA ▲" or "🚪 BẢNG ƯU TIÊN CỬA ▼"
-    UpdateUILayout()
+-- Xử lý thả chuột
+UserInputService.InputEnded:Connect(function(input)
+    if not DragDrop.active then return end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        
+        -- Thực hiện đổi chỗ
+        if DragDrop.previewTargetIndex and DragDrop.previewTargetIndex ~= DragDrop.sourceIndex then
+            local item = DragDrop.sourceList[DragDrop.sourceIndex]
+            table.remove(DragDrop.sourceList, DragDrop.sourceIndex)
+            
+            if DragDrop.previewTargetIndex > DragDrop.sourceIndex then
+                table.insert(DragDrop.sourceList, DragDrop.previewTargetIndex - 1, item)
+            else
+                table.insert(DragDrop.sourceList, DragDrop.previewTargetIndex, item)
+            end
+        end
+        
+        -- Xóa ghost
+        if DragDrop.ghost then
+            DragDrop.ghost:Destroy()
+            DragDrop.ghost = nil
+        end
+        
+        -- Render lại danh sách
+        if DragDrop.scrollFrame and DragDrop.sourceList then
+            RenderListBasic(DragDrop.scrollFrame, DragDrop.sourceList, DragDrop.isDoor)
+        end
+        
+        -- Reset state
+        DragDrop.active = false
+        DragDrop.sourceIndex = nil
+        DragDrop.sourceList = nil
+        DragDrop.scrollFrame = nil
+        DragDrop.previewTargetIndex = nil
+    end
 end)
 
-buffToggleBtn.MouseButton1Click:Connect(function()
-    isBuffOpen = not isBuffOpen
-    buffToggleBtn.Text = isBuffOpen and "✨ BẢNG ƯU TIÊN BUFF ▲" or "✨ BẢNG ƯU TIÊN BUFF ▼"
-    UpdateUILayout()
-end)
-
-RenderList(doorScroll, PriorityList, true)
-RenderList(buffScroll, PRIORITY_BUFF_LIST, false)
+-- Khởi tạo danh sách
+RenderListBasic(doorScroll, PriorityList, true)
+RenderListBasic(buffScroll, PRIORITY_BUFF_LIST, false)
 UpdateUILayout()
-
-toggleBtn.MouseButton1Click:Connect(function()
-    isAutoEnabled = not isAutoEnabled
-    if isAutoEnabled then
-        toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 90) toggleBtn.Text = "AUTO: ON"
-        logTalent.Text = "TRẠNG THÁI: ĐANG CHỜ PHÒNG..." logTalent.TextColor3 = Color3.fromRGB(200, 200, 200)
-        logDoor.Text = "CỬA: ĐANG QUÉT..." logDoor.TextColor3 = Color3.fromRGB(200, 200, 200)
-    else
-        toggleBtn.BackgroundColor3 = Color3.fromRGB(170, 40, 40) toggleBtn.Text = "AUTO: OFF"
-        logTalent.Text = "ĐÃ TẠM DỪNG AUTO" logTalent.TextColor3 = Color3.fromRGB(150, 150, 150)
-        logDoor.Text = "ĐÃ TẠM DỪNG AUTO" logDoor.TextColor3 = Color3.fromRGB(150, 150, 150)
-        isProcessing = false 
-        pcall(function() if player.Character and player.Character:FindFirstChild("Humanoid") then player.Character.Humanoid:MoveTo(player.Character.HumanoidRootPart.Position) end end)
-    end
-end)
 
 -- ==========================================
 -- CÁC HÀM AUTO (GIỮ NGUYÊN)
+-- ==========================================
+-- ==========================================
+-- HÀM CHỌN BUFF (DÙNG REMOTE + AUTO SORT)
 -- ==========================================
 local function AutoPickBuff()
     local mainGui = player.PlayerGui:FindFirstChild("MainGui")
     local fmContent = mainGui and mainGui:FindFirstChild("AbyssSelectTalentView") and mainGui.AbyssSelectTalentView:FindFirstChild("AbyssSelectTalentView") and mainGui.AbyssSelectTalentView.AbyssSelectTalentView:FindFirstChild("FmContent")
     if not fmContent then return false end
     
-    local bestItemCell, bestScore = nil, 999 
+    -- Bước 1: Lấy tất cả các thẻ Buff đang hiển thị và sắp xếp theo trục X (trái qua phải)
+    local buffCells = {}
     for _, itemCell in pairs(fmContent:GetChildren()) do
         if itemCell:IsA("GuiObject") and itemCell.Name == "ItemCell" and itemCell.Visible == true then
-            local buffName = ""
-            for _, child in pairs(itemCell:GetDescendants()) do
-                if child:IsA("TextLabel") and child.Name == "LabName" and child.Text ~= "" then 
-                    buffName = child.Text 
-                    break
-                end
+            table.insert(buffCells, itemCell)
+        end
+    end
+
+    if #buffCells == 0 then return false end
+
+    -- Sắp xếp từ Trái -> Phải để lấy index chuẩn cho Remote (1, 2, 3)
+    table.sort(buffCells, function(a, b)
+        return a.AbsolutePosition.X < b.AbsolutePosition.X
+    end)
+    
+    local bestIndex = 1 -- Mặc định chọn thẻ ngoài cùng bên trái nếu không cái nào khớp ưu tiên
+    local bestScore = 999 
+    local bestBuffName = "Không xác định"
+    
+    -- Bước 2: Quét qua từng thẻ đã được sắp xếp để chấm điểm
+    for index, itemCell in ipairs(buffCells) do
+        local buffName = ""
+        for _, child in pairs(itemCell:GetDescendants()) do
+            if child:IsA("TextLabel") and child.Name == "LabName" and child.Text ~= "" then 
+                buffName = child.Text 
+                break
             end
-            
-            if buffName ~= "" then
-                for score, pName in ipairs(PRIORITY_BUFF_LIST) do
-                    if string.lower(buffName) == string.lower(pName) then
-                        if score < bestScore then bestScore = score; bestItemCell = itemCell end
-                        break 
+        end
+        
+        if buffName ~= "" then
+            for score, pName in ipairs(PRIORITY_BUFF_LIST) do
+                if string.lower(buffName) == string.lower(pName) then
+                    if score < bestScore then 
+                        bestScore = score
+                        bestIndex = index 
+                        bestBuffName = buffName
                     end
+                    break 
                 end
             end
         end
     end
     
-    if not bestItemCell then
-        for _, itemCell in pairs(fmContent:GetChildren()) do
-            if itemCell:IsA("GuiObject") and itemCell.Name == "ItemCell" and itemCell.Visible == true then bestItemCell = itemCell; break end
+    -- Nếu không cái nào nằm trong danh sách ưu tiên, lấy tên của cái số 1 để in ra log
+    if bestScore == 999 then
+        for _, child in pairs(buffCells[1]:GetDescendants()) do
+            if child:IsA("TextLabel") and child.Name == "LabName" and child.Text ~= "" then 
+                bestBuffName = child.Text 
+                break
+            end
         end
     end
     
-    if bestItemCell then
-        local btSelect = bestItemCell:FindFirstChild("BtSelect")
-        if btSelect and btSelect.AbsoluteSize.X > 0 then
-            local targetX = btSelect.AbsolutePosition.X + (btSelect.AbsoluteSize.X / 2)
-            local targetY = btSelect.AbsolutePosition.Y + (btSelect.AbsoluteSize.Y / 2) + 36 
-            VirtualInputManager:SendMouseButtonEvent(targetX, targetY, 0, true, game, 1) 
-            task.wait(0.05)
-            VirtualInputManager:SendMouseButtonEvent(targetX, targetY, 0, false, game, 1)
-            return true
-        end
-    end
-    return false
+    -- Bước 3: IN RA CONSOLE ĐỂ BẠN TEST
+    --print(string.format("✨ [AUTO BUFF] Quyết định chọn Buff: '%s' (Thẻ số %d)", bestBuffName, bestIndex))
+    
+    -- Bước 4: GỌI THẲNG REMOTE (Tốc độ tức thời)
+    pcall(function()
+        local args = {
+            "AbyssSelectTalentChannel",
+            bestIndex
+        }
+        game:GetService("ReplicatedStorage"):WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc"):InvokeServer(unpack(args))
+    end)
+    
+    return true
 end
 
 local speedConnection = nil
@@ -456,10 +740,8 @@ task.spawn(function()
                     roomEnterTime = tick() 
                     clearConfirmTimer = 0 
                     
-                    logDoor.Text = "CỬA: SANG TẦNG MỚI!\nĐANG CHỜ..."
-                    logDoor.TextColor3 = Color3.fromRGB(0, 215, 255)
-                    logTalent.Text = "TRẠNG THÁI: ĐANG QUÉT PHÒNG..."
-                    logTalent.TextColor3 = Color3.fromRGB(200, 200, 200)
+                    statusText.Text = "CỬA: SANG TẦNG MỚI!\nĐANG CHỜ..."
+                    statusText.TextColor3 = Color3.fromRGB(0, 215, 255)
                 end
                 lastPosition = currentPos
             end
@@ -480,8 +762,8 @@ task.spawn(function()
             if not isInDungeon then
                 waveCleared = false
                 clearConfirmTimer = 0
-                logTalent.Text = "TRẠNG THÁI: ĐANG Ở SẢNH CHỜ..."
-                logTalent.TextColor3 = Color3.fromRGB(150, 150, 150)
+                statusText.Text = "TRẠNG THÁI: CHƯA VÀO..."
+                statusText.TextColor3 = Color3.fromRGB(150, 150, 150)
             else
                 local hasMonsters = false
                 local monstersFolder = Workspace:FindFirstChild("Monsters")
@@ -500,18 +782,18 @@ task.spawn(function()
                 if hasMonsters or isClockVisible then
                     waveCleared = false
                     clearConfirmTimer = 0 
-                    logTalent.Text = "TRẠNG THÁI: ĐANG ĐÁNH QUÁI..."
-                    logTalent.TextColor3 = Color3.fromRGB(255, 100, 100)
+                    statusText.Text = "TRẠNG THÁI: ĐANG ĐÁNH QUÁI..."
+                    statusText.TextColor3 = Color3.fromRGB(255, 100, 100)
                 else
                     if not waveCleared then
                         clearConfirmTimer = clearConfirmTimer + 0.05
                         if clearConfirmTimer >= 1.5 then 
                             waveCleared = true
-                            logTalent.Text = "TRẠNG THÁI: ĐÃ DỌN XONG!\nTÌM QUÀ..."
-                            logTalent.TextColor3 = Color3.fromRGB(100, 255, 100)
+                            statusText.Text = "TRẠNG THÁI: ĐÃ DỌN XONG!\nTÌM QUÀ..."
+                            statusText.TextColor3 = Color3.fromRGB(100, 255, 100)
                         else
-                            logTalent.Text = "TRẠNG THÁI: CHỜ XÁC NHẬN CLEAR..."
-                            logTalent.TextColor3 = Color3.fromRGB(255, 200, 50)
+                            statusText.Text = "TRẠNG THÁI: CHỜ XÁC NHẬN CLEAR..."
+                            statusText.TextColor3 = Color3.fromRGB(255, 200, 50)
                         end
                     end
                 end
@@ -568,8 +850,8 @@ local function coreAutoSystem()
     local chosenDoor = nil
     if #currentDoors == 1 then
         chosenDoor = currentDoors[1]
-        logDoor.Text = "CỬA: CHỈ CÓ 1 CỬA -> VÀO LUÔN!"
-        logDoor.TextColor3 = Color3.fromRGB(100, 255, 100)
+        statusText.Text = "CỬA: CHỈ CÓ 1 CỬA -> VÀO LUÔN!"
+        statusText.TextColor3 = Color3.fromRGB(100, 255, 100)
     else
         local door1, door2 = currentDoors[1], currentDoors[2]
         local score1 = PriorityScores[door1.name] or 99
@@ -577,16 +859,16 @@ local function coreAutoSystem()
 
         if score1 < score2 then
             chosenDoor = door1
-            logDoor.Text = "CHỌN CỬA 1: " .. door1.name .. " (Hạng " .. score1 .. ")"
-            logDoor.TextColor3 = Color3.fromRGB(100, 255, 100)
+            statusText.Text = "CHỌN CỬA 1: " .. door1.name .. " (Hạng " .. score1 .. ")"
+            statusText.TextColor3 = Color3.fromRGB(100, 255, 100)
         elseif score2 < score1 then
             chosenDoor = door2
-            logDoor.Text = "CHỌN CỬA 2: " .. door2.name .. " (Hạng " .. score2 .. ")"
-            logDoor.TextColor3 = Color3.fromRGB(100, 255, 100)
+            statusText.Text = "CHỌN CỬA 2: " .. door2.name .. " (Hạng " .. score2 .. ")"
+            statusText.TextColor3 = Color3.fromRGB(100, 255, 100)
         else
             chosenDoor = door2
-            logDoor.Text = "CỬA: ĐỒNG HẠNG -> ÉP CỬA 2 QUA NHANH!"
-            logDoor.TextColor3 = Color3.fromRGB(255, 150, 50)
+            statusText.Text = "CỬA: ĐỒNG HẠNG -> ÉP CỬA 2 QUA NHANH!"
+            statusText.TextColor3 = Color3.fromRGB(255, 150, 50)
         end
     end
 
@@ -602,8 +884,8 @@ local function coreAutoSystem()
 
         if STAGES_WITH_BUFF[currentStageUI] then
             if doGUI then
-                logTalent.Text = "TALENT: ĐANG CHẠY ĐẾN CỘT BUFF..."
-                logTalent.TextColor3 = Color3.fromRGB(255, 215, 0)
+                statusText.Text = "TALENT: ĐANG CHẠY ĐẾN CỘT BUFF..."
+                statusText.TextColor3 = Color3.fromRGB(255, 215, 0)
                 
                 local targetPos = nil
                 if doGUI:IsA("BasePart") then targetPos = doGUI.Position
@@ -629,7 +911,7 @@ local function coreAutoSystem()
                         hum:MoveTo(rootPart.Position)
                         
                         task.wait(0.05) 
-                        logTalent.Text = "TALENT: ĐANG MỞ BẢNG BUFF..."
+                        statusText.Text = "TALENT: ĐANG MỞ BẢNG BUFF..."
                         VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
                         task.wait(0.05)
                         VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
@@ -637,22 +919,22 @@ local function coreAutoSystem()
                         task.wait(0.15) 
                         AutoPickBuff()
                         
-                        logTalent.Text = "TALENT: ĐÃ LẤY XONG.\nRA CỬA!"
-                        logTalent.TextColor3 = Color3.fromRGB(0, 255, 100)
+                        statusText.Text = "TALENT: ĐÃ LẤY XONG.\nRA CỬA!"
+                        statusText.TextColor3 = Color3.fromRGB(0, 255, 100)
                     end
                 else
-                    logTalent.Text = "TALENT: LỖI TỌA ĐỘ TRỤ."
-                    logTalent.TextColor3 = Color3.fromRGB(180, 60, 60)
+                    statusText.Text = "TALENT: LỖI TỌA ĐỘ TRỤ."
+                    statusText.TextColor3 = Color3.fromRGB(180, 60, 60)
                 end
             else
-                logTalent.Text = "TALENT: ĐANG ĐỢI TRỤ RỚT..."
-                logTalent.TextColor3 = Color3.fromRGB(180, 180, 180)
+                statusText.Text = "TALENT: ĐANG ĐỢI TRỤ RỚT..."
+                statusText.TextColor3 = Color3.fromRGB(180, 180, 180)
                 isProcessing = false
                 return 
             end
         else
-            logTalent.Text = "TALENT: MÀN KHÔNG CÓ BUFF. BỎ QUA!"
-            logTalent.TextColor3 = Color3.fromRGB(150, 150, 150)
+            statusText.Text = "TALENT: MÀN KHÔNG CÓ BUFF. BỎ QUA!"
+            statusText.TextColor3 = Color3.fromRGB(150, 150, 150)
         end
         hasHandledTalentThisRoom = true
     end
@@ -677,6 +959,31 @@ local function coreAutoSystem()
         _G.IsWaitingOnDoor = true 
         logDoor.Text = "CỬA: ĐANG ĐỨNG CHỜ TELEPORT..."
         logDoor.TextColor3 = Color3.fromRGB(0, 255, 255)
+
+        -- ==========================================
+        -- BẮT ĐẦU ÉP CHẶT VỊ TRÍ CHỐNG AI GAME KÉO 
+        -- ==========================================
+        if hum then
+            local targetLockPos = chosenDoor.part.Position
+            
+            -- Vòng lặp này sẽ chạy cho đến khi nhân vật thực sự bị dịch chuyển sang tầng mới
+            -- (Khi sang tầng mới, state machine ở trên sẽ tự động set isWaitingForTeleport = false để ngắt vòng lặp này)
+            while isWaitingForTeleport and isAutoEnabled do
+                local dist = (rootPart.Position - targetLockPos).Magnitude
+                
+                -- Nếu bị AI kéo lệch khỏi tâm bục quá 2 stud -> Giật CFrame thẳng về lại tâm bục (Cao hơn 3 stud để không lún)
+                if dist > 2 then
+                    rootPart.CFrame = CFrame.new(targetLockPos + Vector3.new(0, 3, 0))
+                end
+                
+                -- Liên tục spam MoveTo vào tâm bục để đè/hủy lệnh di chuyển của AI game
+                hum:MoveTo(targetLockPos)
+                
+                task.wait(0.05)
+            end
+        end
+        -- ==========================================
+
     end
     
     isProcessing = false 
@@ -687,5 +994,22 @@ task.spawn(function()
         local success, err = pcall(coreAutoSystem)
         if not success then warn("AUTO ERROR: " .. tostring(err)) end
         task.wait(0.05) 
+    end
+end)
+
+-- Cập nhật trạng thái toggle button
+toggleBtn.MouseButton1Click:Connect(function()
+    isAutoEnabled = not isAutoEnabled
+    if isAutoEnabled then
+        toggleBtn.BackgroundColor3 = Color3.fromRGB(34, 197, 94)
+        toggleBtn.Text = "🔴 AUTO ON"
+        statusText.Text = "ĐANG HOẠT ĐỘNG..."
+        statusText.TextColor3 = Color3.fromRGB(100, 255, 100)
+    else
+        toggleBtn.BackgroundColor3 = Color3.fromRGB(220, 38, 38)
+        toggleBtn.Text = "⏹️ AUTO OFF"
+        statusText.Text = "ĐÃ TẠM DỪNG"
+        statusText.TextColor3 = Color3.fromRGB(200, 200, 200)
+        isProcessing = false
     end
 end)
