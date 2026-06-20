@@ -45,8 +45,13 @@ if Utils then
     local r = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/rgame_farm.txt')
     if r then r(Window, Utils) end
     
+    -- Tải Module Săn Boss
     local b = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/boss_hunt.txt')
     if b then b(Window, Utils) end
+    
+    -- Tải Module Quản Lý Server
+    local sm = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/server_manager.txt')
+    if sm then sm(Window, Utils) end
     
     -- Load Hầm Ngục ĐỘC LẬP (Không bị phụ thuộc vào Webhook nữa)
     local d = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/auto_dungeon.txt')
