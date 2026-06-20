@@ -1,0 +1,68 @@
+-- ====================================================================
+-- MODULE: SHOPS & GUIS (MỞ GIAO DIỆN XUYÊN TƯỜNG / BYPASS UI)
+-- ====================================================================
+return function(Window, Utils)
+    -- Tạo một Tab mới trên giao diện Rayfield
+    local GuiTab = Window:CreateTab("Shops & GUIs", 4483362458) 
+
+    -- ==========================================
+    -- HÀM XỬ LÝ CỐT LÕI (BYPASS UI)
+    -- ==========================================
+    local function OpenGameUI(viewName)
+        local success, err = pcall(function()
+            local env = getrenv()._G.PathTool
+            if env then
+                -- Ưu tiên dùng ViewManagerBase
+                if env.ViewManagerBase and env.ViewManagerBase.OpenView then
+                    pcall(function() env.ViewManagerBase.OpenView(viewName) end)
+                    pcall(function() env.ViewManagerBase:OpenView(viewName) end)
+                
+                -- Phương án dự phòng: Gọi thẳng hàm OnOpen
+                elseif env[viewName] and env[viewName].OnOpen then
+                    pcall(function() env[viewName].OnOpen(env[viewName]) end)
+                    pcall(function() env[viewName]:OnOpen() end)
+                end
+            end
+        end)
+        
+        if success then
+            game.StarterGui:SetCore("SendNotification", {
+                Title = "Mở Giao Diện", 
+                Text = "Đã thực thi lệnh mở: " .. viewName, 
+                Duration = 2
+            })
+        else
+            game.StarterGui:SetCore("SendNotification", {
+                Title = "Lỗi", 
+                Text = "Không thể mở " .. viewName, 
+                Duration = 2
+            })
+        end
+    end
+
+    -- ==========================================
+    -- GIAO DIỆN NÚT BẤM (BUTTONS)
+    -- ==========================================
+    
+    GuiTab:CreateSection("--- TÚI ĐỒ & QUẢN LÝ ---")
+    GuiTab:CreateButton({ Name = "🎒 Mở Túi Đồ (Item Bag)", Callback = function() OpenGameUI("ItemBagView") end })
+    GuiTab:CreateButton({ Name = "🐶 Mở Túi Pet (Pet Bag)", Callback = function() OpenGameUI("PetBagView") end })
+    GuiTab:CreateButton({ Name = "🐾 Đội Hình Pet (Pet Team)", Callback = function() OpenGameUI("PetTeamView") end })
+    GuiTab:CreateButton({ Name = "✨ Tiến Hóa Pet (Pet Evolve)", Callback = function() OpenGameUI("PetEvolveView") end })
+
+    GuiTab:CreateSection("--- CỬA HÀNG (SHOPS) ---")
+    GuiTab:CreateButton({ Name = "🛒 Mở Cửa Hàng Chính (Store)", Callback = function() OpenGameUI("StoreView") end })
+    GuiTab:CreateButton({ Name = "🎣 Cửa Hàng Bắt Thú (Catcher Shop)", Callback = function() OpenGameUI("CatcherShopView") end })
+    GuiTab:CreateButton({ Name = "🗼 Cửa Hàng Tháp (Tower Shop)", Callback = function() OpenGameUI("TowerShopView") end })
+    GuiTab:CreateButton({ Name = "🌌 Cửa Hàng Vực Thẳm (Abyss Shop)", Callback = function() OpenGameUI("AbyssShopView") end })
+
+    GuiTab:CreateSection("--- HOẠT ĐỘNG & SỰ KIỆN ---")
+    GuiTab:CreateButton({ Name = "📋 Bảng Nhiệm Vụ (Tasks)", Callback = function() OpenGameUI("TaskView") end })
+    GuiTab:CreateButton({ Name = "🎉 Trung Tâm Sự Kiện (Activity)", Callback = function() OpenGameUI("ActivityView") end })
+    GuiTab:CreateButton({ Name = "🎁 Vòng Quay/Gacha (Gamble)", Callback = function() OpenGameUI("GambleRewardView") end })
+    GuiTab:CreateButton({ Name = "🏆 Thành Tựu (Achieve)", Callback = function() OpenGameUI("AchieveView") end })
+
+    GuiTab:CreateSection("--- HỆ THỐNG ---")
+    GuiTab:CreateButton({ Name = "⚙️ Mở Cài Đặt Game (Settings)", Callback = function() OpenGameUI("SettingView") end })
+    GuiTab:CreateButton({ Name = "🔑 Nhập Code (Code View)", Callback = function() OpenGameUI("CodeView") end })
+end
