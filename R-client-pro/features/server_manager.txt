@@ -1,0 +1,39 @@
+-- ====================================================================
+-- MODULE: QUẢN LÝ SERVER (HOP & REJOIN)
+-- ====================================================================
+return function(Window, Utils)
+    local Players = game:GetService("Players")
+    local TeleportService = game:GetService("TeleportService")
+    local HttpService = game:GetService("HttpService")
+    local LocalPlayer = Players.LocalPlayer
+
+    -- Tạo một Tab riêng biệt cho Server, đổi icon ID để phân biệt nếu muốn
+    local ServerTab = Window:CreateTab("Quản Lý Server", 4483362458) 
+
+    ServerTab:CreateSection("--- QUẢN LÝ SERVER ---")
+
+    ServerTab:CreateButton({
+        Name = "🌐 JOIN SERVER ÍT NGƯỜI (SERVER HOP)",
+        Callback = function()
+            game.StarterGui:SetCore("SendNotification", {Title = "Đang tìm kiếm...", Text = "Đang quét server trống...", Duration = 5})
+            
+            local PlaceId = game.PlaceId
+            local success, data = pcall(function() return game:HttpGet("https://games.roblox.com/v1/games/"..PlaceId.."/servers/Public?sortOrder=Asc&limit=100") end)
+            
+            if success and data then
+                local json = HttpService:JSONDecode(data)
+                if json and json.data then
+                    for _,v in pairs(json.data) do
+                        if v.id and (v.playing or 0) < (v.maxPlayers or 0) then
+                            TeleportService:TeleportToPlaceInstance(PlaceId, v.id, LocalPlayer)
+                            break
+                        end
+                    end
+                end
+            end
+        end,
+    })
+
+    ServerTab:CreateButton({ Name = "🔄 Rejoin Server Khác", Callback = function() TeleportService:Teleport(game.PlaceId, LocalPlayer) end })
+    ServerTab:CreateButton({ Name = "🔄 Rejoin Đúng Server Này", Callback = function() TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer) end })
+end
