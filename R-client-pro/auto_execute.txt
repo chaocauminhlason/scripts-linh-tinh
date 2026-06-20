@@ -1,0 +1,49 @@
+-- Đường dẫn Script của bạn
+local rawLink = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/refs/heads/main/R-client-pro/main.txt"
+local myScriptLink = 'loadstring(game:HttpGet("' .. rawLink .. '"))()'
+
+-- =================================================================
+-- 1. CHẠY LUÔN KỊCH BẢN Ở SERVER HIỆN TẠI (Thêm dòng này để hiện UI luôn)
+-- =================================================================
+task.spawn(function()
+    pcall(function()
+        loadstring(game:HttpGet(rawLink))()
+    end)
+end)
+
+-- =================================================================
+-- 2. KỸ THUẬT A: BÁM DÍNH KHI CHUYỂN SERVER HOP / REJOIN 
+-- =================================================================
+local executeCode = [[
+    if not game:IsLoaded() then game.Loaded:Wait() end
+    task.wait(1)
+]] .. "\n" .. myScriptLink
+
+local queueFunc = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport) or getgenv().queue_on_teleport
+
+if queueFunc then
+    pcall(function() queueFunc(executeCode) end)
+    game:GetService("Players").LocalPlayer.OnTeleport:Connect(function(teleportState)
+        if teleportState == Enum.TeleportState.Started or teleportState == Enum.TeleportState.InProgress then
+            pcall(function() queueFunc(executeCode) end)
+        end
+    end)
+end
+
+-- =================================================================
+-- 3. KỸ THUẬT B: GHI NGẦM VÀO AUTOEXEC (Sống sót khi ra sảnh Home)
+-- =================================================================
+pcall(function()
+    if writefile then
+        local fileName = "R_Client_AutoLoad.lua"
+        local success, err = pcall(function()
+            writefile("../autoexec/" .. fileName, myScriptLink)
+        end)
+        
+        if not success then
+            writefile(fileName, myScriptLink)
+        end
+    end
+end)
+
+print("🚀 Đã chạy Script và kích hoạt hệ thống bám dính thành công!")
