@@ -180,35 +180,37 @@ return function(Window, Utils)
     end)
 
     -- ==========================================
-    -- LUỒNG 3: AUTO START (CHỈ ÉP UI LÒ TRỐNG & ĐÃ MỞ KHÓA)
-    -- ==========================================
+    -- LUỒNG AUTO START (SYNC VỚI SERVER TICK)
     task.spawn(function()
-        while task.wait(1.5) do
+        while task.wait(2) do
             if not hatchSettings.autoStart then continue end
             local env = getrenv()._G.PathTool
             if env and env.BossRoomSystemClient and env.BossRoomSystemClient.gamePlayer.egg then
                 local clientEgg = env.BossRoomSystemClient.gamePlayer.egg
                 local H = clientEgg.saveData and clientEgg.saveData.H or {}
-
+                
+                -- Lấy thời gian ấp từ CfgEgg
+                local hatchTime = 60 -- Mặc định 60s, bạn có thể lấy từ env.CfgEgg.Tmpls[ID].HatchTime
+                
                 for slot = 1, hatchSettings.maxSlots do
-                    -- Chỉ bắn lệnh nếu lò đang trống
                     if not H[slot] then
                         pcall(function()
-                            -- Bắn API Backend
-                            BackendAPI:InvokeServer("EggHatchStartChannel", slot, hatchSettings.eggIdToHatch)
+                            -- 1. Bắn lệnh lên Server
+                            local response = BackendAPI:InvokeServer("EggHatchStartChannel", slot, hatchSettings.eggIdToHatch)
                             
-                            -- Bơm dữ liệu ép Client vẽ quả trứng
-                            if type(clientEgg.StartHatch) == "function" then
-                                local s1 = pcall(function() clientEgg.StartHatch(clientEgg, slot, hatchSettings.eggIdToHatch) end)
-                                if not s1 then
-                                    pcall(function() clientEgg.StartHatch(clientEgg, hatchSettings.eggIdToHatch, slot) end)
+                            -- 2. Dùng StartTick từ Server để tính T chuẩn xác
+                            if response and response.StartTick then
+                                local calculatedT = response.StartTick + hatchTime
+                                
+                                -- 3. Bơm vào Client để UI nảy hình
+                                if type(clientEgg.StartHatch) == "function" then
+                                    clientEgg.StartHatch(clientEgg, slot, hatchSettings.eggIdToHatch)
                                 end
+                                
+                                -- 4. Lưu vào bộ nhớ tạm để Luồng Auto Claim khớp thời gian
+                                H[slot] = {E = hatchSettings.eggIdToHatch, T = calculatedT}
                             end
-
-                            -- Cấy dữ liệu giả (T cực lớn) vào bộ nhớ Client để luồng Auto Claim không báo chín nhầm lúc Server chưa kịp phản hồi
-                            H[slot] = {E = hatchSettings.eggIdToHatch, T = os.time() + 999999}
                         end)
-                        task.wait(0.2)
                     end
                 end
             end
