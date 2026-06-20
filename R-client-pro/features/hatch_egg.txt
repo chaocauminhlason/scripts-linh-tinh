@@ -1,159 +1,162 @@
 -- ====================================================================
--- MODULE: AUTO ẤP TRỨNG & THU HOẠCH (DÙNG REMOTE + TRÍ NHỚ NHÂN TẠO)
+-- MODULE: SMART AUTO HATCH V2 (CÓ DANH SÁCH TRỨNG TỰ ĐỘNG)
 -- ====================================================================
 return function(Window, Utils)
-    local Workspace = game:GetService("Workspace")
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    
-    local autoHatchEnabled = false
-    local targetEggId = 60      -- ID trứng mặc định
-    local hatchTimeMinutes = 60 -- Thời gian ấp mặc định (60 phút)
-    
-    -- TRÍ NHỚ NHÂN TẠO: Lưu mốc thời gian hoàn thành (Tính bằng Giây os.time())
-    local hatchMemory = {} 
-    
+    local EggTab = Window:CreateTab("Trứng & Ấp", 4483362458)
+
+    local hatchSettings = {
+        autoClaim = false,
+        autoStart = false,
+        autoSkip = false,
+        stopIfBagFull = true,
+        eggIdToHatch = 1 -- ID sẽ được cập nhật tự động khi chọn từ Dropdown
+    }
+
     -- ==========================================
-    -- GIAO DIỆN UI (Tạo Tab mới)
+    -- QUÉT VÀ LẤY DANH SÁCH TRỨNG TỪ GAME API
     -- ==========================================
-    local HatchTab = Window:CreateTab("Ấp Trứng", 4483362458)
-    
-    HatchTab:CreateSection("--- THIẾT LẬP AUTO HATCH ---")
-    
-    HatchTab:CreateInput({
-        Name = "Nhập ID Trứng cần ấp",
-        PlaceholderText = "Mặc định đang là 60...",
-        RemoveTextAfterFocusLost = false,
-        Flag = "TargetEggIdInput",
-        Callback = function(Text)
-            local id = tonumber(Text)
-            if id then 
-                targetEggId = id 
-                print("🥚 Đã cài đặt ID trứng sẽ ấp là:", targetEggId)
+    local eggOptions = {}
+    local eggIdMap = {} -- Từ điển map giữa Tên hiển thị và ID thật
+
+    pcall(function()
+        local env = getrenv()._G.PathTool
+        if env and env.CfgEgg then
+            for id, info in pairs(env.CfgEgg) do
+                local eId = tonumber(id)
+                if eId then
+                    -- Cố gắng lấy tên trứng, nếu game mã hóa tên thì hiện ID
+                    local eName = info.Name or info.name or ("Loại " .. tostring(eId))
+                    local displayStr = eName .. " (ID: " .. tostring(eId) .. ")"
+                    
+                    table.insert(eggOptions, displayStr)
+                    eggIdMap[displayStr] = eId
+                end
             end
-        end,
-    })
-
-    HatchTab:CreateInput({
-        Name = "Thời gian ấp 1 mẻ (Phút)",
-        PlaceholderText = "Nhập 60 hoặc 50...",
-        RemoveTextAfterFocusLost = false,
-        Flag = "TargetEggTimeInput",
-        Callback = function(Text)
-            local mins = tonumber(Text)
-            if mins then 
-                hatchTimeMinutes = mins 
-                print("⏳ Đã cài đặt thời gian ấp là:", hatchTimeMinutes, "phút")
-            end
-        end,
-    })
-
-    HatchTab:CreateToggle({
-        Name = "Bật/Tắt Auto Ấp & Nhận (Cả 5 Máy)",
-        CurrentValue = false,
-        Flag = "AutoHatchToggle",
-        Callback = function(Value)
-            autoHatchEnabled = Value
-        end,
-    })
-
-    -- Đường dẫn gọi Remote của Game
-    local DataPullFunc = ReplicatedStorage:WaitForChild("CommonLibrary")
-        :WaitForChild("Tool")
-        :WaitForChild("RemoteManager")
-        :WaitForChild("Funcs")
-        :WaitForChild("DataPullFunc")
-
-    -- Hàm phụ trợ: Dịch từ "00:47:29" sang tổng số giây
-    local function parseTimeToSeconds(timeStr)
-        local parts = string.split(timeStr, ":")
-        if #parts == 3 then
-            return tonumber(parts[1])*3600 + tonumber(parts[2])*60 + tonumber(parts[3])
-        elseif #parts == 2 then
-            return tonumber(parts[1])*60 + tonumber(parts[2])
         end
-        return 0
+    end)
+
+    -- Nếu mảng trống (do game chưa load kịp), tạo 1 lựa chọn mặc định
+    if #eggOptions == 0 then
+        table.insert(eggOptions, "Trứng Mặc Định (ID: 1)")
+        eggIdMap["Trứng Mặc Định (ID: 1)"] = 1
     end
 
     -- ==========================================
-    -- VÒNG LẶP CORE: QUẢN LÝ 5 MÁY ẤP
+    -- GIAO DIỆN UI
+    -- ==========================================
+    EggTab:CreateSection("--- TRẠNG THÁI TÚI PET ---")
+    local BagStatusLabel = EggTab:CreateLabel("Túi Pet: Đang tải...")
+
+    EggTab:CreateSection("--- TỰ ĐỘNG ẤP TRỨNG (SMART) ---")
+    
+    EggTab:CreateToggle({
+        Name = "Tự Động Thu Hoạch Trứng Chín (Auto Claim)",
+        CurrentValue = false,
+        Flag = "AutoClaimEgg",
+        Callback = function(Value) hatchSettings.autoClaim = Value end
+    })
+
+    -- MENU CHỌN TRỨNG TỰ ĐỘNG
+    EggTab:CreateDropdown({
+        Name = "Chọn Loại Trứng Để Tự Ấp",
+        Options = eggOptions,
+        CurrentOption = {eggOptions[1]}, -- Lấy quả đầu tiên làm mặc định
+        MultipleOptions = false,
+        Flag = "EggSelectDropdown",
+        Callback = function(Options)
+            -- Cập nhật ID trứng khi người dùng chọn trong danh sách
+            local selectedString = Options[1]
+            if eggIdMap[selectedString] then
+                hatchSettings.eggIdToHatch = eggIdMap[selectedString]
+            end
+        end,
+    })
+
+    EggTab:CreateToggle({
+        Name = "Tự Động Bỏ Trứng Vào Lò (Auto Start)",
+        CurrentValue = false,
+        Flag = "AutoStartEgg",
+        Callback = function(Value) hatchSettings.autoStart = Value end
+    })
+
+    EggTab:CreateToggle({
+        Name = "Dừng ấp khi Túi Pet đầy (An Toàn)",
+        CurrentValue = true,
+        Flag = "StopIfFull",
+        Callback = function(Value) hatchSettings.stopIfBagFull = Value end
+    })
+
+    EggTab:CreateButton({
+        Name = "⏩ Dùng vé Skip Ấp Trứng (Lò 1)",
+        Callback = function()
+            local env = getrenv()._G.PathTool
+            if env and env.EggSystem and env.EggSystem.ClientHatchSkip then
+                pcall(function() env.EggSystem.ClientHatchSkip(env.EggSystem, 1) end)
+                game.StarterGui:SetCore("SendNotification", {Title = "Skip Trứng", Text = "Đã gửi lệnh Skip cho Lò 1", Duration = 2})
+            end
+        end
+    })
+
+    -- ==========================================
+    -- LUỒNG 1: THEO DÕI TÚI PET (CHỐNG TRÀN TÚI)
     -- ==========================================
     task.spawn(function()
         while task.wait(1) do
-            if not autoHatchEnabled then continue end
-            
-            local eggHatchFolder = Workspace:FindFirstChild("Area") 
-                and Workspace.Area:FindFirstChild("center") 
-                and Workspace.Area.center:FindFirstChild("Area") 
-                and Workspace.Area.center.Area:FindFirstChild("EggHatch")
-                
-            if not eggHatchFolder then continue end
-            
-            local currentTime = os.time()
-            
-            for i = 1, 5 do
-                local machineName = "Hatch_" .. i
-                local machine = eggHatchFolder:FindFirstChild(machineName)
-                
-                if machine then
-                    -- NẾU TOOL CHƯA CÓ TRÍ NHỚ VỀ MÁY NÀY (Vừa bật tool hoặc vừa Rejoin)
-                    if not hatchMemory[i] then
-                        local uiState = "Empty"
-                        local uiSecondsLeft = 0
+            local env = getrenv()._G.PathTool
+            if env and env.PetData then
+                pcall(function()
+                    local currentPets = env.PetData.GetBagAmount(env.PetData)
+                    local maxPets = env.PetData.GetBagCapacity(env.PetData)
+                    
+                    if currentPets and maxPets then
+                        BagStatusLabel:Set("Túi Pet: " .. currentPets .. " / " .. maxPets)
                         
-                        -- Lục lọi UI để xem máy đang làm gì
-                        local topGui = machine:FindFirstChild("TopGUI")
-                        local hatchInfoGui = topGui and topGui:FindFirstChild("HatchInfoGui")
-                        
-                        if hatchInfoGui then
-                            for _, child in ipairs(hatchInfoGui:GetDescendants()) do
-                                if child:IsA("TextLabel") and child.Visible and child.Text ~= "" then
-                                    local text = string.lower(child.Text)
-                                    if string.match(text, "ready") then
-                                        uiState = "Ready"
-                                    elseif string.match(text, "%d+:%d+") then
-                                        uiState = "Hatching"
-                                        uiSecondsLeft = parseTimeToSeconds(child.Text)
-                                    end
-                                end
+                        if hatchSettings.stopIfBagFull and currentPets >= maxPets then
+                            if hatchSettings.autoClaim or hatchSettings.autoStart then
+                                hatchSettings.autoClaim = false
+                                hatchSettings.autoStart = false
+                                game.StarterGui:SetCore("SendNotification", {
+                                    Title = "CẢNH BÁO", 
+                                    Text = "Túi Pet đã ĐẦY! Đã tự động dừng Ấp/Thu Hoạch.", 
+                                    Duration = 5
+                                })
                             end
                         end
-                        
-                        -- Đồng bộ vào trí nhớ
-                        if uiState == "Hatching" and uiSecondsLeft > 0 then
-                            hatchMemory[i] = currentTime + uiSecondsLeft
-                            print(string.format("🧠 [TRÍ NHỚ] Đã đồng bộ Máy %d: Đang ấp dở (Còn %d giây)", i, uiSecondsLeft))
-                        
-                        elseif uiState == "Ready" then
-                            -- Nếu trứng đã chín sẵn
-                            pcall(function() DataPullFunc:InvokeServer("EggHatchTakenChannel", i) end)
-                            task.wait(0.2)
-                            pcall(function() DataPullFunc:InvokeServer("EggHatchStartChannel", i, targetEggId) end)
-                            
-                            hatchMemory[i] = currentTime + (hatchTimeMinutes * 60)
-                            print(string.format("🥚 [AUTO] Đã Thu Hoạch & Ấp Mẻ Mới cho Máy %d", i))
-                            task.wait(0.5)
-                        
-                        elseif uiState == "Empty" then
-                            -- Nếu máy trống không
-                            pcall(function() DataPullFunc:InvokeServer("EggHatchStartChannel", i, targetEggId) end)
-                            hatchMemory[i] = currentTime + (hatchTimeMinutes * 60)
-                            print(string.format("🥚 [AUTO] Bắt Đầu Ấp máy %d (ID: %d - Đợi %d phút)", i, targetEggId, hatchTimeMinutes))
-                            task.wait(0.5)
-                        end
-                        
-                    -- NẾU TOOL ĐÃ CÓ TRÍ NHỚ (Chỉ tin vào trí nhớ, PHỚT LỜ UI!)
-                    else
-                        if currentTime >= hatchMemory[i] then
-                            -- Đúng hẹn đồng hồ báo thức -> Gửi Combo lệnh (Thu Hoạch -> Ấp Tiếp)
-                            pcall(function() DataPullFunc:InvokeServer("EggHatchTakenChannel", i) end)
-                            task.wait(0.2)
-                            pcall(function() DataPullFunc:InvokeServer("EggHatchStartChannel", i, targetEggId) end)
-                            
-                            hatchMemory[i] = currentTime + (hatchTimeMinutes * 60)
-                            print(string.format("🌟 [AUTO] HOÀN THÀNH ẤP Máy %d! Đã thu hoạch và Tự động ấp mẻ mới.", i))
-                            task.wait(0.5)
-                        end
                     end
+                end)
+            end
+        end
+    end)
+
+    -- ==========================================
+    -- LUỒNG 2: AUTO CLAIM EGG (THU HOẠCH API)
+    -- ==========================================
+    task.spawn(function()
+        while task.wait(0.5) do
+            if not hatchSettings.autoClaim then continue end
+
+            local env = getrenv()._G.PathTool
+            if env and env.EggSystem and env.EggSystem.ClientHatchTaken then
+                for slot = 1, 5 do
+                    pcall(function() env.EggSystem.ClientHatchTaken(env.EggSystem, slot) end)
+                end
+            end
+        end
+    end)
+
+    -- ==========================================
+    -- LUỒNG 3: AUTO START HATCH
+    -- ==========================================
+    task.spawn(function()
+        while task.wait(1.5) do
+            if not hatchSettings.autoStart then continue end
+            
+            local env = getrenv()._G.PathTool
+            if env and env.EggSystem and env.EggSystem.ClientHatchStart then
+                for slot = 1, 5 do
+                    pcall(function()
+                        env.EggSystem.ClientHatchStart(env.EggSystem, hatchSettings.eggIdToHatch, slot)
+                    end)
                 end
             end
         end
