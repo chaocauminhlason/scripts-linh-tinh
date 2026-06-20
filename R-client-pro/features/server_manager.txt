@@ -1,17 +1,75 @@
 -- ====================================================================
--- MODULE: QUẢN LÝ SERVER (HOP & REJOIN)
+-- MODULE: QUẢN LÝ SERVER (CÓ SESSION TIMER & AUTO REJOIN)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
     local TeleportService = game:GetService("TeleportService")
     local HttpService = game:GetService("HttpService")
+    local CoreGui = game:GetService("CoreGui")
     local LocalPlayer = Players.LocalPlayer
 
-    -- Tạo một Tab riêng biệt cho Server, đổi icon ID để phân biệt nếu muốn
+    -- Tạo Tab riêng cho Quản Lý Server
     local ServerTab = Window:CreateTab("Quản Lý Server", 4483362458) 
+    
+    -- ==========================================
+    -- 1. BỘ ĐẾM THỜI GIAN SESSION
+    -- ==========================================
+    ServerTab:CreateSection("--- THÔNG TIN SESSION ---")
+    local SessionLabel = ServerTab:CreateLabel("Thời gian treo máy: 00:00:00")
+    
+    -- Lấy mốc thời gian ngay lúc script bắt đầu chạy
+    local sessionStartTime = os.time()
+    
+    -- Vòng lặp đếm giây chạy ngầm
+    task.spawn(function()
+        while task.wait(1) do
+            local diff = os.time() - sessionStartTime
+            local hours = math.floor(diff / 3600)
+            local minutes = math.floor((diff % 3600) / 60)
+            local seconds = diff % 60
+            
+            -- Cập nhật label với định dạng HH:MM:SS
+            SessionLabel:Set(string.format("Thời gian treo máy: %02d:%02d:%02d", hours, minutes, seconds))
+        end
+    end)
 
+    -- ==========================================
+    -- 2. SERVER HOP / REJOIN & ANTI-KICK
+    -- ==========================================
     ServerTab:CreateSection("--- QUẢN LÝ SERVER ---")
 
+    local autoRejoinEnabled = false
+    ServerTab:CreateToggle({
+        Name = "Auto Rejoin khi bị Kick (Chống Disconnect)",
+        CurrentValue = false,
+        Flag = "AutoRejoinKick",
+        Callback = function(Value)
+            autoRejoinEnabled = Value
+        end,
+    })
+
+    -- Lắng nghe giao diện hệ thống (CoreGui) để phát hiện bảng báo lỗi (ErrorPrompt)
+    task.spawn(function()
+        pcall(function()
+            local promptOverlay = CoreGui:WaitForChild("RobloxPromptGui"):WaitForChild("promptOverlay")
+            promptOverlay.ChildAdded:Connect(function(child)
+                if child.Name == "ErrorPrompt" and autoRejoinEnabled then
+                    -- Khi phát hiện bảng thông báo Kick, đợi 2 giây để tránh kẹt request
+                    task.wait(2)
+                    
+                    -- Rejoin vào cùng tựa game nhưng tìm server mới (Tránh bị kick lại do server cũ lỗi)
+                    TeleportService:Teleport(game.PlaceId, LocalPlayer)
+                    
+                    -- *Nếu bạn muốn cố ép Rejoin lại ĐÚNG server vừa bị kick, hãy đổi dòng trên thành:
+                    -- TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+                end
+            end)
+        end)
+    end)
+
+    -- ==========================================
+    -- CÁC NÚT ĐIỀU KHIỂN THỦ CÔNG
+    -- ==========================================
     ServerTab:CreateButton({
         Name = "🌐 JOIN SERVER ÍT NGƯỜI (SERVER HOP)",
         Callback = function()
@@ -24,6 +82,7 @@ return function(Window, Utils)
                 local json = HttpService:JSONDecode(data)
                 if json and json.data then
                     for _,v in pairs(json.data) do
+                        -- Tìm server còn trống chỗ
                         if v.id and (v.playing or 0) < (v.maxPlayers or 0) then
                             TeleportService:TeleportToPlaceInstance(PlaceId, v.id, LocalPlayer)
                             break
