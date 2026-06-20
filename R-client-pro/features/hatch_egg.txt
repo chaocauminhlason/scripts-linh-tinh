@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: SMART AUTO HATCH (DYNAMIC CACHING TỪ Tmpls)
+-- MODULE: SMART AUTO HATCH (DYNAMIC CACHING + REAL INSTANCE)
 -- ====================================================================
 return function(Window, Utils)
     local EggTab = Window:CreateTab("Trứng & Ấp", 4483362458)
@@ -32,16 +32,14 @@ return function(Window, Utils)
                     eggIdMap[displayStr] = eId
                 end
             end
-            table.sort(eggOptions) -- Sắp xếp theo bảng chữ cái A-Z
+            table.sort(eggOptions)
             return true
         end
         return false
     end
 
-    -- Khởi chạy quét ngay lập tức
     local loadSuccess = LoadEggData()
 
-    -- Nếu game dùng Lazy Load (Chưa mở UI trứng bao giờ nên Tmpls trống)
     if not loadSuccess or #eggOptions == 0 then
         table.insert(eggOptions, "⚠️ Hãy mở Bảng Trứng trong game trước!")
         eggIdMap["⚠️ Hãy mở Bảng Trứng trong game trước!"] = 1
@@ -76,7 +74,6 @@ return function(Window, Utils)
         end,
     })
 
-    -- Nút làm mới dữ liệu thủ công (Dành cho trường hợp Lazy Load)
     EggTab:CreateButton({
         Name = "🔄 Làm Mới Danh Sách Trứng (Refresh)",
         Callback = function()
@@ -86,7 +83,7 @@ return function(Window, Utils)
                 EggDropdown:Refresh(eggOptions)
                 game.StarterGui:SetCore("SendNotification", {Title = "Làm mới", Text = "Đã tải " .. #eggOptions .. " quả trứng!", Duration = 3})
             else
-                game.StarterGui:SetCore("SendNotification", {Title = "Lỗi", Text = "Hãy mở giao diện ấp trứng trong game lên 1 lần rồi bấm lại nút này.", Duration = 4})
+                game.StarterGui:SetCore("SendNotification", {Title = "Lỗi", Text = "Hãy mở giao diện ấp trứng trong game lên 1 lần rồi bấm lại.", Duration = 4})
             end
         end
     })
@@ -106,15 +103,18 @@ return function(Window, Utils)
     })
 
     -- ==========================================
-    -- LUỒNG 1: THEO DÕI TÚI PET
+    -- LUỒNG 1: THEO DÕI TÚI PET (ĐÃ FIX LỖI NIL)
     -- ==========================================
     task.spawn(function()
         while task.wait(1) do
             local env = getrenv()._G.PathTool
-            if env and env.PetData then
+            -- Sử dụng chính xác đường dẫn Instance vừa tìm được từ Deep Scan
+            if env and env.BossRoomSystemClient and env.BossRoomSystemClient.gamePlayer and env.BossRoomSystemClient.gamePlayer.pet then
+                local realPetData = env.BossRoomSystemClient.gamePlayer.pet
+                
                 pcall(function()
-                    local currentPets = env.PetData.GetBagAmount(env.PetData)
-                    local maxPets = env.PetData.GetBagCapacity(env.PetData)
+                    local currentPets = realPetData.GetBagAmount(realPetData)
+                    local maxPets = realPetData.GetBagCapacity(realPetData)
                     
                     if currentPets and maxPets then
                         BagStatusLabel:Set("Túi Pet: " .. currentPets .. " / " .. maxPets)
@@ -123,7 +123,11 @@ return function(Window, Utils)
                             if hatchSettings.autoClaim or hatchSettings.autoStart then
                                 hatchSettings.autoClaim = false
                                 hatchSettings.autoStart = false
-                                game.StarterGui:SetCore("SendNotification", {Title = "CẢNH BÁO", Text = "Túi Pet đã ĐẦY! Đã ngắt Auto Trứng.", Duration = 5})
+                                game.StarterGui:SetCore("SendNotification", {
+                                    Title = "CẢNH BÁO AN TOÀN", 
+                                    Text = "Túi Pet đã ĐẦY (" .. currentPets .. "/" .. maxPets .. ")! Đã tự động ngắt Auto ấp trứng.", 
+                                    Duration = 5
+                                })
                             end
                         end
                     end
@@ -141,7 +145,6 @@ return function(Window, Utils)
             local env = getrenv()._G.PathTool
             if env and env.EggSystem then
                 for slot = 1, 5 do
-                    -- Gọi hàm thu hoạch, nếu game thấy trứng chưa chín thì hàm tự động bị block (rất an toàn)
                     pcall(function() env.EggSystem.ClientHatchTaken(env.EggSystem, slot) end)
                 end
             end
