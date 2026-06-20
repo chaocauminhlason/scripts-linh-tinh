@@ -41,7 +41,10 @@ local WebhookModule = SafeLoad('https://raw.githubusercontent.com/chaocauminhlas
 if Utils then
     local t = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/tracker.txt')
     if t then t(Window, Utils) end
-    
+
+    local sg = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/shops_and_guis.txt')
+    if sg then sg(Window, Utils) end
+
     local r = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/farm.txt')
     if r then r(Window, Utils) end
     
