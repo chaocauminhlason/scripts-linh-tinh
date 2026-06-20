@@ -65,4 +65,19 @@ return function(Window, Utils)
     GuiTab:CreateSection("--- HỆ THỐNG ---")
     GuiTab:CreateButton({ Name = "⚙️ Mở Cài Đặt Game (Settings)", Callback = function() OpenGameUI("SettingView") end })
     GuiTab:CreateButton({ Name = "🔑 Nhập Code (Code View)", Callback = function() OpenGameUI("CodeView") end })
+
+    -- ==========================================
+    -- GIAO DIỆN NÚT BẤM (CẬP NHẬT THÊM TRỨNG & PET)
+    -- ==========================================
+
+    GuiTab:CreateSection("--- TRỨNG & ẤP TRỨNG ---")
+    GuiTab:CreateButton({ Name = "🥚 Bảng Chọn Trứng (Egg Select)", Callback = function() OpenGameUI("EggSelectView") end })
+    GuiTab:CreateButton({ Name = "⏩ Skip Ấp Trứng (Egg Hatch Skip)", Callback = function() OpenGameUI("EggHatchSkipView") end })
+
+    GuiTab:CreateSection("--- KHO TÀNG & TÁI CHẾ PET ---")
+    GuiTab:CreateButton({ Name = "🏦 Kho Lưu Trữ Pet (Pet Vault)", Callback = function() OpenGameUI("PetVaultView") end })
+    GuiTab:CreateButton({ Name = "♻️ Tái Chế Pet (Pet Recycle)", Callback = function() OpenGameUI("PetRecycleView") end })
+    GuiTab:CreateButton({ Name = "📖 Sưu Tập Pet (Pet Collect)", Callback = function() OpenGameUI("PetCollectView") end })
+    GuiTab:CreateButton({ Name = "🐎 Quản Lý Thú Cưỡi (Pet Ride)", Callback = function() OpenGameUI("PetRideView") end })
+    GuiTab:CreateButton({ Name = "🔄 Chuyển Hóa Pet (Pet Transform)", Callback = function() OpenGameUI("PetTransformView") end })
 end
