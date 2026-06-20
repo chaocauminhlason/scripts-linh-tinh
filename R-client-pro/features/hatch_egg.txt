@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: SMART AUTO HATCH (DYNAMIC CACHING + REAL INSTANCE)
+-- MODULE: SMART AUTO HATCH V5 (HYBRID HATCHING - ÉP CẬP NHẬT UI)
 -- ====================================================================
 return function(Window, Utils)
     local EggTab = Window:CreateTab("Trứng & Ấp", 4483362458)
@@ -11,8 +11,10 @@ return function(Window, Utils)
         eggIdToHatch = 1
     }
 
+    local BackendAPI = game:GetService("ReplicatedStorage"):WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc")
+
     -- ==========================================
-    -- QUÉT DỮ LIỆU TỰ ĐỘNG (DYNAMIC FETCH)
+    -- QUÉT DỮ LIỆU TỰ ĐỘNG
     -- ==========================================
     local eggOptions = {}
     local eggIdMap = {}
@@ -26,7 +28,6 @@ return function(Window, Utils)
                     local eName = info.Name or info.name or info.EggName or ("Trứng " .. tostring(eId))
                     eName = string.gsub(eName, '"', '')
                     eName = string.gsub(eName, '\n', ' ')
-                    
                     local displayStr = eName .. " (ID: " .. eId .. ")"
                     table.insert(eggOptions, displayStr)
                     eggIdMap[displayStr] = eId
@@ -38,11 +39,9 @@ return function(Window, Utils)
         return false
     end
 
-    local loadSuccess = LoadEggData()
-
-    if not loadSuccess or #eggOptions == 0 then
-        table.insert(eggOptions, "⚠️ Hãy mở Bảng Trứng trong game trước!")
-        eggIdMap["⚠️ Hãy mở Bảng Trứng trong game trước!"] = 1
+    if not LoadEggData() or #eggOptions == 0 then
+        table.insert(eggOptions, "⚠️ Bấm Refresh để tải danh sách!")
+        eggIdMap["⚠️ Bấm Refresh để tải danh sách!"] = 1
     end
 
     -- ==========================================
@@ -51,17 +50,17 @@ return function(Window, Utils)
     EggTab:CreateSection("--- TRẠNG THÁI TÚI PET ---")
     local BagStatusLabel = EggTab:CreateLabel("Túi Pet: Đang tải...")
 
-    EggTab:CreateSection("--- TỰ ĐỘNG ẤP TRỨNG (SMART) ---")
+    EggTab:CreateSection("--- TỰ ĐỘNG ẤP TRỨNG (HYBRID) ---")
     
     EggTab:CreateToggle({
-        Name = "Tự Động Thu Hoạch Trứng Chín (Auto Claim)",
+        Name = "Tự Động Thu Hoạch (Auto Claim)",
         CurrentValue = false,
         Flag = "AutoClaimEgg",
         Callback = function(Value) hatchSettings.autoClaim = Value end
     })
 
     local EggDropdown = EggTab:CreateDropdown({
-        Name = "Chọn Loại Trứng Để Tự Ấp",
+        Name = "Chọn Loại Trứng",
         Options = eggOptions,
         CurrentOption = {eggOptions[1]},
         MultipleOptions = false,
@@ -75,43 +74,38 @@ return function(Window, Utils)
     })
 
     EggTab:CreateButton({
-        Name = "🔄 Làm Mới Danh Sách Trứng (Refresh)",
+        Name = "🔄 Làm Mới Danh Sách Trứng",
         Callback = function()
             eggOptions = {}
             eggIdMap = {}
             if LoadEggData() and #eggOptions > 0 then
                 EggDropdown:Refresh(eggOptions)
-                game.StarterGui:SetCore("SendNotification", {Title = "Làm mới", Text = "Đã tải " .. #eggOptions .. " quả trứng!", Duration = 3})
-            else
-                game.StarterGui:SetCore("SendNotification", {Title = "Lỗi", Text = "Hãy mở giao diện ấp trứng trong game lên 1 lần rồi bấm lại.", Duration = 4})
             end
         end
     })
 
     EggTab:CreateToggle({
-        Name = "Tự Động Bỏ Trứng Vào Lò (Auto Start)",
+        Name = "Tự Động Bỏ Trứng (Auto Start)",
         CurrentValue = false,
         Flag = "AutoStartEgg",
         Callback = function(Value) hatchSettings.autoStart = Value end
     })
 
     EggTab:CreateToggle({
-        Name = "Dừng ấp khi Túi Pet đầy (An Toàn)",
+        Name = "Dừng ấp khi Túi đầy (An Toàn)",
         CurrentValue = true,
         Flag = "StopIfFull",
         Callback = function(Value) hatchSettings.stopIfBagFull = Value end
     })
 
     -- ==========================================
-    -- LUỒNG 1: THEO DÕI TÚI PET (ĐÃ FIX LỖI NIL)
+    -- LUỒNG 1: THEO DÕI TÚI PET CHỐNG TRÀN
     -- ==========================================
     task.spawn(function()
         while task.wait(1) do
             local env = getrenv()._G.PathTool
-            -- Sử dụng chính xác đường dẫn Instance vừa tìm được từ Deep Scan
             if env and env.BossRoomSystemClient and env.BossRoomSystemClient.gamePlayer and env.BossRoomSystemClient.gamePlayer.pet then
                 local realPetData = env.BossRoomSystemClient.gamePlayer.pet
-                
                 pcall(function()
                     local currentPets = realPetData.GetBagAmount(realPetData)
                     local maxPets = realPetData.GetBagCapacity(realPetData)
@@ -124,9 +118,7 @@ return function(Window, Utils)
                                 hatchSettings.autoClaim = false
                                 hatchSettings.autoStart = false
                                 game.StarterGui:SetCore("SendNotification", {
-                                    Title = "CẢNH BÁO AN TOÀN", 
-                                    Text = "Túi Pet đã ĐẦY (" .. currentPets .. "/" .. maxPets .. ")! Đã tự động ngắt Auto ấp trứng.", 
-                                    Duration = 5
+                                    Title = "CẢNH BÁO", Text = "Túi Pet đã ĐẦY! Đã ngắt Auto ấp trứng.", Duration = 5
                                 })
                             end
                         end
@@ -137,31 +129,60 @@ return function(Window, Utils)
     end)
 
     -- ==========================================
-    -- LUỒNG 2: AUTO CLAIM EGG (Thu Hoạch)
+    -- LUỒNG 2: AUTO CLAIM (ĐỒNG BỘ 2 CHIỀU)
     -- ==========================================
     task.spawn(function()
-        while task.wait(0.5) do
+        while task.wait(1) do
             if not hatchSettings.autoClaim then continue end
-            local env = getrenv()._G.PathTool
-            if env and env.EggSystem then
-                for slot = 1, 5 do
-                    pcall(function() env.EggSystem.ClientHatchTaken(env.EggSystem, slot) end)
-                end
+            for slot = 1, 5 do
+                pcall(function()
+                    -- 1. Báo Backend thu hoạch
+                    BackendAPI:InvokeServer("EggHatchTakenChannel", slot)
+                    
+                    -- 2. Ép Client State cập nhật UI
+                    local env = getrenv()._G.PathTool
+                    if env and env.BossRoomSystemClient and env.BossRoomSystemClient.gamePlayer.egg then
+                        local clientEgg = env.BossRoomSystemClient.gamePlayer.egg
+                        
+                        -- Cố gắng gọi các hàm thay đổi dữ liệu ngầm của Client nếu có
+                        if type(clientEgg.Taken) == "function" then
+                            clientEgg.Taken(clientEgg, slot)
+                        elseif type(clientEgg.ChangeEggAmount) == "function" then
+                            clientEgg.ChangeEggAmount(clientEgg)
+                        end
+                    end
+                end)
+                task.wait(0.15)
             end
         end
     end)
 
     -- ==========================================
-    -- LUỒNG 3: AUTO START HATCH (Bỏ Trứng)
+    -- LUỒNG 3: AUTO START (ĐỒNG BỘ 2 CHIỀU)
     -- ==========================================
     task.spawn(function()
-        while task.wait(1.5) do
+        while task.wait(2) do
             if not hatchSettings.autoStart then continue end
-            local env = getrenv()._G.PathTool
-            if env and env.EggSystem then
-                for slot = 1, 5 do
-                    pcall(function() env.EggSystem.ClientHatchStart(env.EggSystem, hatchSettings.eggIdToHatch, slot) end)
-                end
+            for slot = 1, 5 do
+                pcall(function()
+                    -- 1. Bắn API Backend để lấy Pet thật
+                    BackendAPI:InvokeServer("EggHatchStartChannel", slot, hatchSettings.eggIdToHatch)
+                    
+                    -- 2. Bơm State vào Client để hiển thị quả trứng lên lò
+                    local env = getrenv()._G.PathTool
+                    if env and env.BossRoomSystemClient and env.BossRoomSystemClient.gamePlayer.egg then
+                        local clientEgg = env.BossRoomSystemClient.gamePlayer.egg
+                        
+                        -- Thử cả 2 cấu trúc tham số thông dụng (Slot trước hoặc ID trước)
+                        if type(clientEgg.StartHatch) == "function" then
+                            local s1 = pcall(function() clientEgg.StartHatch(clientEgg, slot, hatchSettings.eggIdToHatch) end)
+                            if not s1 then
+                                pcall(function() clientEgg.StartHatch(clientEgg, hatchSettings.eggIdToHatch, slot) end)
+                            end
+                        end
+                    end
+                end)
+                task.wait(0.15)
             end
         end
     end)
