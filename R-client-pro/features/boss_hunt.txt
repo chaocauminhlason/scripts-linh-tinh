@@ -50,12 +50,12 @@ return function(Window, Utils)
     local FlaragonPos    = Vector3.new(-5.1, -116.4, -1492.8)
     local GodzillaPos    = Vector3.new(-2304.0, 39.0, -1365.7)
     local ShakeKnightPos = Vector3.new(2942.0, -44.5, 1865.9)
-    local TideVexPos     = Vector3.new(-2928.9, -89.9, 2913.2)
+    local TideVexPos     = Vector3.new(-2928.9, -99.9, 2913.2)
     local Frostwyrm      = Vector3.new(2907.9, -96.7, 859.1)
-    local GaiDracoPos    = Vector3.new(2725.0, 127, -1117.9)
-    local ThunderclawPos = Vector3.new(-5991.6, -19.2, 880.6)
-    local LampyrPos      = Vector3.new(382.2, -100.0, 3429.5)
-    local ScareaperPos   = Vector3.new(6127.1, -95.0, -416.9)
+    local GaiDracoPos    = Vector3.new(2725.0, 137, -1117.9)
+    local ThunderclawPos = Vector3.new(-5991.6, -29.2, 880.6)
+    local LampyrPos      = Vector3.new(382.2, -110.0, 3429.5)
+    local ScareaperPos   = Vector3.new(6127.1, -105.0, -416.9)
 
     -- ==========================================
     -- GIAO DIỆN UI
