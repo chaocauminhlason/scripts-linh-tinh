@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: QUẢN LÝ SERVER & SĂN THỜI TIẾT VIP
+-- MODULE: QUẢN LÝ SERVER & SĂN THỜI TIẾT VIP (MULTI-SELECT)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -53,13 +53,13 @@ return function(Window, Utils)
     end)
 
     -- ==========================================
-    -- 2. AUTO SĂN THỜI TIẾT VIP (WEATHER HOPPER)
+    -- 2. AUTO SĂN THỜI TIẾT VIP (WEATHER HOPPER - MULTI)
     -- ==========================================
     ServerTab:CreateSection("--- TÌM KIẾM THỜI TIẾT VIP ---")
 
     local hopSettings = {
         isHopping = false,
-        targetWeatherId = 60001 -- Mặc định: Blood Moon
+        targetWeatherIds = {60001} -- Mặc định là Blood Moon (ID: 60001), dùng dạng bảng (table) để chứa nhiều ID
     }
 
     local WeatherMap = {
@@ -91,12 +91,16 @@ return function(Window, Utils)
             "🧚 Màn Sương Ảo Mộng (Dreamveil)"
         },
         CurrentOption = {"🔴 Huyết Nguyệt (Blood Moon)"},
-        MultipleOptions = false,
-        Flag = "WeatherSelect",
+        MultipleOptions = true, -- BẬT TÍNH NĂNG CHỌN NHIỀU OPTIONS
+        Flag = "WeatherSelectMulti",
         Callback = function(Options)
-            local selected = Options[1]
-            if WeatherMap[selected] then
-                hopSettings.targetWeatherId = WeatherMap[selected]
+            -- Làm sạch danh sách cũ
+            hopSettings.targetWeatherIds = {}
+            -- Nạp tất cả các ID thời tiết người dùng vừa chọn vào danh sách
+            for _, selectedOption in ipairs(Options) do
+                if WeatherMap[selectedOption] then
+                    table.insert(hopSettings.targetWeatherIds, WeatherMap[selectedOption])
+                end
             end
         end,
     })
@@ -109,13 +113,29 @@ return function(Window, Utils)
             hopSettings.isHopping = Value
             
             if Value then
+                -- Nếu người dùng chưa chọn gì, báo lỗi và tắt
+                if #hopSettings.targetWeatherIds == 0 then
+                    game.StarterGui:SetCore("SendNotification", {Title = "Lỗi", Text = "Vui lòng chọn ít nhất 1 loại thời tiết!", Duration = 3})
+                    hopSettings.isHopping = false
+                    return
+                end
+
                 task.spawn(function()
                     while hopSettings.isHopping do
                         local env = getrenv()._G.PathTool
                         if env and env.WeatherSystem and type(env.WeatherSystem.IsWeatherActive) == "function" then
-                            local ok, isTargetWeather = pcall(function() return env.WeatherSystem.IsWeatherActive(hopSettings.targetWeatherId) end)
+                            local foundTarget = false
                             
-                            if ok and isTargetWeather then
+                            -- Quét qua toàn bộ danh sách các thời tiết đang tìm
+                            for _, targetId in ipairs(hopSettings.targetWeatherIds) do
+                                local ok, isTargetWeather = pcall(function() return env.WeatherSystem.IsWeatherActive(targetId) end)
+                                if ok and isTargetWeather then
+                                    foundTarget = true
+                                    break -- Trúng 1 cái là thoát vòng lặp ngay
+                                end
+                            end
+                            
+                            if foundTarget then
                                 hopSettings.isHopping = false
                                 game.StarterGui:SetCore("SendNotification", {Title = "BINGO!", Text = "Đã tìm thấy server có thời tiết yêu cầu!", Duration = 10})
                                 break
@@ -137,7 +157,7 @@ return function(Window, Utils)
         while task.wait(2) do
             local env = getrenv()._G.PathTool
             if env and env.WeatherSystem and type(env.WeatherSystem.IsWeatherActive) == "function" then
-                local currentStr = "Bình Thường/Nắng"
+                local currentStr = "Ban Ngày/Bình Thường"
                 for name, id in pairs(WeatherMap) do
                     local ok, isActive = pcall(function() return env.WeatherSystem.IsWeatherActive(id) end)
                     if ok and isActive then
