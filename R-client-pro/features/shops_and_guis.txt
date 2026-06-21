@@ -54,6 +54,7 @@ return function(Window, Utils)
     GuiTab:CreateButton({ Name = "🛒 Mở Cửa Hàng Chính (Store)", Callback = function() OpenGameUI("StoreView") end })
     GuiTab:CreateButton({ Name = "🎣 Cửa Hàng Bắt Thú (Catcher Shop)", Callback = function() OpenGameUI("CatcherShopView") end })
     GuiTab:CreateButton({ Name = "🗼 Cửa Hàng Tháp (Tower Shop)", Callback = function() OpenGameUI("TowerShopView") end })
+    GuiTab:CreateButton({ Name = "⚒️ Xưởng Chế Tạo (Craft)", Callback = function() OpenGameUI("TowerCraftView") end })
     GuiTab:CreateButton({ Name = "🌌 Cửa Hàng Vực Thẳm (Abyss Shop)", Callback = function() OpenGameUI("AbyssShopView") end })
 
     GuiTab:CreateSection("--- HOẠT ĐỘNG & SỰ KIỆN ---")
