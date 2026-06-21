@@ -83,6 +83,9 @@ return function(Window, Utils)
     -- ==========================================
     CamTab:CreateSection("--- TỌA ĐỘ VỊ TRÍ FARM ---")
     
+    -- 1. Tạo một Label để hiển thị tọa độ
+    local FarmPosLabel = CamTab:CreateLabel("Tọa độ đang lưu: Chưa có")
+
     CamTab:CreateButton({
         Name = "📍 Lưu Tọa Độ Vị Trí Farm Hiện Tại",
         Callback = function()
@@ -90,7 +93,15 @@ return function(Window, Utils)
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
             if hrp then
                 savedFarmPosition = hrp.CFrame
-                game.StarterGui:SetCore("SendNotification", { Title = "Thành Công!", Text = "Đã ghi nhớ vị trí farm hiện tại của bạn.", Duration = 3 })
+                
+                -- Lấy tọa độ X, Y, Z và làm tròn số để UI nhìn gọn gàng
+                local pos = savedFarmPosition.Position
+                local displayPos = string.format("%d, %d, %d", math.floor(pos.X), math.floor(pos.Y), math.floor(pos.Z))
+                
+                -- 2. Cập nhật lại dòng Label trên giao diện
+                FarmPosLabel:Set("Tọa độ đang lưu: " .. displayPos)
+                
+                game.StarterGui:SetCore("SendNotification", { Title = "Thành Công!", Text = "Đã lưu tọa độ: " .. displayPos, Duration = 3 })
             else
                 game.StarterGui:SetCore("SendNotification", { Title = "Lỗi Hệ Thống", Text = "Không tìm thấy HumanoidRootPart của nhân vật!", Duration = 3 })
             end
@@ -113,39 +124,6 @@ return function(Window, Utils)
         end,
     })
 
-    CamTab:CreateSection("--- LỌC QUÁI THEO TÊN ---")
-    local MonsterDropdown = CamTab:CreateDropdown({
-        Name = "Chọn Quái Ưu Tiên (Trống = Bắt Tất Cả)", 
-        Options = {"(Trống)"}, 
-        CurrentOption = {""}, 
-        MultipleOptions = true, 
-        Flag = "TargetMonstersDropdown",
-        Callback = function(Options) 
-            camSettings.targetMonsterNames = Options 
-        end,
-    })
-
-    CamTab:CreateButton({
-        Name = "🔄 Quét Quái Trên Map",
-        Callback = function()
-            local monstersFolder = Workspace:FindFirstChild("Monsters")
-            if not monstersFolder then return end
-            
-            local foundNames = {}
-            local dict = {} 
-            for _, monster in pairs(monstersFolder:GetChildren()) do
-                local realName = GetCachedMonsterName(monster)
-                if realName and not dict[realName] then 
-                    dict[realName] = true
-                    table.insert(foundNames, realName) 
-                end
-            end
-            if #foundNames > 0 then
-                MonsterDropdown:Refresh(foundNames)
-                game.StarterGui:SetCore("SendNotification", {Title = "Thành Công!", Text = "Đã tìm thấy " .. #foundNames .. " loài quái!", Duration = 3})
-            end
-        end,
-    })
 
     -- ==========================================
     -- LUỒNG 1: AUTO ATTACK
