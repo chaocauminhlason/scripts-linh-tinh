@@ -142,35 +142,72 @@ return function(Window, Utils)
     end)
 
     -- ==========================================
-    -- LUỒNG 2: AUTO CLAIM (ĐỌC DEADLINE 'T')
+    -- LUỒNG 2: AUTO CLAIM (SỬ DỤNG GIỜ SERVER CHUẨN)
     -- ==========================================
     task.spawn(function()
-        while task.wait(1) do
+        while task.wait(0.5) do
             if not hatchSettings.autoClaim then continue end
             local env = getrenv()._G.PathTool
             if env and env.BossRoomSystemClient and env.BossRoomSystemClient.gamePlayer.egg then
                 local clientEgg = env.BossRoomSystemClient.gamePlayer.egg
                 local H = clientEgg.saveData and clientEgg.saveData.H or {}
                 
-                -- Lấy thời gian thực của máy tính
-                local currentTime = os.time()
+                -- SỬA LỖI: Dùng giờ của Server Roblox thay vì giờ PC để không bao giờ bị lệch
+                local currentTime = workspace:GetServerTimeNow()
 
                 for slot = 1, hatchSettings.maxSlots do
                     local slotData = H[slot]
                     
-                    -- Nếu lò có trứng và mốc T đã trôi qua (Trứng đã chín)
                     if slotData and slotData.T and currentTime >= slotData.T then
                         pcall(function()
-                            -- Báo Backend thu hoạch
+                            -- 1. Bắn lệnh thu hoạch
                             BackendAPI:InvokeServer("EggHatchTakenChannel", slot)
                             
-                            -- Cập nhật UI
+                            -- 2. Chỉ Update UI, tuyệt đối không gán H[slot] = nil. 
+                            -- DataPullManager của game sẽ tự động xóa H[slot] khi Server xác nhận.
                             if type(clientEgg.Taken) == "function" then
                                 clientEgg.Taken(clientEgg, slot)
                             end
+                        end)
+                        task.wait(0.1) -- Delay nhẹ tránh spam gói tin
+                    end
+                end
+            end
+        end
+    end)
+
+    -- ==========================================
+    -- LUỒNG 3: AUTO START (ĐỌC HATCH TIME ĐỘNG TỪ GAME)
+    -- ==========================================
+    task.spawn(function()
+        while task.wait(1) do
+            if not hatchSettings.autoStart then continue end
+            local env = getrenv()._G.PathTool
+            if env and env.BossRoomSystemClient and env.BossRoomSystemClient.gamePlayer.egg then
+                local clientEgg = env.BossRoomSystemClient.gamePlayer.egg
+                local H = clientEgg.saveData and clientEgg.saveData.H or {}
+                
+                for slot = 1, hatchSettings.maxSlots do
+                    if not H[slot] then
+                        pcall(function()
+                            -- SỬA LỖI: Lấy chính xác thời gian ấp của quả trứng đang chọn từ hệ thống
+                            local hatchTime = 60
+                            if env.CfgEgg and env.CfgEgg.Tmpls and env.CfgEgg.Tmpls[hatchSettings.eggIdToHatch] then
+                                -- Tên biến có thể là Time, HatchTime, hoặc CostTime. Ta quét để lấy.
+                                local eggInfo = env.CfgEgg.Tmpls[hatchSettings.eggIdToHatch]
+                                hatchTime = eggInfo.Time or eggInfo.HatchTime or eggInfo.CostTime or 60
+                            end
+
+                            -- 1. Bắn lệnh lên Server
+                            local response = BackendAPI:InvokeServer("EggHatchStartChannel", slot, hatchSettings.eggIdToHatch)
                             
-                            -- Xóa trứng khỏi bộ nhớ tạm để vòng lặp Start làm việc
-                            H[slot] = nil
+                            if response then
+                                -- 2. Kích hoạt hoạt ảnh UI
+                                if type(clientEgg.StartHatch) == "function" then
+                                    clientEgg.StartHatch(clientEgg, slot, hatchSettings.eggIdToHatch)
+                                end
+                                -- Không cần gán tay H[slot] = ... nữa. Gói response hoặc DataPull sẽ tự nạp vào!
+                            end
                         end)
                         task.wait(0.2)
                     end
@@ -178,42 +215,3 @@ return function(Window, Utils)
             end
         end
     end)
-
-    -- ==========================================
-    -- LUỒNG AUTO START (SYNC VỚI SERVER TICK)
-    task.spawn(function()
-        while task.wait(2) do
-            if not hatchSettings.autoStart then continue end
-            local env = getrenv()._G.PathTool
-            if env and env.BossRoomSystemClient and env.BossRoomSystemClient.gamePlayer.egg then
-                local clientEgg = env.BossRoomSystemClient.gamePlayer.egg
-                local H = clientEgg.saveData and clientEgg.saveData.H or {}
-                
-                -- Lấy thời gian ấp từ CfgEgg
-                local hatchTime = 60 -- Mặc định 60s, bạn có thể lấy từ env.CfgEgg.Tmpls[ID].HatchTime
-                
-                for slot = 1, hatchSettings.maxSlots do
-                    if not H[slot] then
-                        pcall(function()
-                            -- 1. Bắn lệnh lên Server
-                            local response = BackendAPI:InvokeServer("EggHatchStartChannel", slot, hatchSettings.eggIdToHatch)
-                            
-                            -- 2. Dùng StartTick từ Server để tính T chuẩn xác
-                            if response and response.StartTick then
-                                local calculatedT = response.StartTick + hatchTime
-                                
-                                -- 3. Bơm vào Client để UI nảy hình
-                                if type(clientEgg.StartHatch) == "function" then
-                                    clientEgg.StartHatch(clientEgg, slot, hatchSettings.eggIdToHatch)
-                                end
-                                
-                                -- 4. Lưu vào bộ nhớ tạm để Luồng Auto Claim khớp thời gian
-                                H[slot] = {E = hatchSettings.eggIdToHatch, T = calculatedT}
-                            end
-                        end)
-                    end
-                end
-            end
-        end
-    end)
-end
