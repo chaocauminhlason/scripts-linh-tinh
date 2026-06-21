@@ -9,10 +9,14 @@ return function(Window, Utils)
         autoStart = false,
         stopIfBagFull = true,
         eggIdToHatch = 1,
-        maxSlots = 1 -- Mặc định chỉ ấp lò số 1 để chống lỗi UI máy khóa
+        maxSlots = 1
     }
 
-    local BackendAPI = game:GetService("ReplicatedStorage"):WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc")
+    local BackendAPI = nil
+    task.spawn(function()
+        BackendAPI = game:GetService("ReplicatedStorage"):WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc")
+end)
+
 
     -- ==========================================
     -- QUÉT DỮ LIỆU TỰ ĐỘNG
