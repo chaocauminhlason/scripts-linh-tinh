@@ -1,4 +1,13 @@
 -- =================================================================
+-- KHÓA CHỐNG NHÂN BẢN (GLOBAL LOCK) - QUAN TRỌNG NHẤT
+-- =================================================================
+if getgenv().R_Client_Pro_Running then 
+    warn("⏳ Tool đã hoạt động, chặn thực thi trùng lặp!")
+    return -- Nếu tool đã chạy rồi thì hủy luôn các bản sao khác
+end
+getgenv().R_Client_Pro_Running = true
+
+-- =================================================================
 -- KHỞI TẠO ĐƯỜNG DẪN TỪ GITHUB CỦA BẠN
 -- =================================================================
 local mainScriptLink = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/refs/heads/main/R-client-pro/main.txt"
@@ -7,7 +16,6 @@ local autoExecLink = "https://raw.githubusercontent.com/chaocauminhlason/scripts
 -- =================================================================
 -- 1. KỸ THUẬT A: VÒNG LẶP QUEUE ON TELEPORT VĨNH CỬU
 -- =================================================================
--- Thay vì chỉ gọi main.txt, ta gọi lại chính auto_execute.txt để nó cài lại Queue cho lần nhảy sau!
 local executeCode = [[
     if not game:IsLoaded() then game.Loaded:Wait() end
     
@@ -23,15 +31,8 @@ local executeCode = [[
 local queueFunc = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport) or getgenv().queue_on_teleport
 
 if queueFunc then
-    -- Cài sẵn mìn cho lần Teleport tiếp theo
+    -- Chỉ cài queue 1 lần duy nhất, bỏ sự kiện OnTeleport đi vì nó gây nhân bản
     pcall(function() queueFunc(executeCode) end)
-    
-    -- Backup: Gắn vào sự kiện OnTeleport phòng khi Executor bị lú
-    game:GetService("Players").LocalPlayer.OnTeleport:Connect(function(teleportState)
-        if teleportState == Enum.TeleportState.Started then
-            pcall(function() queueFunc(executeCode) end)
-        end
-    end)
 end
 
 -- =================================================================
@@ -43,4 +44,4 @@ task.spawn(function()
     end)
 end)
 
-print("🚀 Đã kích hoạt hệ thống Bám Dính Vĩnh Cửu (Loop Queue)!")
+print("🚀 Đã kích hoạt hệ thống Bám Dính Vĩnh Cửu (Đã bọc chống Clone)!")
