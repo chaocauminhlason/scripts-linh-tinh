@@ -9,14 +9,14 @@ return function(Window, Utils)
         autoStart = false,
         stopIfBagFull = true,
         eggIdToHatch = 1,
-        maxSlots = 1
+        maxSlots = 1 -- Mặc định chỉ ấp lò số 1 để chống lỗi UI máy khóa
     }
 
+    -- [ĐÃ FIX]: Đưa luồng tìm kiếm BackendAPI vào task.spawn để không block UI
     local BackendAPI = nil
     task.spawn(function()
         BackendAPI = game:GetService("ReplicatedStorage"):WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc")
-end)
-
+    end)
 
     -- ==========================================
     -- QUÉT DỮ LIỆU TỰ ĐỘNG
@@ -164,13 +164,16 @@ end)
                     
                     if slotData and slotData.T and currentTime >= slotData.T then
                         pcall(function()
-                            -- 1. Bắn lệnh thu hoạch
-                            BackendAPI:InvokeServer("EggHatchTakenChannel", slot)
-                            
-                            -- 2. Chỉ Update UI, tuyệt đối không gán H[slot] = nil. 
-                            -- DataPullManager của game sẽ tự động xóa H[slot] khi Server xác nhận.
-                            if type(clientEgg.Taken) == "function" then
-                                clientEgg.Taken(clientEgg, slot)
+                            -- [ĐÃ FIX]: Check an toàn BackendAPI trước khi gọi
+                            if BackendAPI then
+                                -- 1. Bắn lệnh thu hoạch
+                                BackendAPI:InvokeServer("EggHatchTakenChannel", slot)
+                                
+                                -- 2. Chỉ Update UI, tuyệt đối không gán H[slot] = nil. 
+                                -- DataPullManager của game sẽ tự động xóa H[slot] khi Server xác nhận.
+                                if type(clientEgg.Taken) == "function" then
+                                    clientEgg.Taken(clientEgg, slot)
+                                end
                             end
                         end)
                         task.wait(0.1) -- Delay nhẹ tránh spam gói tin
@@ -194,23 +197,26 @@ end)
                 for slot = 1, hatchSettings.maxSlots do
                     if not H[slot] then
                         pcall(function()
-                            -- SỬA LỖI: Lấy chính xác thời gian ấp của quả trứng đang chọn từ hệ thống
-                            local hatchTime = 60
-                            if env.CfgEgg and env.CfgEgg.Tmpls and env.CfgEgg.Tmpls[hatchSettings.eggIdToHatch] then
-                                -- Tên biến có thể là Time, HatchTime, hoặc CostTime. Ta quét để lấy.
-                                local eggInfo = env.CfgEgg.Tmpls[hatchSettings.eggIdToHatch]
-                                hatchTime = eggInfo.Time or eggInfo.HatchTime or eggInfo.CostTime or 60
-                            end
-
-                            -- 1. Bắn lệnh lên Server
-                            local response = BackendAPI:InvokeServer("EggHatchStartChannel", slot, hatchSettings.eggIdToHatch)
-                            
-                            if response then
-                                -- 2. Kích hoạt hoạt ảnh UI
-                                if type(clientEgg.StartHatch) == "function" then
-                                    clientEgg.StartHatch(clientEgg, slot, hatchSettings.eggIdToHatch)
+                            -- [ĐÃ FIX]: Check an toàn BackendAPI trước khi gọi
+                            if BackendAPI then
+                                -- SỬA LỖI: Lấy chính xác thời gian ấp của quả trứng đang chọn từ hệ thống
+                                local hatchTime = 60
+                                if env.CfgEgg and env.CfgEgg.Tmpls and env.CfgEgg.Tmpls[hatchSettings.eggIdToHatch] then
+                                    -- Tên biến có thể là Time, HatchTime, hoặc CostTime. Ta quét để lấy.
+                                    local eggInfo = env.CfgEgg.Tmpls[hatchSettings.eggIdToHatch]
+                                    hatchTime = eggInfo.Time or eggInfo.HatchTime or eggInfo.CostTime or 60
                                 end
-                                -- Không cần gán tay H[slot] = ... nữa. Gói response hoặc DataPull sẽ tự nạp vào!
+
+                                -- 1. Bắn lệnh lên Server
+                                local response = BackendAPI:InvokeServer("EggHatchStartChannel", slot, hatchSettings.eggIdToHatch)
+                                
+                                if response then
+                                    -- 2. Kích hoạt hoạt ảnh UI
+                                    if type(clientEgg.StartHatch) == "function" then
+                                        clientEgg.StartHatch(clientEgg, slot, hatchSettings.eggIdToHatch)
+                                    end
+                                    -- Không cần gán tay H[slot] = ... nữa. Gói response hoặc DataPull sẽ tự nạp vào!
+                                end
                             end
                         end)
                         task.wait(0.2)
@@ -219,3 +225,4 @@ end)
             end
         end
     end)
+end
