@@ -121,6 +121,9 @@ return function(Window, Utils)
                 end
 
                 task.spawn(function()
+                    -- Biến này để chống việc Tool spam thông báo liên tục khi đang ở đúng server
+                    local currentlyInTargetWeather = false 
+
                     while hopSettings.isHopping do
                         local env = getrenv()._G.PathTool
                         if env and env.WeatherSystem and type(env.WeatherSystem.IsWeatherActive) == "function" then
@@ -131,21 +134,34 @@ return function(Window, Utils)
                                 local ok, isTargetWeather = pcall(function() return env.WeatherSystem.IsWeatherActive(targetId) end)
                                 if ok and isTargetWeather then
                                     foundTarget = true
-                                    break -- Trúng 1 cái là thoát vòng lặp ngay
+                                    break 
                                 end
                             end
                             
                             if foundTarget then
-                                hopSettings.isHopping = false
-                                game.StarterGui:SetCore("SendNotification", {Title = "BINGO!", Text = "Đã tìm thấy server có thời tiết yêu cầu!", Duration = 10})
-                                break
+                                -- NẾU THỜI TIẾT ĐANG CÓ: Đứng im, KHÔNG tắt isHopping
+                                if not currentlyInTargetWeather then
+                                    currentlyInTargetWeather = true
+                                    game.StarterGui:SetCore("SendNotification", {Title = "BINGO!", Text = "Đang ở server có thời tiết yêu cầu! Sẽ tự nhảy đi khi thời tiết hết.", Duration = 10})
+                                end
+                                
+                                -- Chờ 5s rồi check lại (không nhảy server)
+                                task.wait(5) 
                             else
-                                WeatherStatus:Set("Trạng thái: Không đúng thời tiết, đang tìm server khác...")
+                                -- NẾU THỜI TIẾT HẾT HOẶC CHƯA TÌM THẤY: Bắt đầu nhảy
+                                if currentlyInTargetWeather then
+                                    game.StarterGui:SetCore("SendNotification", {Title = "Thời tiết đã hết!", Text = "Đang tìm server mới...", Duration = 5})
+                                    currentlyInTargetWeather = false
+                                else
+                                    WeatherStatus:Set("Trạng thái: Không đúng thời tiết, đang tìm server khác...")
+                                end
+                                
                                 HopToNewServer()
-                                task.wait(10) -- Nghỉ 10s chờ Teleport
+                                task.wait(15) -- Nghỉ 15s chờ màn hình load Teleport
                             end
+                        else
+                            task.wait(3) -- Chờ nếu game chưa load xong PathTool
                         end
-                        task.wait(3)
                     end
                 end)
             end
