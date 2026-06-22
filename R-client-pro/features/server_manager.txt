@@ -1,6 +1,6 @@
 -- ====================================================================
 -- MODULE: QUẢN LÝ SERVER & AUTO HOP (PRIORITY QUEUE: BOSS -> WEATHER)
--- VERSION: 2.5 - FIX KICK & GIỚI HẠN HOP
+-- VERSION: 2.6 - FIX LỖI ANTI-KICK
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -23,10 +23,10 @@ return function(Window, Utils)
     local hopCooldown = false
     local MAX_BLACKLIST_SIZE = 150
 
-    -- GIỚI HẠN HOP SERVER (CHỐNG KICK)
-    local hopHistory = {} -- Lưu thời gian các lần hop
+    -- GIỚI HẠN HOP
+    local hopHistory = {}
     local MAX_HOPS_PER_MINUTE = 5
-    local HOP_COOLDOWN_TIME = 15 -- giây
+    local HOP_COOLDOWN_TIME = 15
 
     -- CHỐNG SPAM BOSS
     local lastBossAlertTime = 0
@@ -145,8 +145,6 @@ return function(Window, Utils)
     -- ==========================================
     local function CanHop()
         local now = os.time()
-        
-        -- Xóa lịch sử cũ hơn 60 giây
         local newHistory = {}
         for _, t in ipairs(hopHistory) do
             if now - t < 60 then
@@ -155,7 +153,6 @@ return function(Window, Utils)
         end
         hopHistory = newHistory
         
-        -- Kiểm tra số lần hop trong 60 giây
         if #hopHistory >= MAX_HOPS_PER_MINUTE then
             game.StarterGui:SetCore("SendNotification", {
                 Title = "⛔ Giới hạn hop", 
@@ -164,7 +161,6 @@ return function(Window, Utils)
             })
             return false
         end
-        
         return true
     end
 
@@ -209,12 +205,9 @@ return function(Window, Utils)
     end
 
     local function HopToNewServer(hopReason)
-        -- Kiểm tra cooldown
         if isTeleporting or hopCooldown then return false end
-        
-        -- Kiểm tra giới hạn hop
         if not CanHop() then
-            task.wait(10) -- Chờ 10 giây rồi thử lại
+            task.wait(10)
             return false
         end
 
@@ -266,7 +259,6 @@ return function(Window, Utils)
     -- ==========================================
     local ServerTab = Window:CreateTab("Quản Lý Server", 4483362458)
 
-    -- THÔNG TIN SESSION
     ServerTab:CreateSection("--- THÔNG TIN SESSION ---")
     local SessionLabel = ServerTab:CreateLabel("Thời gian treo máy: 00:00:00")
     local sessionStartTime = os.time()
@@ -363,9 +355,7 @@ return function(Window, Utils)
         end 
     })
 
-    -- ==========================================
-    -- XỬ LÝ CHAT - CÓ CHỐNG SPAM
-    -- ==========================================
+    -- XỬ LÝ CHAT
     local function CheckChatMessage(msg)
         local lowerMsg = string.lower(msg)
         if string.find(lowerMsg, "special boss") then return end
@@ -433,14 +423,14 @@ return function(Window, Utils)
     })
 
     ServerTab:CreateButton({ 
-        Name = "🗑️ Reset Blacklist (Xóa lịch sử server)", 
+        Name = "🗑️ Reset Blacklist", 
         Callback = function() 
             ResetBlacklist("Reset thủ công bởi người dùng", false)
         end 
     })
 
     -- ==========================================
-    -- ANTI-KICK NÂNG CAO (BẮT SỰ KIỆN KICK)
+    -- ANTI-KICK (SỬA LỖI)
     -- ==========================================
     ServerTab:CreateSection("--- ANTI-KICK ---")
     local autoRejoinEnabled = false
@@ -454,7 +444,7 @@ return function(Window, Utils)
         end,
     })
 
-    -- CÁCH 1: Bắt sự kiện ErrorPrompt (popup lỗi)
+    -- CÁCH 1: Bắt popup lỗi
     task.spawn(function()
         pcall(function()
             local promptOverlay = CoreGui:WaitForChild("RobloxPromptGui"):WaitForChild("promptOverlay")
@@ -467,18 +457,25 @@ return function(Window, Utils)
         end)
     end)
 
-    -- CÁCH 2: Bắt sự kiện Character bị xóa (khi bị kick)
+    -- CÁCH 2: Bắt sự kiện mất character (NHƯNG CHỈ KHI ĐÃ CÓ CHARACTER)
     task.spawn(function()
-        while task.wait(1) do
-            if not autoRejoinEnabled then continue end
-            
-            -- Nếu LocalPlayer vẫn tồn tại nhưng Character đã bị xóa và không có popup
-            -- thì có thể đã bị kick không hiển thị popup
+        local hadCharacter = false
+        -- Đợi đến khi có character lần đầu
+        repeat
+            task.wait(0.5)
+            if LocalPlayer.Character then
+                hadCharacter = true
+            end
+        until hadCharacter or not autoRejoinEnabled
+        
+        -- Nếu đã có character và đang bật autoRejoin, mới bắt đầu kiểm tra
+        while autoRejoinEnabled and hadCharacter do
+            task.wait(1)
             local char = LocalPlayer.Character
             if char == nil then
-                -- Chờ 2 giây để chắc chắn không phải load lại bình thường
-                task.wait(2)
-                if LocalPlayer.Character == nil then
+                -- Đã có character trước đó, giờ mất -> khả năng bị kick
+                task.wait(2) -- chờ thêm để chắc chắn
+                if LocalPlayer.Character == nil and autoRejoinEnabled then
                     game.StarterGui:SetCore("SendNotification", {
                         Title = "🔁 Auto Rejoin", 
                         Text = "Phát hiện bị kick, đang kết nối lại...", 
@@ -519,7 +516,6 @@ return function(Window, Utils)
             end)
             local bossGlobalActive = (endTime - currentTime) > 0
 
-            -- KHỐI ƯU TIÊN 1: SĂN BOSS
             if (bossGlobalActive or bossPresent) and bossHopSettings.enabled then
                 _G.ServerManager.pauseFarm = true
                 if not bossPresent then
@@ -530,7 +526,6 @@ return function(Window, Utils)
                 continue 
             end
 
-            -- KHỐI ƯU TIÊN 2: SĂN THỜI TIẾT
             if weatherHopSettings.enabled then
                 local env = getrenv()._G.PathTool
                 if env and env.WeatherSystem then
@@ -579,12 +574,10 @@ return function(Window, Utils)
         local hopCountLabel = ServerTab:CreateLabel("🔄 Số lần hop trong phút: 0")
         
         while task.wait(5) do
-            -- Đếm blacklist
             local count = 0
             for k, v in pairs(visitedServers) do count = count + 1 end
             blacklistCountLabel:Set("📊 Số server trong blacklist: " .. count)
             
-            -- Đếm số lần hop trong 60 giây
             local now = os.time()
             local recentHops = 0
             for _, t in ipairs(hopHistory) do
@@ -600,5 +593,5 @@ return function(Window, Utils)
         end
     end)
 
-    print("✅ Server Manager 2.5 loaded successfully!")
+    print("✅ Server Manager 2.6 loaded successfully!")
 end
