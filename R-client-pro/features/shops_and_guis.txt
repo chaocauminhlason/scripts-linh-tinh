@@ -44,9 +44,9 @@ return function(Window, Utils)
     -- GIAO DIỆN NÚT BẤM (BUTTONS)
     -- ==========================================
     GuiTab:CreateSection("--- 🗺️ DỊCH CHUYỂN & BẢN ĐỒ ---")
-    GuiTab:CreateButton({ Name = "🌍 Chọn Khu Vực (Area Switch)", Callback = function() OpenGameUI("AreaSwitchView") end })
+    --GuiTab:CreateButton({ Name = "🌍 Chọn Khu Vực (Area Switch)", Callback = function() OpenGameUI("AreaSwitchView") end })
     GuiTab:CreateButton({ Name = "📍 Dịch Chuyển Tức Thời (Area Teleport)", Callback = function() OpenGameUI("AreaTeleportView") end })
-    GuiTab:CreateButton({ Name = "🚀 Cổng Dịch Chuyển (Queue Teleport)", Callback = function() OpenGameUI("QueueTeleportView") end })
+    --GuiTab:CreateButton({ Name = "🚀 Cổng Dịch Chuyển (Queue Teleport)", Callback = function() OpenGameUI("QueueTeleportView") end })
 
     GuiTab:CreateSection("--- TÚI ĐỒ & QUẢN LÝ ---")
     GuiTab:CreateButton({ Name = "🎒 Mở Túi Đồ (Item Bag)", Callback = function() OpenGameUI("ItemBagView") end })
