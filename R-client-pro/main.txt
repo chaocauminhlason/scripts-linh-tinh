@@ -1,5 +1,6 @@
 -- ====================================================================
 -- MAIN SCRIPT: Khởi chạy R-Client Pro (BẢN CHỐNG CACHE GITHUB)
+-- VERSION: 2.6 - THÊM MAIN CONTROLLER
 -- ====================================================================
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
@@ -36,9 +37,22 @@ end
 local Utils = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/core/utilities.txt')
 local WebhookModule = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/core/webhook.txt')
 
-
 -- 2. Kéo các Features
 if Utils then
+    -- ==========================================
+    -- MAIN CONTROLLER - ĐIỀU KHIỂN TRUNG TÂM
+    -- ==========================================
+    local main = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/main.lua')
+    if main then 
+        main(Window, Utils) 
+        print("✅ Main Controller loaded!")
+    else
+        warn("❌ Không thể tải Main Controller")
+    end
+
+    -- ==========================================
+    -- CÁC MODULE CHỨC NĂNG
+    -- ==========================================
     local t = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/tracker.txt')
     if t then t(Window, Utils) end
 
@@ -48,26 +62,21 @@ if Utils then
     local r = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/farm.txt')
     if r then r(Window, Utils) end
     
-    -- Tải Module Săn Boss
     local b = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/boss_hunt.txt')
     if b then b(Window, Utils) end
     
-    -- Tải Module Quản Lý Server
     local sm = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/server_manager.txt')
     if sm then sm(Window, Utils) end
     
-    -- Load Hầm Ngục ĐỘC LẬP (Không bị phụ thuộc vào Webhook nữa)
     local d = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/auto_dungeon.txt')
     if d then d(Window, Utils, WebhookModule) end
     
-    -- [ĐÃ SỬA LỖI TÊN FILE]: auto_hatch.txt -> hatch_egg.txt
     local h = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/hatch_egg.txt')
     if h then h(Window, Utils) end
 
     local rift = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/auto_rift.txt')
     if rift then rift(Window, Utils) end
     
-    -- [ĐÃ SỬA LỖI MẤT BIẾN O]: Thêm "local o ="
     local o = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/optimization.txt')
     if o then o(Window, Utils) end
 end
