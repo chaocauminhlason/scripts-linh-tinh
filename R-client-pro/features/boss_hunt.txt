@@ -1,16 +1,13 @@
 -- ====================================================================
--- MODULE: SĂN BOSS VIP (SMART AUTO ATTACK & SERVER HOP)
+-- MODULE: SĂN BOSS VIP (CHỈ QUÉT VÀ TẤN CÔNG TỪ XA)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local TeleportService = game:GetService("TeleportService")
-    local HttpService = game:GetService("HttpService")
-    local TextChatService = game:GetService("TextChatService")
-    
     local LocalPlayer = Players.LocalPlayer
 
-    -- Danh sách từ khóa nhận diện Boss
+    local BossTab = Window:CreateTab("Săn Boss", 4483345998)
+
     local BOSS_KEYWORDS = {
         "flaragon", "godzilla", "shake", "knight", "tide", "vex", 
         "frost", "wyrm", "gai", "draco", "thunder", "claw", 
@@ -18,29 +15,7 @@ return function(Window, Utils)
     }
 
     -- ==========================================
-    -- 1. QUẢN LÝ THỜI GIAN TOÀN CẦU (GLOBAL TIMER)
-    -- ==========================================
-    local timerFileName = "RClient_BossGlobalTimer.json"
-    
-    local function SaveBossEndTime(endTime)
-        pcall(function()
-            if writefile then writefile(timerFileName, HttpService:JSONEncode({EndTime = endTime})) end
-        end)
-    end
-
-    local function GetBossEndTime()
-        local endTime = 0
-        pcall(function()
-            if isfile and isfile(timerFileName) then
-                local data = HttpService:JSONDecode(readfile(timerFileName))
-                if data and data.EndTime then endTime = data.EndTime end
-            end
-        end)
-        return endTime
-    end
-
-    -- ==========================================
-    -- 2. LOGIC TÌM & EXTRACT ID BOSS THÔNG MINH
+    -- LOGIC TÌM & EXTRACT ID BOSS
     -- ==========================================
     local function AutoDetectBossID()
         local monstersFolder = workspace:FindFirstChild("Monsters") or workspace:FindFirstChild("Monster")
@@ -50,234 +25,75 @@ return function(Window, Utils)
             if obj:IsA("Model") then
                 local hum = obj:FindFirstChildOfClass("Humanoid")
                 
-                -- Lọc thực thể có máu khổng lồ (> 100k) như file cũ của bạn
                 if hum and hum.MaxHealth and hum.MaxHealth >= 100000 and obj.Name ~= LocalPlayer.Name then
                     local nameLower = obj.Name:lower()
                     local isKnownBoss = false
                     
                     for _, k in pairs(BOSS_KEYWORDS) do
-                        if nameLower:find(k) then 
-                            isKnownBoss = true 
-                            break 
-                        end
+                        if nameLower:find(k) then isKnownBoss = true; break end
                     end
 
                     if isKnownBoss then
                         local bossId = nil
-                        
-                        -- Quét ID từ Tên (VD: Monster_15900 -> 15900)
                         local idFromName = string.match(obj.Name, "%d+")
                         if idFromName then bossId = tonumber(idFromName) end
                         
-                        -- Quét ID từ Thuộc tính (Attribute)
                         if not bossId then
                             bossId = obj:GetAttribute("Id") or obj:GetAttribute("ID") or obj:GetAttribute("Uid") or obj:GetAttribute("TmplId")
                         end
                         
-                        -- Trả về ID, Tên, và HRP để dùng nếu cần Teleport
-                        if bossId then
-                            return bossId, obj.Name, obj:FindFirstChild("HumanoidRootPart")
-                        end
+                        if bossId then return bossId, obj.Name end
                     end
                 end
             end
         end
-        return nil, nil, nil
+        return nil, nil
     end
 
     -- ==========================================
-    -- 3. HÀM NHẢY SERVER (SERVER HOP)
+    -- GIAO DIỆN & LOGIC AUTO TẤN CÔNG
     -- ==========================================
-    local function HopToNewServer()
-        local PlaceId = game.PlaceId
-        local api = "https://games.roblox.com/v1/games/"..PlaceId.."/servers/Public?sortOrder=Desc&excludeFullGames=true&limit=100"
-        
-        local success, data = pcall(function() return game:HttpGet(api) end)
-        if success and data then
-            local json = HttpService:JSONDecode(data)
-            if json and json.data then
-                local validServers = {}
-                for _, v in pairs(json.data) do
-                    if v.id and v.id ~= game.JobId and (v.playing or 0) < (v.maxPlayers or 0) then
-                        table.insert(validServers, v.id)
-                    end
-                end
+    local attackSettings = { enabled = false, hitSpeed = 0.1 }
 
-                if #validServers > 0 then
-                    local randomTargetId = validServers[math.random(1, #validServers)]
-                    game.StarterGui:SetCore("SendNotification", {Title = "Boss Hop", Text = "Đang nhảy Server...", Duration = 5})
-                    
-                    -- Tự động chạy lại Tool khi sang Server mới
-                    pcall(function()
-                        local autoExecLink = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/refs/heads/main/R-client-pro/auto_execute.txt"
-                        local executeCode = "if not game:IsLoaded() then game.Loaded:Wait() end; task.wait(1); pcall(function() loadstring(game:HttpGet('"..autoExecLink.."'))() end)"
-                        local queueFunc = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport) or getgenv().queue_on_teleport
-                        if queueFunc then queueFunc(executeCode) end
-                    end)
-                    
-                    task.wait(1)
-                    TeleportService:TeleportToPlaceInstance(PlaceId, randomTargetId, LocalPlayer)
-                    return true
-                end
-            end
-        end
-        return false
-    end
-
-    -- ==========================================
-    -- GIAO DIỆN UI (RAYFIELD)
-    -- ==========================================
-    local BossTab = Window:CreateTab("Săn Boss", 4483345998)
+    BossTab:CreateSection("--- AUTO ĐÁNH BOSS TỪ XA ---")
     
-    local huntSettings = {
-        enabled = false,
-        spamDuration = 5 -- Thời gian nã skill trước khi nhảy
-    }
-
-    BossTab:CreateSection("--- TRẠNG THÁI HỆ THỐNG ---")
     local StatusLabel = BossTab:CreateLabel("Trạng thái: Đang nghỉ")
-    local TargetLabel = BossTab:CreateLabel("Mục tiêu hiện tại: Chưa tìm thấy")
-    local TimerLabel = BossTab:CreateLabel("Thời gian Boss: Chờ thông báo")
+    local TargetLabel = BossTab:CreateLabel("Mục tiêu hiện tại: Trống")
 
-    BossTab:CreateSection("--- THIẾT LẬP AUTO THÔNG MINH ---")
-    
     BossTab:CreateToggle({
-        Name = "Bật Auto Săn Boss & Server Hop",
+        Name = "Bật Auto Tấn Công Boss (Khi Phát Hiện)",
         CurrentValue = false,
-        Flag = "AutoBossHunt",
+        Flag = "AutoAttackBoss",
         Callback = function(Value)
-            huntSettings.enabled = Value
+            attackSettings.enabled = Value
             if not Value then StatusLabel:Set("Trạng thái: Đã tắt") end
         end
     })
 
-    BossTab:CreateSlider({
-        Name = "Thời gian spam đòn trước khi đổi Server",
-        Range = {3, 15},
-        Increment = 1,
-        Suffix = "Giây",
-        CurrentValue = 5,
-        Flag = "BossSpamTime",
-        Callback = function(Value) huntSettings.spamDuration = Value end,
-    })
-    
-    BossTab:CreateButton({
-        Name = "⏳ Ép kích hoạt đồng hồ 5 Phút (Test)",
-        Callback = function() SaveBossEndTime(os.time() + 300) end
-    })
-
-    -- ==========================================
-    -- LẮNG NGHE CHAT (BẮT SỰ KIỆN 5 PHÚT)
-    -- ==========================================
-    local function CheckChatMessage(msg)
-        local text = string.lower(msg)
-        if text:match("xuất hiện") or text:match("spawn") or text:match("has appeared") or text:match("boss") then
-            SaveBossEndTime(os.time() + 300) -- Boss sống 5 phút
-        end
-    end
-
-    local chatEvents = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
-    if chatEvents then
-        chatEvents.OnMessageDoneFiltering.OnClientEvent:Connect(function(msgData) CheckChatMessage(msgData.Message) end)
-    end
-    TextChatService.MessageReceived:Connect(function(textChatMessage) CheckChatMessage(textChatMessage.Text) end)
-
-    -- ==========================================
-    -- LUỒNG XỬ LÝ CHÍNH: TÌM ID -> ĐÁNH -> HOP
-    -- ==========================================
     task.spawn(function()
         local DataPullFunc = nil
         pcall(function()
             DataPullFunc = ReplicatedStorage:WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc")
         end)
 
-        while task.wait(1) do
-            local currentEndTime = GetBossEndTime()
-            local timeRemaining = currentEndTime - os.time()
-
-            if timeRemaining > 0 then
-                TimerLabel:Set(string.format("Thời gian Boss sống: %02d:%02d", math.floor(timeRemaining / 60), timeRemaining % 60))
-            else
-                TimerLabel:Set("Thời gian Boss sống: Đã hết hạn")
-            end
-
-            if huntSettings.enabled then
-                if timeRemaining > 0 then
-                    -- Quét ID Boss đang sống
-                    local currentBossId, currentBossName = AutoDetectBossID()
+        while task.wait(attackSettings.hitSpeed) do
+            if attackSettings.enabled then
+                local currentBossId, currentBossName = AutoDetectBossID()
+                
+                if currentBossId and DataPullFunc then
+                    TargetLabel:Set("Đang khóa mục tiêu: " .. currentBossName)
+                    StatusLabel:Set("Trạng thái: ⚔️ Đang nã sát thương (Remote)!")
                     
-                    if currentBossId then
-                        TargetLabel:Set("Mục tiêu hiện tại: " .. currentBossName .. " (ID: " .. tostring(currentBossId) .. ")")
-                        StatusLabel:Set("Trạng thái: ⚔️ ĐANG BẮN REMOTE TỪ XA!")
-                        
-                        -- Spam đòn đánh qua Remote
-                        local attackEndTime = os.time() + huntSettings.spamDuration
-                        while os.time() < attackEndTime and huntSettings.enabled do
-                            if DataPullFunc then
-                                pcall(function()
-                                    DataPullFunc:InvokeServer("MonsterAttackChannel", currentBossId)
-                                end)
-                            end
-                            task.wait(0.1)
-                        end
-
-                        -- Nhảy Server
-                        if huntSettings.enabled then
-                            StatusLabel:Set("Trạng thái: 🌐 Đang nhảy Server...")
-                            HopToNewServer()
-                            task.wait(15)
-                        end
-                    else
-                        TargetLabel:Set("Mục tiêu hiện tại: Không thấy Boss")
-                        StatusLabel:Set("Trạng thái: 🌐 Server rỗng, đang nhảy...")
-                        HopToNewServer()
-                        task.wait(15)
-                    end
+                    -- Bắn lệnh tấn công trực tiếp
+                    pcall(function()
+                        DataPullFunc:InvokeServer("MonsterAttackChannel", currentBossId)
+                    end)
                 else
-                    StatusLabel:Set("Trạng thái: 💤 Đang chờ Boss xuất hiện...")
-                    TargetLabel:Set("Mục tiêu hiện tại: Chờ đợi")
+                    TargetLabel:Set("Mục tiêu hiện tại: Trống")
+                    StatusLabel:Set("Trạng thái: 🔍 Đang quét bản đồ tìm Boss...")
+                    task.wait(1) -- Quét chậm lại nếu không thấy Boss để đỡ lag
                 end
             end
         end
     end)
-
-    -- ==========================================
-    -- PHỤ LỤC: DỊCH CHUYỂN THỦ CÔNG (TỪ FILE CŨ)
-    -- ==========================================
-    local function TeleToTarget(fallbackPos)
-        local _, _, bossHRP = AutoDetectBossID() -- Thử tìm Boss thật trước
-        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if not hrp then return end
-        
-        if bossHRP then
-            hrp.CFrame = bossHRP.CFrame * CFrame.new(0, 0, 10)
-            game.StarterGui:SetCore("SendNotification", {Title = "Thành Công", Text = "Đã bay tới ngay trước mặt Boss!", Duration = 3})
-        else
-            hrp.CFrame = CFrame.new(fallbackPos + Vector3.new(0, 5, 0))
-            game.StarterGui:SetCore("SendNotification", {Title = "Thông Báo", Text = "Không tìm thấy Boss!\nBay tới tọa độ chờ...", Duration = 3})
-        end
-    end
-
-    local Coords = {
-        Flaragon = Vector3.new(-5.1, -116.4, -1492.8),
-        Godzilla = Vector3.new(-2304.0, 39.0, -1365.7),
-        ShakeKnight = Vector3.new(2942.0, -44.5, 1865.9),
-        TideVex = Vector3.new(-2928.9, -99.9, 2913.2),
-        Frostwyrm = Vector3.new(2907.9, -96.7, 859.1),
-        GaiDraco = Vector3.new(2725.0, 137, -1117.9),
-        Thunderclaw = Vector3.new(-5991.6, -29.2, 880.6),
-        Lampyr = Vector3.new(382.2, -110.0, 3429.5),
-        Scareaper = Vector3.new(6127.1, -105.0, -416.9)
-    }
-
-    BossTab:CreateSection("--- DỊCH CHUYỂN THỦ CÔNG (CỔ ĐIỂN) ---")
-    BossTab:CreateButton({ Name = "🐉 TELE FLARAGON", Callback = function() TeleToTarget(Coords.Flaragon) end })
-    BossTab:CreateButton({ Name = "🦖 TELE GODZILLA", Callback = function() TeleToTarget(Coords.Godzilla) end })
-    BossTab:CreateButton({ Name = "⚔️ TELE SHAKEKNIGHT", Callback = function() TeleToTarget(Coords.ShakeKnight) end })
-    BossTab:CreateButton({ Name = "🌊 TELE TIDEVEX", Callback = function() TeleToTarget(Coords.TideVex) end })
-    BossTab:CreateButton({ Name = "❄️ TELE FROSTWYRM", Callback = function() TeleToTarget(Coords.Frostwyrm) end })
-    BossTab:CreateButton({ Name = "🐲 TELE GAIDRACO", Callback = function() TeleToTarget(Coords.GaiDraco) end })
-    BossTab:CreateButton({ Name = "⚡ TELE THUNDERCLAW", Callback = function() TeleToTarget(Coords.Thunderclaw) end })
-    BossTab:CreateButton({ Name = "💡 TELE LAMPYR", Callback = function() TeleToTarget(Coords.Lampyr) end })
-    BossTab:CreateButton({ Name = "☠️ TELE SCAREAPER", Callback = function() TeleToTarget(Coords.Scareaper) end })
 end
