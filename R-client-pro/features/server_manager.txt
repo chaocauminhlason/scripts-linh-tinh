@@ -1,6 +1,6 @@
 -- ====================================================================
 -- MODULE: QUẢN LÝ SERVER & AUTO HOP (PRIORITY QUEUE: BOSS -> WEATHER)
--- VERSION: 2.5 - FIX AUTO REJOIN KHI BỊ KICK (ERRORCODE 267)
+-- VERSION: 2.5 - FIX KICK & GIỚI HẠN HOP
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -23,6 +23,12 @@ return function(Window, Utils)
     local hopCooldown = false
     local MAX_BLACKLIST_SIZE = 150
 
+    -- GIỚI HẠN HOP SERVER (CHỐNG KICK)
+    local hopHistory = {} -- Lưu thời gian các lần hop
+    local MAX_HOPS_PER_MINUTE = 5
+    local HOP_COOLDOWN_TIME = 15 -- giây
+
+    -- CHỐNG SPAM BOSS
     local lastBossAlertTime = 0
     local BOSS_ALERT_COOLDOWN = 30
 
@@ -135,7 +141,39 @@ return function(Window, Utils)
     _G.ServerManager.IsBossPresent = IsBossPresent
 
     -- ==========================================
-    -- HÀM TÌM & NHẢY SERVER (CHỈ SERVER ÍT NGƯỜI)
+    -- HÀM KIỂM TRA GIỚI HẠN HOP
+    -- ==========================================
+    local function CanHop()
+        local now = os.time()
+        
+        -- Xóa lịch sử cũ hơn 60 giây
+        local newHistory = {}
+        for _, t in ipairs(hopHistory) do
+            if now - t < 60 then
+                table.insert(newHistory, t)
+            end
+        end
+        hopHistory = newHistory
+        
+        -- Kiểm tra số lần hop trong 60 giây
+        if #hopHistory >= MAX_HOPS_PER_MINUTE then
+            game.StarterGui:SetCore("SendNotification", {
+                Title = "⛔ Giới hạn hop", 
+                Text = "Đã hop " .. MAX_HOPS_PER_MINUTE .. " lần/phút, tạm dừng 10s...", 
+                Duration = 3
+            })
+            return false
+        end
+        
+        return true
+    end
+
+    local function RecordHop()
+        table.insert(hopHistory, os.time())
+    end
+
+    -- ==========================================
+    -- HÀM TÌM & NHẢY SERVER
     -- ==========================================
     local function GetServerList()
         local PlaceId = game.PlaceId
@@ -171,12 +209,21 @@ return function(Window, Utils)
     end
 
     local function HopToNewServer(hopReason)
+        -- Kiểm tra cooldown
         if isTeleporting or hopCooldown then return false end
+        
+        -- Kiểm tra giới hạn hop
+        if not CanHop() then
+            task.wait(10) -- Chờ 10 giây rồi thử lại
+            return false
+        end
+
         isTeleporting = true
         hopCooldown = true
+        RecordHop()
 
         task.spawn(function()
-            task.wait(5)
+            task.wait(HOP_COOLDOWN_TIME)
             hopCooldown = false
         end)
 
@@ -189,7 +236,7 @@ return function(Window, Utils)
 
             if targetServer and targetServer.id then
                 game.StarterGui:SetCore("SendNotification", {
-                    Title = "Server Hop", 
+                    Title = "🚀 Server Hop", 
                     Text = hopReason or "Đang sang server mới...", 
                     Duration = 5
                 })
@@ -317,7 +364,7 @@ return function(Window, Utils)
     })
 
     -- ==========================================
-    -- XỬ LÝ CHAT
+    -- XỬ LÝ CHAT - CÓ CHỐNG SPAM
     -- ==========================================
     local function CheckChatMessage(msg)
         local lowerMsg = string.lower(msg)
@@ -393,126 +440,55 @@ return function(Window, Utils)
     })
 
     -- ==========================================
-    -- AUTO REJOIN NÂNG CAO (FIX ERRORCODE 267)
+    -- ANTI-KICK NÂNG CAO (BẮT SỰ KIỆN KICK)
     -- ==========================================
     ServerTab:CreateSection("--- ANTI-KICK ---")
     local autoRejoinEnabled = false
-    local rejoinCooldown = false
-
-    -- Hàm rejoin an toàn
-    local function SafeRejoin()
-        if rejoinCooldown then 
-            print("⏳ Rejoin đang trong thời gian chờ, bỏ qua")
-            return 
-        end
-        
-        rejoinCooldown = true
-        
-        game.StarterGui:SetCore("SendNotification", {
-            Title = "🔄 Auto Rejoin", 
-            Text = "Bị kick! Đang kết nối lại server...", 
-            Duration = 5
-        })
-        
-        print("🔄 Auto Rejoin: Đang teleport lại...")
-        
-        task.wait(2)
-        TeleportService:Teleport(game.PlaceId, LocalPlayer)
-        
-        -- Cooldown 30s sau khi rejoin để tránh spam
-        task.spawn(function()
-            task.wait(30)
-            rejoinCooldown = false
-            print("✅ Rejoin cooldown đã reset")
-        end)
-    end
-
-    -- CÁCH 1: Bắt sự kiện ErrorPrompt (cách cũ nhưng cải tiến)
-    pcall(function()
-        local promptOverlay = CoreGui:WaitForChild("RobloxPromptGui"):WaitForChild("promptOverlay")
-        promptOverlay.ChildAdded:Connect(function(child)
-            if child.Name == "ErrorPrompt" and autoRejoinEnabled then
-                -- Kiểm tra xem có phải lỗi kick không
-                local errorText = child:FindFirstChild("ErrorText")
-                if errorText and errorText.Text then
-                    local text = errorText.Text
-                    if string.find(text, "kicked") or string.find(text, "ErrorCode:267") then
-                        print("🔴 Phát hiện kick qua ErrorPrompt: " .. text)
-                        SafeRejoin()
-                    end
-                else
-                    -- Fallback: vẫn rejoin nếu không xác định được nội dung
-                    print("🔴 Phát hiện ErrorPrompt nhưng không có nội dung, vẫn rejoin")
-                    SafeRejoin()
-                end
-            end
-        end)
-    end)
-
-    -- CÁCH 2: Bắt sự kiện PlayerRemoving (khi người chơi bị xóa khỏi game)
-    Players.PlayerRemoving:Connect(function(player)
-        if player == LocalPlayer and autoRejoinEnabled then
-            print("🔴 Phát hiện PlayerRemoving - có thể đang bị kick")
-            -- Đợi 1 giây để game xử lý xong
-            task.wait(1)
-            SafeRejoin()
-        end
-    end)
-
-    -- CÁCH 3: Bắt sự kiện Teleport thất bại
-    game:OnTeleport(function(state)
-        if state == Enum.TeleportState.Failed and autoRejoinEnabled then
-            print("🔴 Teleport thất bại, thử rejoin")
-            SafeRejoin()
-        end
-    end)
-
-    -- CÁCH 4: Theo dõi CoreGui để phát hiện màn hình kick (dự phòng)
-    task.spawn(function()
-        while task.wait(2) do
-            if not autoRejoinEnabled then continue end
-            
-            -- Kiểm tra nếu LocalPlayer không còn tồn tại trong Players
-            if not Players:FindFirstChild(LocalPlayer.Name) then
-                print("🔴 Không tìm thấy LocalPlayer trong Players, đang bị kick")
-                SafeRejoin()
-                break
-            end
-            
-            -- Kiểm tra nếu Character bị xóa đột ngột (không phải do chết)
-            if LocalPlayer.Character == nil and LocalPlayer:FindFirstChild("Character") == nil then
-                -- Đợi 2 giây xem có hồi sinh không
-                task.wait(2)
-                if LocalPlayer.Character == nil then
-                    print("🔴 Character biến mất và không hồi sinh, có thể bị kick")
-                    SafeRejoin()
-                    break
-                end
-            end
-        end
-    end)
 
     ServerTab:CreateToggle({
         Name = "Auto Rejoin khi bị Kick (Chống Disconnect)",
         CurrentValue = false,
         Flag = "AutoRejoinKick",
-        Callback = function(Value)
-            autoRejoinEnabled = Value
-            if Value then
-                game.StarterGui:SetCore("SendNotification", {
-                    Title = "✅ Auto Rejoin", 
-                    Text = "Đã bật, sẽ tự động kết nối lại khi bị kick", 
-                    Duration = 3
-                })
-            else
-                game.StarterGui:SetCore("SendNotification", {
-                    Title = "⏸️ Auto Rejoin", 
-                    Text = "Đã tắt", 
-                    Duration = 2
-                })
-            end
+        Callback = function(Value) 
+            autoRejoinEnabled = Value 
         end,
     })
+
+    -- CÁCH 1: Bắt sự kiện ErrorPrompt (popup lỗi)
+    task.spawn(function()
+        pcall(function()
+            local promptOverlay = CoreGui:WaitForChild("RobloxPromptGui"):WaitForChild("promptOverlay")
+            promptOverlay.ChildAdded:Connect(function(child)
+                if child.Name == "ErrorPrompt" and autoRejoinEnabled then
+                    task.wait(2)
+                    TeleportService:Teleport(game.PlaceId, LocalPlayer)
+                end
+            end)
+        end)
+    end)
+
+    -- CÁCH 2: Bắt sự kiện Character bị xóa (khi bị kick)
+    task.spawn(function()
+        while task.wait(1) do
+            if not autoRejoinEnabled then continue end
+            
+            -- Nếu LocalPlayer vẫn tồn tại nhưng Character đã bị xóa và không có popup
+            -- thì có thể đã bị kick không hiển thị popup
+            local char = LocalPlayer.Character
+            if char == nil then
+                -- Chờ 2 giây để chắc chắn không phải load lại bình thường
+                task.wait(2)
+                if LocalPlayer.Character == nil then
+                    game.StarterGui:SetCore("SendNotification", {
+                        Title = "🔁 Auto Rejoin", 
+                        Text = "Phát hiện bị kick, đang kết nối lại...", 
+                        Duration = 3
+                    })
+                    TeleportService:Teleport(game.PlaceId, LocalPlayer)
+                end
+            end
+        end
+    end)
 
     -- ==========================================
     -- MASTER QUEUE
@@ -529,7 +505,7 @@ return function(Window, Utils)
             if isTeleporting then continue end
 
             local currentTime = os.time()
-            if currentTime - lastHopTime < 10 then continue end
+            if currentTime - lastHopTime < HOP_COOLDOWN_TIME then continue end
 
             local bossPresent = IsBossPresent()
             _G.ServerManager.isBossPresent = bossPresent
@@ -543,6 +519,7 @@ return function(Window, Utils)
             end)
             local bossGlobalActive = (endTime - currentTime) > 0
 
+            -- KHỐI ƯU TIÊN 1: SĂN BOSS
             if (bossGlobalActive or bossPresent) and bossHopSettings.enabled then
                 _G.ServerManager.pauseFarm = true
                 if not bossPresent then
@@ -553,6 +530,7 @@ return function(Window, Utils)
                 continue 
             end
 
+            -- KHỐI ƯU TIÊN 2: SĂN THỜI TIẾT
             if weatherHopSettings.enabled then
                 local env = getrenv()._G.PathTool
                 if env and env.WeatherSystem then
@@ -594,14 +572,27 @@ return function(Window, Utils)
     end)
 
     -- ==========================================
-    -- HIỂN THỊ SỐ LƯỢNG BLACKLIST
+    -- HIỂN THỊ SỐ LƯỢNG BLACKLIST & HOP
     -- ==========================================
     task.spawn(function()
         local blacklistCountLabel = ServerTab:CreateLabel("📊 Số server trong blacklist: 0")
-        while task.wait(10) do
+        local hopCountLabel = ServerTab:CreateLabel("🔄 Số lần hop trong phút: 0")
+        
+        while task.wait(5) do
+            -- Đếm blacklist
             local count = 0
             for k, v in pairs(visitedServers) do count = count + 1 end
             blacklistCountLabel:Set("📊 Số server trong blacklist: " .. count)
+            
+            -- Đếm số lần hop trong 60 giây
+            local now = os.time()
+            local recentHops = 0
+            for _, t in ipairs(hopHistory) do
+                if now - t < 60 then
+                    recentHops = recentHops + 1
+                end
+            end
+            hopCountLabel:Set("🔄 Số lần hop trong phút: " .. recentHops .. "/" .. MAX_HOPS_PER_MINUTE)
             
             if count > MAX_BLACKLIST_SIZE then
                 AutoCleanBlacklist()
