@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: R-GAME (AUTO BẮT, ĐÁNH, HỒI MÁU) - SMART HEAL V4 (MOUNT FIX) & FARM POS
+-- MODULE: R-GAME (AUTO BẮT, ĐÁNH, HỒI MÁU) - SMART HEAL V3
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -17,9 +17,6 @@ return function(Window, Utils)
         savedPosition = nil,
         targetMonsterNames = {}
     }
-
-    -- Biến lưu tọa độ vị trí farm do người dùng chọn
-    local savedFarmPosition = nil
 
     local MonsterSystem = nil
     pcall(function() MonsterSystem = require(ReplicatedStorage.CommonLogic.Monster.MonsterSystem) end)
@@ -75,41 +72,6 @@ return function(Window, Utils)
         Flag = "HealThresholdSlider",
         Callback = function(Value)
             camSettings.healThreshold = Value
-        end,
-    })
-
-    -- ==========================================
-    -- QUẢN LÝ TỌA ĐỘ VỊ TRÍ FARM
-    -- ==========================================
-    CamTab:CreateSection("--- TỌA ĐỘ VỊ TRÍ FARM ---")
-    
-    CamTab:CreateButton({
-        Name = "📍 Lưu Tọa Độ Vị Trí Farm Hiện Tại",
-        Callback = function()
-            local char = LocalPlayer.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                savedFarmPosition = hrp.CFrame
-                game.StarterGui:SetCore("SendNotification", { Title = "Thành Công!", Text = "Đã ghi nhớ vị trí farm hiện tại của bạn.", Duration = 3 })
-            else
-                game.StarterGui:SetCore("SendNotification", { Title = "Lỗi Hệ Thống", Text = "Không tìm thấy HumanoidRootPart của nhân vật!", Duration = 3 })
-            end
-        end,
-    })
-
-    CamTab:CreateButton({
-        Name = "🚀 Dịch Chuyển Đến Tọa Độ Đã Lưu",
-        Callback = function()
-            if savedFarmPosition then
-                local char = LocalPlayer.Character
-                local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    hrp.CFrame = savedFarmPosition
-                    game.StarterGui:SetCore("SendNotification", { Title = "Thành Công!", Text = "Đã dịch chuyển về vị trí farm đã lưu.", Duration = 3 })
-                end
-            else
-                game.StarterGui:SetCore("SendNotification", { Title = "Thông Báo", Text = "Bạn chưa bấm lưu tọa độ vị trí farm nào!", Duration = 3 })
-            end
         end,
     })
 
@@ -230,14 +192,10 @@ return function(Window, Utils)
         while task.wait(1) do
             if not camSettings.autoHeal or camSettings.isHealing then continue end
 
-            -- [BẢN VÁ LỖI]: Bỏ qua quét máu nếu đang cưỡi thú (vì game sẽ cất mất Pet)
-            local isRiding = LocalPlayer:GetAttribute("RidePetId") ~= nil
-            if isRiding then continue end
-
             local triggerHeal = false
 
             pcall(function()
-                -- Bước 1: Đếm số Pet trên UI (Kỳ vọng)
+                -- Bước 1: Đếm số Pet trên UI (Kỳ vọng) - Đã đổi thành MainLeftView
                 local petListUI = LocalPlayer:FindFirstChild("PlayerGui")
                     and LocalPlayer.PlayerGui:FindFirstChild("MainGui")
                     and LocalPlayer.PlayerGui.MainGui:FindFirstChild("ScreenGui")
@@ -280,6 +238,7 @@ return function(Window, Utils)
                 -- Bước 3: Tính toán thiệt hại và đối chiếu ngưỡng
                 if totalPetsUI > 0 then
                     local deadPets = totalPetsUI - alivePetsMap
+                    -- Kích hoạt hồi máu nếu số Pet chết đạt ngưỡng cài đặt
                     if deadPets >= camSettings.healThreshold then
                         triggerHeal = true
                     end
@@ -293,9 +252,7 @@ return function(Window, Utils)
                 local hrp = char and char:FindFirstChild("HumanoidRootPart")
                 
                 if hrp then
-                    -- Ưu tiên lưu vị trí farm tự đánh dấu (savedFarmPosition), nếu không có thì lưu vị trí ngay lúc chết
-                    camSettings.savedPosition = savedFarmPosition or hrp.CFrame
-                    
+                    camSettings.savedPosition = hrp.CFrame
                     local bestRecoverPos, minDist = nil, math.huge
                     local areaFolder = Workspace:FindFirstChild("Area")
                     
@@ -314,7 +271,7 @@ return function(Window, Utils)
                     end
 
                     if bestRecoverPos then
-                        -- Lót một bệ đỡ tàng hình dưới chân
+                        -- Lót một bệ đỡ tàng hình dưới chân để chống rớt map khi ngâm suối
                         local plat = Instance.new("Part")
                         plat.Size = Vector3.new(20, 1, 20)
                         plat.Position = bestRecoverPos - Vector3.new(0, 3, 0)
@@ -323,13 +280,13 @@ return function(Window, Utils)
                         plat.CanCollide = true
                         plat.Parent = Workspace
 
-                        -- Dịch chuyển nhân vật ra suối ngâm máu
+                        -- Dịch chuyển nhân vật
                         hrp.CFrame = CFrame.new(bestRecoverPos + Vector3.new(0, 3, 0))
                         
                         -- Nghỉ ngơi 9 giây chờ hồi đầy máu
                         task.wait(9)
                         
-                        -- Dọn dẹp bệ đỡ và quay về vị trí farm
+                        -- Dọn dẹp bệ đỡ và quay về vị trí chiến đấu cũ
                         plat:Destroy()
                         if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
                             LocalPlayer.Character.HumanoidRootPart.CFrame = camSettings.savedPosition
@@ -338,7 +295,7 @@ return function(Window, Utils)
                 end
                 
                 camSettings.isHealing = false
-                -- Không xóa savedFarmPosition để dùng cho những lần sau
+                camSettings.savedPosition = nil
             end
         end
     end)
