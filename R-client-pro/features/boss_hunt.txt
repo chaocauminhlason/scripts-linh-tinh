@@ -1,6 +1,6 @@
 -- ====================================================================
 -- MODULE: SĂN BOSS VIP (HỖ TRỢ CHỌN NHIỀU MỤC TIÊU)
--- VERSION: 2.0 - ĐỒNG BỘ VỚI SERVER MANAGER
+-- VERSION: 2.1 - TÍCH HỢP MAIN CONTROLLER & CHỐNG SPAM
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -84,27 +84,25 @@ return function(Window, Utils)
         for _, obj in pairs(monstersFolder:GetChildren()) do
             if obj:IsA("Model") then
                 local hum = obj:FindFirstChildOfClass("Humanoid")
-                if hum and hum.Health and hum.Health > 0 then
-                    -- Chỉ nhận diện boss nếu có máu >= 100k
-                    if hum.MaxHealth and hum.MaxHealth >= 100000 then
-                        local realNameLower = GetRealMonsterName(obj)
-                        local isTargetedBoss = false
+                -- Chỉ nhận diện boss nếu có máu >= 100k và còn sống
+                if hum and hum.Health and hum.Health > 0 and hum.MaxHealth and hum.MaxHealth >= 100000 then
+                    local realNameLower = GetRealMonsterName(obj)
+                    local isTargetedBoss = false
 
-                        for _, k in pairs(currentTargetKeywords) do
-                            if realNameLower:find(k) then 
-                                isTargetedBoss = true
-                                break 
-                            end
+                    for _, k in pairs(currentTargetKeywords) do
+                        if realNameLower:find(k) then 
+                            isTargetedBoss = true
+                            break 
                         end
+                    end
 
-                        if isTargetedBoss then
-                            local bossId = tonumber(string.match(obj.Name, "%d+")) 
-                                or obj:GetAttribute("Id") 
-                                or obj:GetAttribute("TmplId") 
-                                or obj:GetAttribute("Uid")
-                            if bossId then 
-                                return bossId, obj.Name 
-                            end
+                    if isTargetedBoss then
+                        local bossId = tonumber(string.match(obj.Name, "%d+")) 
+                            or obj:GetAttribute("Id") 
+                            or obj:GetAttribute("TmplId") 
+                            or obj:GetAttribute("Uid")
+                        if bossId then 
+                            return bossId, obj.Name 
                         end
                     end
                 end
@@ -138,8 +136,6 @@ return function(Window, Utils)
     
     local StatusLabel = BossTab:CreateLabel("🔴 Trạng thái: Đang nghỉ")
     local TargetLabel = BossTab:CreateLabel("🎯 Mục tiêu hiện tại: Trống")
-    
-    -- Hiển thị trạng thái boss toàn cục
     local BossStatusLabel = BossTab:CreateLabel("📊 Boss trên map: Chưa có")
 
     BossTab:CreateToggle({
@@ -170,6 +166,15 @@ return function(Window, Utils)
         end)
 
         while task.wait(attackSettings.hitSpeed) do
+            -- ==========================================
+            -- KIỂM TRA DỪNG TỪ MAIN CONTROLLER
+            -- ==========================================
+            if _G.SystemController and _G.SystemController.shouldStop then
+                StatusLabel:Set("⏸️ ĐÃ DỪNG (Main Controller)")
+                task.wait(0.5)
+                continue
+            end
+
             -- Cập nhật trạng thái boss từ Server Manager
             if _G.ServerManager and _G.ServerManager.isBossPresent ~= nil then
                 if _G.ServerManager.isBossPresent then
@@ -195,6 +200,7 @@ return function(Window, Utils)
                     continue
                 end
 
+                -- Phát hiện boss
                 local currentBossId, currentBossName = AutoDetectBossID()
 
                 if currentBossId and DataPullFunc then
@@ -212,5 +218,5 @@ return function(Window, Utils)
         end
     end)
 
-    print("✅ Boss Hunt 2.0 loaded successfully!")
+    print("✅ Boss Hunt 2.1 loaded successfully!")
 end
