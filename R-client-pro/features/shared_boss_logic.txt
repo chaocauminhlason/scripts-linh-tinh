@@ -1,0 +1,143 @@
+-- ==========================================
+-- SHARED BOSS LOGIC (DÙNG CHUNG) - VERSION 1.0
+-- ==========================================
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
+local LocalPlayer = Players.LocalPlayer
+
+-- ==========================================
+-- 1. THỐNG NHẤT DANH SÁCH BOSS KEYWORDS
+-- ==========================================
+local BOSS_KEYWORDS = {
+    "flaragon", "gildron", "shadeknight", "mountusk", "tidevex", 
+    "frostwyrm", "dracospike", "thunderclaw", "lampyr", "scareaper",
+    "godzilla", "final", "king", "lord", "ancient", "primal"
+}
+
+-- ==========================================
+-- 2. HÀM LẤY TÊN THẬT CỦA QUÁI (CÓ CACHE TOÀN CỤC)
+-- ==========================================
+local MonsterNameCache = {}
+
+local function GetRealMonsterName(obj)
+    if not obj then return "" end
+    
+    -- Lấy TmplId
+    local tmplId = obj:GetAttribute("TmplId") or obj:GetAttribute("Id")
+    if not tmplId then 
+        return obj.Name or ""
+    end
+    
+    -- Kiểm tra cache
+    if MonsterNameCache[tmplId] then 
+        return MonsterNameCache[tmplId]
+    end
+    
+    -- Lấy từ config
+    local realName = obj.Name or ""
+    pcall(function()
+        local cfgFolder = ReplicatedStorage:FindFirstChild("CommonConfig")
+        if cfgFolder and cfgFolder:FindFirstChild("Monster") then
+            local cfgFile = cfgFolder.Monster:FindFirstChild("Monster" .. tostring(tmplId))
+            if cfgFile then
+                local data = require(cfgFile)
+                if data and data.Name then 
+                    realName = data.Name 
+                end
+            end
+        end
+    end)
+    
+    -- Lưu cache
+    MonsterNameCache[tmplId] = realName
+    return realName
+end
+
+-- ==========================================
+-- 3. HÀM KIỂM TRA BOSS
+-- ==========================================
+local timerFileName = "RClient_BossGlobalTimer.json"
+
+local function CheckBossPriority()
+    -- Bước 1: Kiểm tra timer (đọc từ file chung)
+    local endTime = 0
+    pcall(function()
+        if isfile and isfile(timerFileName) then
+            local data = HttpService:JSONDecode(readfile(timerFileName))
+            if data and data.EndTime then 
+                endTime = data.EndTime 
+            end
+        end
+    end)
+    
+    -- Nếu hết giờ hoặc chưa có timer -> không có boss
+    if (endTime - os.time()) <= 0 then 
+        return false 
+    end
+
+    -- Bước 2: Kiểm tra boss trên map
+    local monstersFolder = Workspace:FindFirstChild("Monsters")
+    if not monstersFolder then 
+        return false 
+    end
+    
+    for _, obj in pairs(monstersFolder:GetChildren()) do
+        if obj:IsA("Model") then
+            -- Kiểm tra máu lớn (dấu hiệu boss)
+            local hum = obj:FindFirstChildOfClass("Humanoid")
+            if hum and hum.MaxHealth and hum.MaxHealth >= 100000 then
+                -- Kiểm tra tên có chứa keyword không
+                local nameLower = (obj.Name or ""):lower()
+                for _, keyword in pairs(BOSS_KEYWORDS) do
+                    if string.find(nameLower, keyword) then
+                        return true
+                    end
+                end
+                
+                -- Kiểm tra tên thật từ config
+                local realName = GetRealMonsterName(obj):lower()
+                for _, keyword in pairs(BOSS_KEYWORDS) do
+                    if string.find(realName, keyword) then
+                        return true
+                    end
+                end
+            end
+        end
+    end
+    
+    return false
+end
+
+-- ==========================================
+-- 4. HÀM ĐỌC FILE BOSS KEYWORDS (TÙY CHỌN)
+-- ==========================================
+local function LoadBossKeywords()
+    local keywordsFile = "RClient_SelectedBossKeywords.json"
+    if isfile and isfile(keywordsFile) then
+        local success, data = pcall(function() 
+            return HttpService:JSONDecode(readfile(keywordsFile)) 
+        end)
+        if success and type(data) == "table" and #data > 0 then
+            return data
+        end
+    end
+    return BOSS_KEYWORDS -- Fallback về danh sách mặc định
+end
+
+-- ==========================================
+-- 5. EXPORT (TRẢ VỀ CÁC HÀM CHO MODULE KHÁC)
+-- ==========================================
+return {
+    -- Hàm chính
+    CheckBossPriority = CheckBossPriority,
+    GetRealMonsterName = GetRealMonsterName,
+    
+    -- Danh sách keywords (có thể ghi đè)
+    BOSS_KEYWORDS = BOSS_KEYWORDS,
+    LoadBossKeywords = LoadBossKeywords,
+    
+    -- Cache (để module khác có thể truy cập nếu cần)
+    MonsterNameCache = MonsterNameCache,
+}
