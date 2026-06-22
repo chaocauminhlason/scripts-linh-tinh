@@ -1,9 +1,10 @@
 -- ====================================================================
 -- MODULE: MAIN CONTROLLER (DỪNG/TIẾP TỤC TOÀN BỘ HỆ THỐNG)
--- VERSION: 1.0 - ĐIỀU KHIỂN TẬP TRUNG
+-- VERSION: 1.1 - THÊM PHÍM TẮT P
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
+    local UserInputService = game:GetService("UserInputService")
     local LocalPlayer = Players.LocalPlayer
 
     -- ==========================================
@@ -100,7 +101,9 @@ return function(Window, Utils)
 
     MainTab:CreateSection("--- ĐIỀU KHIỂN HỆ THỐNG ---")
     
+    -- Label hiển thị trạng thái và phím tắt
     local StatusLabel = MainTab:CreateLabel("📊 Trạng thái: 🟢 Đang chạy")
+    local HotkeyLabel = MainTab:CreateLabel("⌨️ Phím tắt: P = Stop All")
     
     MainTab:CreateButton({
         Name = "⏸️ DỪNG TẤT CẢ CHỨC NĂNG (STOP ALL)",
@@ -115,6 +118,26 @@ return function(Window, Utils)
             ResumeAll()
         end
     })
+
+    -- ==========================================
+    -- PHÍM TẮT: P = STOP ALL
+    -- ==========================================
+    UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        -- Bỏ qua nếu đang gõ trong chat hoặc UI
+        if gameProcessed then return end
+        
+        -- Kiểm tra phím P (không phân biệt hoa/thường)
+        if input.KeyCode == Enum.KeyCode.P then
+            -- Kiểm tra trạng thái hiện tại
+            if _G.SystemController.isPaused then
+                -- Nếu đang dừng thì Resume
+                ResumeAll()
+            else
+                -- Nếu đang chạy thì Stop
+                StopAll("Phím tắt P")
+            end
+        end
+    end)
 
     -- ==========================================
     -- HIỂN THỊ TRẠNG THÁI
@@ -132,5 +155,6 @@ return function(Window, Utils)
         end
     end)
 
-    print("✅ Main Controller loaded successfully!")
+    print("✅ Main Controller 1.1 loaded successfully!")
+    print("⌨️ Phím tắt: P = Toggle Stop/Resume All")
 end
