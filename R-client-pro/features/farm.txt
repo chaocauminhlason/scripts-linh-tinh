@@ -1,3 +1,4 @@
+-- ====================================================================
 -- MODULE: R-GAME (AUTO BẮT, ĐÁNH, HỒI MÁU) - SMART HEAL V4 (MOUNT FIX) & FARM POS
 -- ====================================================================
 return function(Window, Utils)
@@ -78,37 +79,10 @@ return function(Window, Utils)
     })
 
     -- ==========================================
-    -- QUẢN LÝ TỌA ĐỘ VỊ TRÍ FARM (CÓ CACHE VĨNH VIỄN)
+    -- QUẢN LÝ TỌA ĐỘ VỊ TRÍ FARM
     -- ==========================================
-    local HttpService = game:GetService("HttpService")
-    local posFileName = "R_ClientPro_FarmPos.json"
-
-    -- Hàm đọc tọa độ từ file cache trong thư mục workspace của Executor
-    local function LoadSavedPosition()
-        if isfile and isfile(posFileName) and readfile then
-            local success, data = pcall(function()
-                return HttpService:JSONDecode(readfile(posFileName))
-            end)
-            if success and data and data.X and data.Y and data.Z then
-                return CFrame.new(data.X, data.Y, data.Z)
-            end
-        end
-        return nil
-    end
-
-    -- Khởi tạo biến từ cache khi vừa chạy script
-    savedFarmPosition = LoadSavedPosition()
-
     CamTab:CreateSection("--- TỌA ĐỘ VỊ TRÍ FARM ---")
     
-    -- 1. Khởi tạo Label. Nếu đã có cache từ trước thì hiển thị số luôn.
-    local initText = "Tọa độ đang lưu: Chưa có"
-    if savedFarmPosition then
-        local p = savedFarmPosition.Position
-        initText = string.format("Tọa độ đang lưu: %d, %d, %d", math.floor(p.X), math.floor(p.Y), math.floor(p.Z))
-    end
-    local FarmPosLabel = CamTab:CreateLabel(initText)
-
     CamTab:CreateButton({
         Name = "📍 Lưu Tọa Độ Vị Trí Farm Hiện Tại",
         Callback = function()
@@ -116,21 +90,7 @@ return function(Window, Utils)
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
             if hrp then
                 savedFarmPosition = hrp.CFrame
-                local pos = savedFarmPosition.Position
-                
-                -- [CACHE VÀO MÁY]: Ghi tọa độ ra file dạng JSON
-                if writefile then
-                    local posData = { X = pos.X, Y = pos.Y, Z = pos.Z }
-                    pcall(function()
-                        writefile(posFileName, HttpService:JSONEncode(posData))
-                    end)
-                end
-
-                -- Cập nhật giao diện
-                local displayPos = string.format("%d, %d, %d", math.floor(pos.X), math.floor(pos.Y), math.floor(pos.Z))
-                FarmPosLabel:Set("Tọa độ đang lưu: " .. displayPos)
-                
-                game.StarterGui:SetCore("SendNotification", { Title = "Thành Công!", Text = "Đã lưu & Cache tọa độ: " .. displayPos, Duration = 3 })
+                game.StarterGui:SetCore("SendNotification", { Title = "Thành Công!", Text = "Đã ghi nhớ vị trí farm hiện tại của bạn.", Duration = 3 })
             else
                 game.StarterGui:SetCore("SendNotification", { Title = "Lỗi Hệ Thống", Text = "Không tìm thấy HumanoidRootPart của nhân vật!", Duration = 3 })
             end
@@ -144,8 +104,7 @@ return function(Window, Utils)
                 local char = LocalPlayer.Character
                 local hrp = char and char:FindFirstChild("HumanoidRootPart")
                 if hrp then
-                    -- Cộng thêm 3 ở trục Y để chống kẹt xuống đất (clip) khi dịch chuyển
-                    hrp.CFrame = savedFarmPosition + Vector3.new(0, 3, 0)
+                    hrp.CFrame = savedFarmPosition
                     game.StarterGui:SetCore("SendNotification", { Title = "Thành Công!", Text = "Đã dịch chuyển về vị trí farm đã lưu.", Duration = 3 })
                 end
             else
@@ -154,7 +113,39 @@ return function(Window, Utils)
         end,
     })
 
+    CamTab:CreateSection("--- LỌC QUÁI THEO TÊN ---")
+    local MonsterDropdown = CamTab:CreateDropdown({
+        Name = "Chọn Quái Ưu Tiên (Trống = Bắt Tất Cả)", 
+        Options = {"(Trống)"}, 
+        CurrentOption = {""}, 
+        MultipleOptions = true, 
+        Flag = "TargetMonstersDropdown",
+        Callback = function(Options) 
+            camSettings.targetMonsterNames = Options 
+        end,
+    })
 
+    CamTab:CreateButton({
+        Name = "🔄 Quét Quái Trên Map",
+        Callback = function()
+            local monstersFolder = Workspace:FindFirstChild("Monsters")
+            if not monstersFolder then return end
+            
+            local foundNames = {}
+            local dict = {} 
+            for _, monster in pairs(monstersFolder:GetChildren()) do
+                local realName = GetCachedMonsterName(monster)
+                if realName and not dict[realName] then 
+                    dict[realName] = true
+                    table.insert(foundNames, realName) 
+                end
+            end
+            if #foundNames > 0 then
+                MonsterDropdown:Refresh(foundNames)
+                game.StarterGui:SetCore("SendNotification", {Title = "Thành Công!", Text = "Đã tìm thấy " .. #foundNames .. " loài quái!", Duration = 3})
+            end
+        end,
+    })
 
     -- ==========================================
     -- LUỒNG 1: AUTO ATTACK
