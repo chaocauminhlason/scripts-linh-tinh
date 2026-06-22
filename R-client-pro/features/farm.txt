@@ -8,6 +8,12 @@ return function(Window, Utils)
     local HttpService = game:GetService("HttpService")
     local LocalPlayer = Players.LocalPlayer
 
+-- Load shared boss logic
+local BossLogic = loadstring(game:HttpGet("https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/R-client-pro/features/shared_boss_logic.txt"))()
+if not BossLogic then
+    print("⚠️ Không thể load shared_boss_logic.lua, sử dụng logic mặc định")
+    -- Fallback: tự định nghĩa hàm CheckBossPriority đơn giản
+end
     -- ==========================================
     -- QUẢN LÝ TRẠNG THÁI
     -- ==========================================
