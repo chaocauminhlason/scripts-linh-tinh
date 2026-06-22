@@ -1,0 +1,136 @@
+-- ====================================================================
+-- MODULE: MAIN CONTROLLER (DỪNG/TIẾP TỤC TOÀN BỘ HỆ THỐNG)
+-- VERSION: 1.0 - ĐIỀU KHIỂN TẬP TRUNG
+-- ====================================================================
+return function(Window, Utils)
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+
+    -- ==========================================
+    -- BIẾN TOÀN CỤC ĐIỀU KHIỂN HỆ THỐNG
+    -- ==========================================
+    _G.SystemController = {
+        isPaused = false,
+        pauseReason = "",
+        shouldStop = false,
+        onPause = nil,
+        onResume = nil,
+    }
+
+    -- Hàm tiện ích cho các module
+    function _G.SystemController.ShouldPause()
+        if _G.SystemController.isPaused then
+            return true
+        end
+        if _G.ServerManager and _G.ServerManager.pauseFarm then
+            return true
+        end
+        return false
+    end
+
+    -- ==========================================
+    -- HÀM DỪNG TẤT CẢ
+    -- ==========================================
+    local function StopAll(reason)
+        reason = reason or "Người dùng yêu cầu dừng"
+        
+        _G.SystemController.isPaused = true
+        _G.SystemController.shouldStop = true
+        _G.SystemController.pauseReason = reason
+        
+        if _G.ServerManager then
+            _G.ServerManager.pauseFarm = true
+        end
+        
+        if _G.SystemState then
+            _G.SystemState.shouldPause = true
+            _G.SystemState.pauseReason = reason
+        end
+        
+        if _G.SystemController.onPause then
+            pcall(_G.SystemController.onPause)
+        end
+        
+        game.StarterGui:SetCore("SendNotification", {
+            Title = "⏸️ ĐÃ DỪNG", 
+            Text = "Tất cả chức năng đã tạm dừng: " .. reason,
+            Duration = 5
+        })
+        
+        print("[System] ⏸️ STOP ALL: " .. reason)
+    end
+
+    -- ==========================================
+    -- HÀM TIẾP TỤC TẤT CẢ
+    -- ==========================================
+    local function ResumeAll()
+        _G.SystemController.isPaused = false
+        _G.SystemController.shouldStop = false
+        _G.SystemController.pauseReason = ""
+        
+        if _G.ServerManager then
+            _G.ServerManager.pauseFarm = false
+        end
+        
+        if _G.SystemState then
+            _G.SystemState.shouldPause = false
+            _G.SystemState.pauseReason = ""
+        end
+        
+        if _G.SystemController.onResume then
+            pcall(_G.SystemController.onResume)
+        end
+        
+        game.StarterGui:SetCore("SendNotification", {
+            Title = "▶️ TIẾP TỤC", 
+            Text = "Tất cả chức năng đã được tiếp tục",
+            Duration = 5
+        })
+        
+        print("[System] ▶️ RESUME ALL")
+    end
+
+    _G.SystemController.StopAll = StopAll
+    _G.SystemController.ResumeAll = ResumeAll
+
+    -- ==========================================
+    -- GIAO DIỆN UI
+    -- ==========================================
+    local MainTab = Window:CreateTab("Main", 4483362458)
+
+    MainTab:CreateSection("--- ĐIỀU KHIỂN HỆ THỐNG ---")
+    
+    local StatusLabel = MainTab:CreateLabel("📊 Trạng thái: 🟢 Đang chạy")
+    
+    MainTab:CreateButton({
+        Name = "⏸️ DỪNG TẤT CẢ CHỨC NĂNG (STOP ALL)",
+        Callback = function()
+            StopAll("Người dùng nhấn nút STOP")
+        end
+    })
+
+    MainTab:CreateButton({
+        Name = "▶️ TIẾP TỤC CHẠY (RESUME ALL)",
+        Callback = function()
+            ResumeAll()
+        end
+    })
+
+    -- ==========================================
+    -- HIỂN THỊ TRẠNG THÁI
+    -- ==========================================
+    task.spawn(function()
+        while task.wait(1) do
+            if _G.SystemController.isPaused then
+                StatusLabel:Set(string.format(
+                    "🔴 ĐÃ DỪNG: %s",
+                    _G.SystemController.pauseReason
+                ))
+            else
+                StatusLabel:Set("🟢 Đang chạy - Sẵn sàng")
+            end
+        end
+    end)
+
+    print("✅ Main Controller loaded successfully!")
+end
