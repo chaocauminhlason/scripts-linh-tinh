@@ -74,35 +74,47 @@ return function(Window, Utils)
     })
 
     -- ==========================================
-    -- LOGIC TÌM & EXTRACT ID BOSS (LỌC THEO TỪ KHÓA)
+    -- LOGIC TÌM & EXTRACT ID BOSS (CHUẨN XÁC 100%)
     -- ==========================================
+    local function GetRealMonsterName(obj)
+        local name = obj.Name:lower()
+        local tmplId = obj:GetAttribute("TmplId") or obj:GetAttribute("Id")
+        if tmplId then
+            pcall(function()
+                local cfgFolder = ReplicatedStorage:FindFirstChild("CommonConfig")
+                if cfgFolder and cfgFolder:FindFirstChild("Monster") then
+                    local cfgFile = cfgFolder.Monster:FindFirstChild("Monster" .. tostring(tmplId))
+                    if cfgFile then
+                        local data = require(cfgFile)
+                        if data and data.Name then name = data.Name:lower() end
+                    end
+                end
+            end)
+        end
+        return name
+    end
+
     local function AutoDetectBossID()
         if #currentTargetKeywords == 0 then return nil, nil end
 
         local monstersFolder = workspace:FindFirstChild("Monsters") or workspace:FindFirstChild("Monster")
-        local scanTarget = monstersFolder and monstersFolder:GetChildren() or workspace:GetDescendants()
+        if not monstersFolder then return nil, nil end
 
-        for _, obj in pairs(scanTarget) do
+        for _, obj in pairs(monstersFolder:GetChildren()) do
             if obj:IsA("Model") then
                 local hum = obj:FindFirstChildOfClass("Humanoid")
                 
-                if hum and hum.MaxHealth and hum.MaxHealth >= 100000 and obj.Name ~= LocalPlayer.Name then
-                    local nameLower = obj.Name:lower()
+                -- Bỏ check máu 100k, chỉ cần quái còn sống (Health > 0)
+                if hum and hum.Health > 0 then
+                    local realNameLower = GetRealMonsterName(obj)
                     local isTargetedBoss = false
                     
                     for _, k in pairs(currentTargetKeywords) do
-                        if nameLower:find(k) then isTargetedBoss = true; break end
+                        if realNameLower:find(k) then isTargetedBoss = true; break end
                     end
 
                     if isTargetedBoss then
-                        local bossId = nil
-                        local idFromName = string.match(obj.Name, "%d+")
-                        if idFromName then bossId = tonumber(idFromName) end
-                        
-                        if not bossId then
-                            bossId = obj:GetAttribute("Id") or obj:GetAttribute("ID") or obj:GetAttribute("Uid") or obj:GetAttribute("TmplId")
-                        end
-                        
+                        local bossId = tonumber(string.match(obj.Name, "%d+")) or obj:GetAttribute("Id") or obj:GetAttribute("TmplId") or obj:GetAttribute("Uid")
                         if bossId then return bossId, obj.Name end
                     end
                 end
@@ -110,7 +122,6 @@ return function(Window, Utils)
         end
         return nil, nil
     end
-
     -- ==========================================
     -- LUỒNG BẮN REMOTE
     -- ==========================================
