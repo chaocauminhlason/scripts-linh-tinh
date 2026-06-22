@@ -1,5 +1,6 @@
 -- ====================================================================
 -- MODULE: QUẢN LÝ SERVER & AUTO HOP (PRIORITY QUEUE: BOSS -> WEATHER)
+-- VERSION: 2.0 - ĐỒNG BỘ HÓA VÀ TỐI ƯU
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -8,16 +9,26 @@ return function(Window, Utils)
     local TextChatService = game:GetService("TextChatService")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local CoreGui = game:GetService("CoreGui")
+    local Workspace = game:GetService("Workspace")
     local LocalPlayer = Players.LocalPlayer
 
     -- ==========================================
     -- HỆ THỐNG BLACKLIST & QUẢN LÝ SERVER
     -- ==========================================
     local blacklistFileName = "WeatherHop_Blacklist.json"
+    local bossKeywordFile = "RClient_SelectedBossKeywords.json"
+    local bossTimerFile = "RClient_BossGlobalTimer.json"
     local visitedServers = {}
-    local serverHistory = {} -- Lưu lịch sử các server đã qua
     local isTeleporting = false
     local hopCooldown = false
+
+    -- Biến toàn cục để các module khác dùng chung
+    _G.ServerManager = {
+        isBossPresent = false,
+        pauseFarm = false,
+        currentWeather = "Bình Thường",
+        targetWeatherIds = {60001}
+    }
 
     -- Đọc lịch sử server
     pcall(function()
@@ -32,7 +43,6 @@ return function(Window, Utils)
     for k, v in pairs(visitedServers) do serverCount = serverCount + 1 end
     if serverCount > 150 then visitedServers = {} end
 
-    -- Thêm server hiện tại vào danh sách đã qua
     visitedServers[game.JobId] = true
     pcall(function() 
         if writefile then 
@@ -43,13 +53,71 @@ return function(Window, Utils)
     local ServerTab = Window:CreateTab("Quản Lý Server", 4483362458) 
 
     -- ==========================================
-    -- HÀM TRỢ GIÚP: TÌM & NHẢY SERVER (NÂNG CAO)
+    -- HÀM LẤY TỪ KHÓA BOSS (ĐỒNG BỘ)
+    -- ==========================================
+    local function GetTargetBossKeywords()
+        local kws = {}
+        pcall(function()
+            if isfile and isfile(bossKeywordFile) then
+                kws = HttpService:JSONDecode(readfile(bossKeywordFile))
+                if type(kws) ~= "table" then kws = {} end
+            end
+        end)
+        return kws
+    end
+
+    -- ==========================================
+    -- HÀM KIỂM TRA BOSS TẬP TRUNG (DÙNG CHUNG)
+    -- ==========================================
+    local function IsBossPresent()
+        local keywords = GetTargetBossKeywords()
+        if #keywords == 0 then return false end
+
+        local monstersFolder = Workspace:FindFirstChild("Monsters") or Workspace:FindFirstChild("Monster")
+        if not monstersFolder then return false end
+
+        for _, obj in pairs(monstersFolder:GetChildren()) do
+            if obj:IsA("Model") then
+                local hum = obj:FindFirstChildOfClass("Humanoid")
+                if hum and hum.Health and hum.Health > 0 and hum.MaxHealth and hum.MaxHealth >= 100000 then
+                    -- Lấy tên thật từ config nếu có
+                    local realName = obj.Name:lower()
+                    local tmplId = obj:GetAttribute("TmplId") or obj:GetAttribute("Id")
+                    if tmplId then
+                        pcall(function()
+                            local cfgFolder = ReplicatedStorage:FindFirstChild("CommonConfig")
+                            if cfgFolder and cfgFolder:FindFirstChild("Monster") then
+                                local cfgFile = cfgFolder.Monster:FindFirstChild("Monster" .. tostring(tmplId))
+                                if cfgFile then
+                                    local data = require(cfgFile)
+                                    if data and data.Name then realName = data.Name:lower() end
+                                end
+                            end
+                        end)
+                    end
+
+                    for _, k in pairs(keywords) do
+                        if realName:find(k) then 
+                            return true 
+                        end
+                    end
+                end
+            end
+        end
+        return false
+    end
+
+    -- Gán hàm vào toàn cục để các module khác dùng
+    _G.ServerManager.IsBossPresent = IsBossPresent
+
+    -- ==========================================
+    -- HÀM TÌM & NHẢY SERVER
     -- ==========================================
     local function GetServerList(sortOrder)
         sortOrder = sortOrder or "Asc"
         local PlaceId = game.PlaceId
         local api = "https://games.roblox.com/v1/games/"..PlaceId.."/servers/Public?sortOrder="..sortOrder.."&limit=100"
-        
+
         local success, data = pcall(function() return game:HttpGet(api) end)
         if success and data then
             local json = HttpService:JSONDecode(data)
@@ -82,8 +150,7 @@ return function(Window, Utils)
         if isTeleporting or hopCooldown then return false end
         isTeleporting = true
         hopCooldown = true
-        
-        -- Reset cooldown sau 5 giây
+
         task.spawn(function()
             task.wait(5)
             hopCooldown = false
@@ -92,63 +159,56 @@ return function(Window, Utils)
         local PlaceId = game.PlaceId
         local sortOrder = preferLowPlayer and "Asc" or "Desc"
         local servers = GetServerList(sortOrder)
-        
+
         if #servers > 0 then
-            -- Ưu tiên server ít người nhất nếu có yêu cầu
             if preferLowPlayer then
                 table.sort(servers, function(a, b) return a.playing < b.playing end)
             end
-            
-            -- Chọn server random trong top 10 (tránh bị kẹt)
+
             local maxIndex = math.min(#servers, 10)
             local targetServer = servers[math.random(1, maxIndex)]
-            
+
             if targetServer and targetServer.id then
                 game.StarterGui:SetCore("SendNotification", {
                     Title = "Server Hop", 
                     Text = hopReason or "Đang sang server mới...", 
                     Duration = 5
                 })
-                
-                -- Lưu thông tin server cũ
-                serverHistory[game.JobId] = {
-                    time = os.time(),
-                    weather = "Unknown",
-                    boss = false
-                }
-                
+
                 pcall(function()
                     local autoExecLink = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/refs/heads/main/R-client-pro/auto_execute.txt"
                     local executeCode = "if not game:IsLoaded() then game.Loaded:Wait() end; task.wait(1); pcall(function() loadstring(game:HttpGet('"..autoExecLink.."'))() end)"
                     local queueFunc = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport) or getgenv().queue_on_teleport
                     if queueFunc then queueFunc(executeCode) end
                 end)
-                
+
                 task.wait(1)
                 TeleportService:TeleportToPlaceInstance(PlaceId, targetServer.id, LocalPlayer)
                 return true
             end
         end
-        
-        -- Nếu không tìm thấy server, reset blacklist
+
         visitedServers = {}
         pcall(function() 
             if writefile then 
                 writefile(blacklistFileName, HttpService:JSONEncode(visitedServers)) 
             end 
         end)
-        
+
         isTeleporting = false
         return false
     end
 
+    -- Gán hàm vào toàn cục để module farm dùng
+    _G.ServerManager.HopToNewServer = HopToNewServer
+
     -- ==========================================
-    -- 1. BỘ ĐẾM THỜI GIAN SESSION
+    -- UI: THÔNG TIN SESSION
     -- ==========================================
     ServerTab:CreateSection("--- THÔNG TIN SESSION ---")
     local SessionLabel = ServerTab:CreateLabel("Thời gian treo máy: 00:00:00")
     local sessionStartTime = os.time()
-    
+
     task.spawn(function()
         while task.wait(1) do
             local diff = os.time() - sessionStartTime
@@ -160,9 +220,8 @@ return function(Window, Utils)
     end)
 
     -- ==========================================
-    -- 2. CẤU HÌNH DỮ LIỆU
+    -- UI: THỜI TIẾT
     -- ==========================================
-    local timerFileName = "RClient_BossGlobalTimer.json"
     local WeatherMap = {
         ["Ban Ngày (Day)"] = 10001, ["Ban Đêm (Night)"] = 10002, ["Nhiều Mây (Cloudy)"] = 20002,
         ["Trời Mưa (Rainy)"] = 30001, ["Trời Tuyết (Snowy)"] = 30002, ["Cực Quang (Aurora)"] = 30003,
@@ -171,16 +230,12 @@ return function(Window, Utils)
         ["🧚 Màn Sương Ảo Mộng (Dreamveil)"] = 60004
     }
 
-    -- ==========================================
-    -- 3. AUTO SĂN THỜI TIẾT VIP 
-    -- ==========================================
     ServerTab:CreateSection("--- TÌM KIẾM THỜI TIẾT VIP ---")
 
-    local weatherHopSettings = { enabled = false, targetIds = {60001}, foundTarget = false }
+    local weatherHopSettings = { enabled = false, targetIds = {60001} }
 
     local WeatherStatus = ServerTab:CreateLabel("Thời tiết hiện tại: Đang tải...")
-    
-    -- Hiển thị thời tiết hiện tại
+
     task.spawn(function()
         while task.wait(2) do
             local env = getrenv()._G.PathTool
@@ -190,6 +245,7 @@ return function(Window, Utils)
                     local ok, isActive = pcall(function() return env.WeatherSystem.IsWeatherActive(id) end)
                     if ok and isActive then currentStr = name; break end
                 end
+                _G.ServerManager.currentWeather = currentStr
                 WeatherStatus:Set("Thời tiết hiện tại: " .. currentStr)
             end
         end
@@ -212,6 +268,7 @@ return function(Window, Utils)
                     table.insert(weatherHopSettings.targetIds, WeatherMap[selectedOption]) 
                 end
             end
+            _G.ServerManager.targetWeatherIds = weatherHopSettings.targetIds
         end,
     })
 
@@ -234,67 +291,36 @@ return function(Window, Utils)
     })
 
     -- ==========================================
-    -- 4. LOGIC QUÉT BOSS & CHAT (ĐÃ ĐỒNG BỘ)
+    -- UI: BOSS
     -- ==========================================
+    ServerTab:CreateSection("--- ƯU TIÊN 1: SĂN BOSS ---")
     local bossHopSettings = { enabled = false }
-    
-    local function GetTargetBossKeywords()
-        local kws = {"flaragon", "gildron", "shadeknight", "mountusk", "tidevex", "frostwyrm", "dracospike", "thunderclaw", "lampyr", "scareaper"}
-        pcall(function() 
-            if isfile and isfile("RClient_SelectedBossKeywords.json") then 
-                kws = HttpService:JSONDecode(readfile("RClient_SelectedBossKeywords.json")) 
-            end 
-        end)
-        return kws
-    end
 
-    local function GetRealMonsterName(obj)
-        local name = obj.Name:lower()
-        local tmplId = obj:GetAttribute("TmplId") or obj:GetAttribute("Id")
-        if tmplId then
-            pcall(function()
-                local cfgFolder = ReplicatedStorage:FindFirstChild("CommonConfig")
-                if cfgFolder and cfgFolder:FindFirstChild("Monster") then
-                    local cfgFile = cfgFolder.Monster:FindFirstChild("Monster" .. tostring(tmplId))
-                    if cfgFile then
-                        local data = require(cfgFile)
-                        if data and data.Name then name = data.Name:lower() end
-                    end
-                end
-            end)
-        end
-        return name
-    end
+    ServerTab:CreateToggle({ 
+        Name = "Tự Động Nhảy Server Săn Boss", 
+        CurrentValue = false, 
+        Flag = "BossHopToggle", 
+        Callback = function(V) 
+            bossHopSettings.enabled = V 
+        end 
+    })
 
-    local function IsBossAliveLocally()
-        local targetKeywords = GetTargetBossKeywords()
-        if #targetKeywords == 0 then return false end 
-        local monstersFolder = workspace:FindFirstChild("Monsters") or workspace:FindFirstChild("Monster")
-        if not monstersFolder then return false end
-
-        for _, obj in pairs(monstersFolder:GetChildren()) do
-            if obj:IsA("Model") then
-                local hum = obj:FindFirstChildOfClass("Humanoid")
-                if hum and hum.Health > 0 then
-                    local realNameLower = GetRealMonsterName(obj)
-                    for _, k in pairs(targetKeywords) do 
-                        if realNameLower:find(k) then return true end 
-                    end
-                end
-            end
-        end
-        return false
-    end
-
-    -- Xử lý chat
+    -- ==========================================
+    -- XỬ LÝ CHAT
+    -- ==========================================
     local function CheckChatMessage(msg)
         local lowerMsg = string.lower(msg)
         if string.find(lowerMsg, "special boss") then return end
-        if string.find(lowerMsg, " appear at ") then
+        if string.find(lowerMsg, " appear at ") or string.find(lowerMsg, " spawned") then
             pcall(function() 
-                writefile(timerFileName, HttpService:JSONEncode({EndTime = os.time() + 300})) 
+                writefile(bossTimerFile, HttpService:JSONEncode({EndTime = os.time() + 300})) 
             end)
             visitedServers = {}
+            pcall(function() 
+                if writefile then 
+                    writefile(blacklistFileName, HttpService:JSONEncode(visitedServers)) 
+                end 
+            end)
             game.StarterGui:SetCore("SendNotification", {
                 Title = "Boss Alert!", 
                 Text = "Boss đã spawn! Đang tìm server...", 
@@ -303,7 +329,6 @@ return function(Window, Utils)
         end
     end
 
-    -- Kết nối chat events
     local chatEvents = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
     if chatEvents then 
         chatEvents.OnMessageDoneFiltering.OnClientEvent:Connect(function(msgData) 
@@ -319,42 +344,31 @@ return function(Window, Utils)
     end)
 
     -- ==========================================
-    -- 5. UI ĐIỀU KHIỂN BOSS
-    -- ==========================================
-    ServerTab:CreateSection("--- ƯU TIÊN 1: SĂN BOSS ---")
-    ServerTab:CreateToggle({ 
-        Name = "Tự Động Nhảy Server Săn Boss", 
-        CurrentValue = false, 
-        Flag = "BossHopToggle", 
-        Callback = function(V) bossHopSettings.enabled = V end 
-    })
-
-    -- ==========================================
-    -- 6. CÁC NÚT ĐIỀU KHIỂN THỦ CÔNG
+    -- UI: ĐIỀU KHIỂN THỦ CÔNG
     -- ==========================================
     ServerTab:CreateSection("--- ĐIỀU KHIỂN THỦ CÔNG ---")
-    
+
     ServerTab:CreateButton({ 
         Name = "🌐 JOIN SERVER ÍT NGƯỜI NHẤT", 
         Callback = function() 
             HopToNewServer("Đang tìm server vắng người...", true) 
         end 
     })
-    
+
     ServerTab:CreateButton({ 
         Name = "🌐 JOIN SERVER ĐÔNG NHẤT", 
         Callback = function() 
             HopToNewServer("Đang tìm server đông người...", false) 
         end 
     })
-    
+
     ServerTab:CreateButton({ 
         Name = "🔄 Rejoin Server Khác", 
         Callback = function() 
             TeleportService:Teleport(game.PlaceId, LocalPlayer) 
         end 
     })
-    
+
     ServerTab:CreateButton({ 
         Name = "🔄 Rejoin Đúng Server Này", 
         Callback = function() 
@@ -380,11 +394,11 @@ return function(Window, Utils)
     })
 
     -- ==========================================
-    -- 7. AUTO REJOIN KHI BỊ KICK
+    -- UI: ANTI-KICK
     -- ==========================================
     ServerTab:CreateSection("--- ANTI-KICK ---")
     local autoRejoinEnabled = false
-    
+
     ServerTab:CreateToggle({
         Name = "Auto Rejoin khi bị Kick (Chống Disconnect)",
         CurrentValue = false,
@@ -405,31 +419,36 @@ return function(Window, Utils)
     end)
 
     -- ==========================================
-    -- 8. MASTER QUEUE (LUỒNG QUẢN LÝ CHÍNH)
+    -- MASTER QUEUE (LUỒNG QUẢN LÝ CHÍNH)
     -- ==========================================
     task.spawn(function()
         local currentlyInTargetWeather = false
         local lastHopTime = 0
-        
+
         while task.wait(2) do
             if isTeleporting then continue end
-            
-            local currentTime = os.time()
-            if currentTime - lastHopTime < 10 then continue end -- Cooldown 10s
 
-            -- Kiểm tra boss global
+            local currentTime = os.time()
+            if currentTime - lastHopTime < 10 then continue end
+
+            -- Cập nhật trạng thái boss
+            local bossPresent = IsBossPresent()
+            _G.ServerManager.isBossPresent = bossPresent
+
+            -- Kiểm tra timer boss
             local endTime = 0
             pcall(function() 
-                if isfile and isfile(timerFileName) then 
-                    local d = HttpService:JSONDecode(readfile(timerFileName))
+                if isfile and isfile(bossTimerFile) then 
+                    local d = HttpService:JSONDecode(readfile(bossTimerFile))
                     if d and d.EndTime then endTime = d.EndTime end
                 end 
             end)
             local bossGlobalActive = (endTime - currentTime) > 0
 
             -- KHỐI ƯU TIÊN 1: SĂN BOSS
-            if bossGlobalActive and bossHopSettings.enabled then
-                if not IsBossAliveLocally() then
+            if (bossGlobalActive or bossPresent) and bossHopSettings.enabled then
+                _G.ServerManager.pauseFarm = true
+                if not bossPresent then
                     if HopToNewServer("ƯU TIÊN BOSS: Đang tìm server mới...", false) then
                         lastHopTime = currentTime
                     end
@@ -449,8 +468,9 @@ return function(Window, Utils)
                             break 
                         end
                     end
-                    
+
                     if foundTarget then
+                        _G.ServerManager.pauseFarm = false
                         if not currentlyInTargetWeather then
                             currentlyInTargetWeather = true
                             visitedServers = {}
@@ -466,6 +486,7 @@ return function(Window, Utils)
                             })
                         end
                     else
+                        _G.ServerManager.pauseFarm = true
                         if currentlyInTargetWeather then
                             game.StarterGui:SetCore("SendNotification", {
                                 Title = "Thời tiết đã hết!", 
@@ -474,26 +495,17 @@ return function(Window, Utils)
                             })
                             currentlyInTargetWeather = false
                         end
-                        
+
                         if HopToNewServer("Đang tìm thời tiết VIP...", true) then
                             lastHopTime = currentTime
                         end
                     end
                 end
+            else
+                _G.ServerManager.pauseFarm = false
             end
         end
     end)
 
-    -- ==========================================
-    -- 9. HIỂN THỊ THÔNG TIN BLACKLIST
-    -- ==========================================
-    task.spawn(function()
-        while task.wait(30) do
-            local count = 0
-            for k, v in pairs(visitedServers) do count = count + 1 end
-            -- Có thể thêm hiển thị nếu muốn
-        end
-    end)
-
-    print("✅ Server Manager loaded successfully!")
+    print("✅ Server Manager 2.0 loaded successfully!")
 end
