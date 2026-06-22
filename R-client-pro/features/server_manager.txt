@@ -1,6 +1,6 @@
 -- ====================================================================
 -- MODULE: QUẢN LÝ SERVER & AUTO HOP (PRIORITY QUEUE: BOSS -> WEATHER)
--- VERSION: 2.3 - CHỈ GIỮ JOIN SERVER ÍT NGƯỜI
+-- VERSION: 2.4 - FIX SPAM BOSS & CHỈ RESET KHI BẬT SĂN BOSS
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -22,6 +22,10 @@ return function(Window, Utils)
     local isTeleporting = false
     local hopCooldown = false
     local MAX_BLACKLIST_SIZE = 150
+
+    -- CHỐNG SPAM BOSS
+    local lastBossAlertTime = 0
+    local BOSS_ALERT_COOLDOWN = 30 -- Chỉ thông báo và reset 1 lần mỗi 30 giây
 
     _G.ServerManager = {
         isBossPresent = false,
@@ -50,10 +54,10 @@ return function(Window, Utils)
         end)
     end
 
-    local function ResetBlacklist(reason)
+    local function ResetBlacklist(reason, silent)
         visitedServers = {}
         SaveBlacklist()
-        if reason then
+        if not silent and reason then
             game.StarterGui:SetCore("SendNotification", {
                 Title = "🔄 Reset Blacklist", 
                 Text = reason, 
@@ -66,7 +70,7 @@ return function(Window, Utils)
         local count = 0
         for k, v in pairs(visitedServers) do count = count + 1 end
         if count > MAX_BLACKLIST_SIZE then
-            ResetBlacklist("Tự động reset do quá nhiều server (" .. count .. ")")
+            ResetBlacklist("Tự động reset do quá nhiều server (" .. count .. ")", true)
         end
     end
 
@@ -136,7 +140,6 @@ return function(Window, Utils)
     -- ==========================================
     local function GetServerList()
         local PlaceId = game.PlaceId
-        -- Luôn lấy server ít người nhất
         local api = "https://games.roblox.com/v1/games/"..PlaceId.."/servers/Public?sortOrder=Asc&limit=100"
 
         local success, data = pcall(function() return game:HttpGet(api) end)
@@ -161,7 +164,6 @@ return function(Window, Utils)
                         end
                     end
                 end
-                -- Sắp xếp theo số người chơi tăng dần (ít người nhất lên đầu)
                 table.sort(validServers, function(a, b) return a.playing < b.playing end)
                 return validServers
             end
@@ -183,7 +185,6 @@ return function(Window, Utils)
         local servers = GetServerList()
 
         if #servers > 0 then
-            -- Chọn random trong top 5 server ít người nhất
             local maxIndex = math.min(#servers, 5)
             local targetServer = servers[math.random(1, maxIndex)]
 
@@ -207,7 +208,7 @@ return function(Window, Utils)
             end
         end
 
-        ResetBlacklist("Không tìm thấy server, reset blacklist")
+        ResetBlacklist("Không tìm thấy server, reset blacklist", true)
         isTeleporting = false
         return false
     end
@@ -316,15 +317,39 @@ return function(Window, Utils)
         end 
     })
 
-    -- XỬ LÝ CHAT
+    -- ==========================================
+    -- XỬ LÝ CHAT - CÓ CHỐNG SPAM
+    -- ==========================================
     local function CheckChatMessage(msg)
         local lowerMsg = string.lower(msg)
         if string.find(lowerMsg, "special boss") then return end
+        
+        -- CHỈ XỬ LÝ KHI BẬT SĂN BOSS
+        if not bossHopSettings.enabled then return end
+        
         if string.find(lowerMsg, " appear at ") or string.find(lowerMsg, " spawned") then
+            local currentTime = os.time()
+            
+            -- CHỐNG SPAM: Chỉ xử lý 1 lần trong 30 giây
+            if currentTime - lastBossAlertTime < BOSS_ALERT_COOLDOWN then
+                return
+            end
+            lastBossAlertTime = currentTime
+            
+            -- Ghi timer boss
             pcall(function() 
                 writefile(bossTimerFile, HttpService:JSONEncode({EndTime = os.time() + 300})) 
             end)
-            ResetBlacklist("Boss đã spawn! Reset blacklist để tìm server mới")
+            
+            -- Reset blacklist (silent = không hiện thông báo để tránh spam)
+            ResetBlacklist("Boss đã spawn! Reset blacklist để tìm server mới", true)
+            
+            -- Chỉ hiện thông báo 1 lần
+            game.StarterGui:SetCore("SendNotification", {
+                Title = "⚔️ Boss Alert!", 
+                Text = "Boss đã spawn! Đang tìm server...", 
+                Duration = 5
+            })
         end
     end
 
@@ -342,10 +367,11 @@ return function(Window, Utils)
         end
     end)
 
+    -- ==========================================
     -- ĐIỀU KHIỂN THỦ CÔNG
+    -- ==========================================
     ServerTab:CreateSection("--- ĐIỀU KHIỂN THỦ CÔNG ---")
 
-    -- CHỈ GIỮ NÚT JOIN SERVER ÍT NGƯỜI
     ServerTab:CreateButton({ 
         Name = "🌐 JOIN SERVER ÍT NGƯỜI NHẤT", 
         Callback = function() 
@@ -370,11 +396,13 @@ return function(Window, Utils)
     ServerTab:CreateButton({ 
         Name = "🗑️ Reset Blacklist (Xóa lịch sử server)", 
         Callback = function() 
-            ResetBlacklist("Reset thủ công bởi người dùng")
+            ResetBlacklist("Reset thủ công bởi người dùng", false)
         end 
     })
 
+    -- ==========================================
     -- ANTI-KICK
+    -- ==========================================
     ServerTab:CreateSection("--- ANTI-KICK ---")
     local autoRejoinEnabled = false
 
@@ -405,6 +433,11 @@ return function(Window, Utils)
         local lastHopTime = 0
 
         while task.wait(2) do
+            -- KIỂM TRA DỪNG TỪ MAIN CONTROLLER
+            if _G.SystemController and _G.SystemController.shouldStop then
+                continue
+            end
+
             if isTeleporting then continue end
 
             local currentTime = os.time()
@@ -450,7 +483,7 @@ return function(Window, Utils)
                         _G.ServerManager.pauseFarm = false
                         if not currentlyInTargetWeather then
                             currentlyInTargetWeather = true
-                            ResetBlacklist("Tìm thấy thời tiết mục tiêu! Reset blacklist để lưu server")
+                            ResetBlacklist("Tìm thấy thời tiết mục tiêu! Reset blacklist để lưu server", true)
                         end
                     else
                         _G.ServerManager.pauseFarm = true
@@ -490,5 +523,5 @@ return function(Window, Utils)
         end
     end)
 
-    print("✅ Server Manager 2.3 loaded successfully!")
+    print("✅ Server Manager 2.4 loaded successfully!")
 end
