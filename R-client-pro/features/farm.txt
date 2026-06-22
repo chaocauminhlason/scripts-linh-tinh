@@ -1,6 +1,6 @@
 -- ====================================================================
 -- MODULE: R-GAME (AUTO BẮT, ĐÁNH, HỒI MÁU) - FULL CHỨC NĂNG
--- VERSION: 2.0 - ĐỒNG BỘ VỚI SERVER MANAGER
+-- VERSION: 2.1 - FIX DỊCH CHUYỂN & THÊM CÔNG TẮC
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -20,7 +20,7 @@ return function(Window, Utils)
         savedPosition = nil,
         targetMonsterNames = {},
         yieldForBoss = true,
-        autoReturnToFarm = true,
+        autoReturnToFarm = false,  -- MẶC ĐỊNH TẮT
         healThreshold = 1
     }
 
@@ -112,11 +112,45 @@ return function(Window, Utils)
     -- HÀM KIỂM TRA CÓ NÊN TẠM DỪNG FARM KHÔNG
     -- ==========================================
     local function ShouldPauseFarm()
-        -- Kiểm tra từ Server Manager
         if _G.ServerManager and _G.ServerManager.pauseFarm ~= nil then
             return _G.ServerManager.pauseFarm
         end
         return false
+    end
+
+    -- ==========================================
+    -- HÀM DỊCH CHUYỂN AN TOÀN (FIX ĐỘN THỔ)
+    -- ==========================================
+    local function SafeTeleport(targetCFrame, offsetY)
+        offsetY = offsetY or 5 -- Mặc định cộng 5 studs theo trục Y
+        
+        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not hrp then return false end
+        
+        -- Kiểm tra vị trí đích có hợp lệ không
+        local targetPos = targetCFrame.Position + Vector3.new(0, offsetY, 0)
+        
+        -- Tạo raycast để kiểm tra mặt đất
+        local rayOrigin = targetPos + Vector3.new(0, 10, 0)
+        local rayDirection = Vector3.new(0, -20, 0)
+        local raycastParams = RaycastParams.new()
+        raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+        raycastParams.FilterDescendantsInstances = {LocalPlayer.Character}
+        
+        local rayResult = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+        
+        if rayResult then
+            -- Nếu tìm thấy mặt đất, đặt nhân vật lên đó + 3 studs
+            local groundY = rayResult.Position.Y
+            targetPos = Vector3.new(targetPos.X, groundY + 3, targetPos.Z)
+        else
+            -- Fallback: cộng thêm 5 studs nếu không tìm thấy mặt đất
+            targetPos = targetCFrame.Position + Vector3.new(0, 5, 0)
+        end
+        
+        -- Thực hiện dịch chuyển
+        hrp.CFrame = CFrame.new(targetPos)
+        return true
     end
 
     -- ==========================================
@@ -323,6 +357,32 @@ return function(Window, Utils)
     })
 
     -- ==========================================
+    -- CÀI ĐẶT TỰ ĐỘNG VỀ FARM (CÓ CÔNG TẮC)
+    -- ==========================================
+    CamTab:CreateSection("--- TỰ ĐỘNG VỀ FARM ---")
+    
+    CamTab:CreateToggle({
+        Name = "Tự động về vị trí farm khi vào game",
+        CurrentValue = false,  -- MẶC ĐỊNH TẮT
+        Flag = "AutoReturnToFarm",
+        Callback = function(Value)
+            camSettings.autoReturnToFarm = Value
+            if Value and savedFarmPosition then
+                -- Nếu bật, dịch chuyển ngay lập tức
+                task.spawn(function()
+                    task.wait(1)
+                    SafeTeleport(savedFarmPosition, 5)
+                    game.StarterGui:SetCore("SendNotification", { 
+                        Title = "✅ Đã về farm", 
+                        Text = "Đã dịch chuyển về vị trí farm", 
+                        Duration = 3 
+                    })
+                end)
+            end
+        end
+    })
+
+    -- ==========================================
     -- CÁC THIẾT LẬP KHÁC
     -- ==========================================
     CamTab:CreateSection("--- CÀI ĐẶT FARM ---")
@@ -363,7 +423,6 @@ return function(Window, Utils)
         while task.wait(0.2) do
             if not camSettings.autoAttack or camSettings.isHealing then continue end
 
-            -- Kiểm tra tạm dừng từ Server Manager
             if camSettings.yieldForBoss and ShouldPauseFarm() then continue end
 
             local monstersFolder = Workspace:FindFirstChild("Monsters")
@@ -429,7 +488,7 @@ return function(Window, Utils)
                 local targetId = tonumber(targetCatch.Name:match("Monster_(%d+)"))
                 local root = targetCatch.PrimaryPart or targetCatch:FindFirstChild("HumanoidRootPart")
                 if root and root:IsA("BasePart") then
-                    hrp.CFrame = CFrame.new(root.Position + Vector3.new(0, 3, 0))
+                    SafeTeleport(CFrame.new(root.Position), 5)
                 end
 
                 task.spawn(function()
@@ -448,7 +507,7 @@ return function(Window, Utils)
     end)
 
     -- ==========================================
-    -- LUỒNG 3: AUTO HEAL
+    -- LUỒNG 3: AUTO HEAL (FIX DỊCH CHUYỂN)
     -- ==========================================
     task.spawn(function()
         while task.wait(1) do
@@ -541,12 +600,13 @@ return function(Window, Utils)
                         plat.CanCollide = true
                         plat.Parent = Workspace
 
-                        hrp.CFrame = CFrame.new(bestRecoverPos + Vector3.new(0, 3, 0))
+                        -- Dùng SafeTeleport thay vì gán trực tiếp
+                        SafeTeleport(CFrame.new(bestRecoverPos), 5)
                         task.wait(9)
 
                         plat:Destroy()
                         if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                            LocalPlayer.Character.HumanoidRootPart.CFrame = camSettings.savedPosition
+                            SafeTeleport(camSettings.savedPosition, 5)
                         end
                     end
                 end
@@ -556,15 +616,19 @@ return function(Window, Utils)
     end)
 
     -- ==========================================
-    -- TỰ ĐỘNG VỀ FARM POS
+    -- TỰ ĐỘNG VỀ FARM POS (CHỈ KHI BẬT CÔNG TẮC)
     -- ==========================================
     task.spawn(function()
+        -- Chỉ chạy 1 lần khi vào game
+        task.wait(3) -- Chờ game load
+        
         if camSettings.autoReturnToFarm and savedFarmPosition then
-            task.wait(5)
-            local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                hrp.CFrame = savedFarmPosition + Vector3.new(0, 3, 0)
-            end
+            SafeTeleport(savedFarmPosition, 5)
+            game.StarterGui:SetCore("SendNotification", { 
+                Title = "🏠 Về farm", 
+                Text = "Đã tự động về vị trí farm", 
+                Duration = 3 
+            })
         end
     end)
 
@@ -630,7 +694,12 @@ return function(Window, Utils)
         Callback = function()
             local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
             if hrp and savedFarmPosition then
-                hrp.CFrame = savedFarmPosition + Vector3.new(0, 3, 0)
+                SafeTeleport(savedFarmPosition, 5)
+                game.StarterGui:SetCore("SendNotification", { 
+                    Title = "✅ Đã về farm", 
+                    Text = "Đã dịch chuyển về vị trí farm", 
+                    Duration = 3 
+                })
             end
         end,
     })
@@ -651,6 +720,6 @@ return function(Window, Utils)
         end
     end)
 
-    print("✅ R-Game Module 2.0 loaded successfully!")
+    print("✅ R-Game Module 2.1 loaded successfully!")
     print("📊 Đã tìm thấy " .. #GetAllMonsterNames() .. " loại quái")
 end
