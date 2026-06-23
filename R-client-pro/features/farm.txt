@@ -1,31 +1,12 @@
 -- ====================================================================
--- MODULE: AUTO FARM - R-GAME
--- VERSION: 3.5 - FIX LỖI KHÔNG DÙNG UTILS
+-- MODULE: R-GAME (AUTO BẮT, ĐÁNH, HỒI MÁU) - BẢN ỔN ĐỊNH
 -- ====================================================================
 return function(Window, Utils)
-    -- Utils được truyền vào nhưng không sử dụng để tránh lỗi
     local Players = game:GetService("Players")
     local Workspace = game:GetService("Workspace")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local HttpService = game:GetService("HttpService")
     local LocalPlayer = Players.LocalPlayer
-
-    -- ==========================================
-    -- ĐĂNG KÝ VỚI MAIN CONTROLLER
-    -- ==========================================
-    local function FarmToggle(enable)
-        camSettings.autoAttack = enable
-        camSettings.autoCatch = enable
-    end
-    
-    local function HealToggle(enable)
-        camSettings.autoHeal = enable
-    end
-    
-    if _G.SystemController then
-        _G.SystemController:registerModule("farm", FarmToggle)
-        _G.SystemController:registerModule("heal", HealToggle)
-    end
 
     -- ==========================================
     -- STATE
@@ -98,18 +79,6 @@ return function(Window, Utils)
             if string.find(string.lower(realName), string.lower(targetName)) then
                 return true
             end
-        end
-        return false
-    end
-
-    -- ==========================================
-    -- PAUSE CHECK
-    -- ==========================================
-    local function ShouldPauseFarm()
-        if _G.SystemController and _G.SystemController.shouldStop then return true end
-        if _G.SystemController and _G.SystemController.isPaused then return true end
-        if _G.SystemController and _G.SystemController.modules and _G.SystemController.modules.farm then
-            if not _G.SystemController.modules.farm.enabled then return true end
         end
         return false
     end
@@ -249,35 +218,19 @@ return function(Window, Utils)
         Name = "Tự Động Đánh Quái", 
         CurrentValue = false, 
         Flag = "FarmAutoAttack", 
-        Callback = function(V) 
-            pcall(function() 
-                camSettings.autoAttack = V 
-                if _G.SystemController then
-                    _G.SystemController:toggleModule("farm", V or camSettings.autoCatch)
-                end
-            end) 
-        end 
+        Callback = function(V) pcall(function() camSettings.autoAttack = V end) end 
     })
     CamTab:CreateToggle({ 
         Name = "Tự Động Bắt Quái", 
         CurrentValue = false, 
         Flag = "FarmAutoCatch", 
-        Callback = function(V) 
-            pcall(function() 
-                camSettings.autoCatch = V 
-                if _G.SystemController then
-                    _G.SystemController:toggleModule("farm", V or camSettings.autoAttack)
-                end
-            end) 
-        end 
+        Callback = function(V) pcall(function() camSettings.autoCatch = V end) end 
     })
     CamTab:CreateToggle({ 
         Name = "Tạm dừng khi có Boss", 
         CurrentValue = true, 
         Flag = "FarmYieldForBoss", 
-        Callback = function(V) 
-            pcall(function() camSettings.yieldForBoss = V end) 
-        end 
+        Callback = function(V) pcall(function() camSettings.yieldForBoss = V end) end 
     })
 
     CamTab:CreateSection("--- TỰ ĐỘNG VỀ FARM ---")
@@ -303,14 +256,7 @@ return function(Window, Utils)
         Name = "Tự Động Hồi Máu Pet", 
         CurrentValue = false, 
         Flag = "FarmAutoHeal", 
-        Callback = function(V) 
-            pcall(function() 
-                camSettings.autoHeal = V 
-                if _G.SystemController then
-                    _G.SystemController:toggleModule("heal", V)
-                end
-            end) 
-        end 
+        Callback = function(V) pcall(function() camSettings.autoHeal = V end) end 
     })
     CamTab:CreateSlider({
         Name = "Ngưỡng Pet chết",
@@ -319,9 +265,7 @@ return function(Window, Utils)
         Suffix = " Pet",
         CurrentValue = 1,
         Flag = "HealThresholdSlider",
-        Callback = function(Value)
-            pcall(function() camSettings.healThreshold = Value end)
-        end,
+        Callback = function(Value) pcall(function() camSettings.healThreshold = Value end) end,
     })
 
     CamTab:CreateSection("--- TRẠNG THÁI ---")
@@ -369,7 +313,6 @@ return function(Window, Utils)
     -- ==========================================
     task.spawn(function()
         while task.wait(0.2) do
-            if ShouldPauseFarm() then continue end
             if not camSettings.autoAttack or camSettings.isHealing then continue end
             if camSettings.yieldForBoss and _G.BossStatus and _G.BossStatus.bossFound then continue end
             
@@ -394,7 +337,6 @@ return function(Window, Utils)
 
     task.spawn(function()
         while task.wait(0.5) do
-            if ShouldPauseFarm() then continue end
             if not camSettings.autoCatch or camSettings.isHealing then continue end
             if camSettings.yieldForBoss and _G.BossStatus and _G.BossStatus.bossFound then continue end
             
@@ -446,7 +388,7 @@ return function(Window, Utils)
         end
     end)
 
-    -- Auto Heal
+    -- Heal
     local function CheckDeadPetsFromUI()
         local deadCount = 0
         local totalPets = 0
@@ -480,9 +422,6 @@ return function(Window, Utils)
 
     local function ShouldTriggerHeal()
         if camSettings.isHealing then return false end
-        if _G.SystemController and _G.SystemController.modules and _G.SystemController.modules.heal then
-            if not _G.SystemController.modules.heal.enabled then return false end
-        end
         local deadCount, totalPets = CheckDeadPetsFromUI()
         if totalPets == 0 then return false end
         return deadCount >= camSettings.healThreshold
@@ -514,7 +453,6 @@ return function(Window, Utils)
 
     task.spawn(function()
         while task.wait(1) do
-            if ShouldPauseFarm() then continue end
             if not camSettings.autoHeal or camSettings.isHealing then continue end
             local isRiding = LocalPlayer:GetAttribute("RidePetId") ~= nil
             if isRiding then continue end
@@ -548,7 +486,7 @@ return function(Window, Utils)
         end
     end)
 
-    -- Auto return farm
+    -- Auto return
     task.spawn(function()
         task.wait(3)
         if camSettings.autoReturnToFarm and savedFarmPosition then
@@ -560,10 +498,6 @@ return function(Window, Utils)
     -- Status
     task.spawn(function()
         while task.wait(2) do
-            if _G.SystemController and _G.SystemController.shouldStop then
-                statusLabel:Set("⏸️ ĐÃ DỪNG (Main Controller)")
-                continue
-            end
             local status = "🟢 Đang chạy"
             if camSettings.isHealing then 
                 status = "🔄 Đang hồi máu..."
@@ -576,5 +510,5 @@ return function(Window, Utils)
         end
     end)
 
-    print("✅ Farm Module 3.5 loaded successfully!")
+    print("✅ Farm Module loaded successfully!")
 end
