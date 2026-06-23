@@ -1,3 +1,4 @@
+# OLD VERSION
 # 📁 TÀI LIỆU BÀN GIAO: R-CLIENT PRO TOOL (AUTO-FARM & BOSS HUB)
 
 **Tác giả / Lead Developer:** Lê Hồng Sơn  
