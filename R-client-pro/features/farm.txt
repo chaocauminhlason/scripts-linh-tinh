@@ -1,6 +1,6 @@
 -- ====================================================================
--- MODULE: R-GAME (AUTO BẮT, ĐÁNH, HỒI MÁU)
--- VERSION: 3.2 - TÍCH HỢP MAIN CONTROLLER & SERVER MANAGER
+-- MODULE: R-GAME (AUTO BẮT, ĐÁNH, HỒI MÁU) - BẢN TỐI ƯU
+-- VERSION: 3.4 - FIX LỖI LOAD
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -101,9 +101,16 @@ return function(Window, Utils)
         return false
     end
 
+    -- ==========================================
+    -- HÀM KIỂM TRA PAUSE (KHÔNG DÙNG isModuleEnabled)
+    -- ==========================================
     local function ShouldPauseFarm()
         if _G.SystemController and _G.SystemController.shouldStop then return true end
-        if not _G.SystemController:isModuleEnabled("farm") then return true end
+        if _G.SystemController and _G.SystemController.isPaused then return true end
+        -- Kiểm tra module farm có được bật không (qua toggle của main)
+        if _G.SystemController and _G.SystemController.modules and _G.SystemController.modules.farm then
+            if not _G.SystemController.modules.farm.enabled then return true end
+        end
         return false
     end
 
@@ -489,7 +496,9 @@ return function(Window, Utils)
 
     local function ShouldTriggerHeal()
         if camSettings.isHealing then return false end
-        if not _G.SystemController:isModuleEnabled("heal") then return false end
+        if _G.SystemController and _G.SystemController.modules and _G.SystemController.modules.heal then
+            if not _G.SystemController.modules.heal.enabled then return false end
+        end
         local deadCount, totalPets = CheckDeadPetsFromUI()
         if totalPets == 0 then return false end
         return deadCount >= camSettings.healThreshold
@@ -590,5 +599,5 @@ return function(Window, Utils)
         end
     end)
 
-    print("✅ Farm Module 3.2 loaded successfully!")
+    print("✅ Farm Module 3.4 loaded successfully!")
 end
