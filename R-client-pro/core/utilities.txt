@@ -418,6 +418,303 @@ task.spawn(function()
         warn("[Utils] ⚠️ DataPullFunc chưa sẵn sàng, sẽ thử lại sau")
     end
 end)
+-- ==========================================
+-- HỆ THỐNG DROPDOWN ĐA CHỌN KHU VỰC (DÙNG CHUNG)
+-- ==========================================
+
+-- BẢNG KHU VỰC MỞ RỘNG (Có thể thêm tùy ý)
+local AreaData = {
+    {id = 1, name = "Starter Island", category = "Cơ Bản"},
+    {id = 2, name = "Volcano", category = "Săn Boss"},
+    {id = 3, name = "Duneveil Isle", category = "Săn Boss"},
+    {id = 4, name = "Neverland", category = "Săn Boss"},
+    {id = 5, name = "Frost Isle", category = "Săn Boss"},
+    {id = 6, name = "Tideland", category = "Săn Boss"},
+    {id = 7, name = "Spirit Grove", category = "Săn Boss"},
+    {id = 8, name = "Dragon's Breath", category = "Săn Boss"},
+    {id = 9, name = "Blossom Haven", category = "Săn Boss"},
+    {id = 10, name = "Mobius Circus", category = "Săn Boss"},
+    {id = 11, name = "Specter Shallows", category = "Săn Boss"}
+}
+
+-- ==========================================
+-- 1. TẠO DROPDOWN ĐA CHỌN KHU VỰC
+-- ==========================================
+function Utils.CreateAreaMultiSelect(tab, config)
+    config = config or {}
+    
+    local options = {}
+    for _, area in ipairs(AreaData) do
+        table.insert(options, area.name)
+    end
+    
+    local defaultOptions = {}
+    if config.defaultAreas and #config.defaultAreas > 0 then
+        for _, areaName in ipairs(config.defaultAreas) do
+            for _, area in ipairs(AreaData) do
+                if area.name == areaName then
+                    table.insert(defaultOptions, areaName)
+                    break
+                end
+            end
+        end
+    end
+    
+    -- Nếu không có default thì lấy tất cả
+    if #defaultOptions == 0 then
+        defaultOptions = options
+    end
+    
+    local dropdown = tab:CreateDropdown({
+        Name = config.name or "Chọn Khu Vực",
+        Options = options,
+        CurrentOption = defaultOptions,
+        MultipleOptions = true,
+        Flag = config.flag or "AreaMultiSelect",
+        Callback = function(selectedOptions)
+            if config.callback then
+                -- Chuyển đổi tên → ID
+                local selectedIds = {}
+                for _, areaName in ipairs(selectedOptions) do
+                    for _, area in ipairs(AreaData) do
+                        if area.name == areaName then
+                            table.insert(selectedIds, area.id)
+                            break
+                        end
+                    end
+                end
+                config.callback(selectedIds, selectedOptions)
+            end
+        end
+    })
+    
+    return dropdown
+end
+
+-- ==========================================
+-- 2. LẤY DANH SÁCH ID TỪ TÊN KHU VỰC
+-- ==========================================
+function Utils.GetAreaIdsByNames(areaNames)
+    local ids = {}
+    for _, areaName in ipairs(areaNames) do
+        for _, area in ipairs(AreaData) do
+            if area.name == areaName then
+                table.insert(ids, area.id)
+                break
+            end
+        end
+    end
+    return ids
+end
+
+-- ==========================================
+-- 3. LẤY DANH SÁCH TÊN TỪ ID KHU VỰC
+-- ==========================================
+function Utils.GetAreaNamesByIds(areaIds)
+    local names = {}
+    for _, areaId in ipairs(areaIds) do
+        for _, area in ipairs(AreaData) do
+            if area.id == areaId then
+                table.insert(names, area.name)
+                break
+            end
+        end
+    end
+    return names
+end
+
+-- ==========================================
+-- 4. LẤY DANH SÁCH TẤT CẢ KHU VỰC (CÓ CATEGORY)
+-- ==========================================
+function Utils.GetAllAreas()
+    return AreaData
+end
+
+-- ==========================================
+-- 5. LẤY DANH SÁCH KHU VỰC THEO CATEGORY
+-- ==========================================
+function Utils.GetAreasByCategory(category)
+    local result = {}
+    for _, area in ipairs(AreaData) do
+        if area.category == category then
+            table.insert(result, area)
+        end
+    end
+    return result
+end
+
+-- ==========================================
+-- 6. DỊCH CHUYỂN ĐẾN NHIỀU KHU VỰC TUẦN TỰ
+-- ==========================================
+function Utils.TeleportToAreasSequential(areaIds, delayBetween)
+    delayBetween = delayBetween or 3
+    local remote = GetDataPullFunc()
+    if not remote then
+        warn("[Utils] ❌ Không tìm thấy DataPullFunc")
+        return false
+    end
+    
+    task.spawn(function()
+        for _, areaId in ipairs(areaIds) do
+            local success = Utils.TeleportToArea(areaId)
+            if success then
+                local areaName = AreaMap[areaId] or "Unknown"
+                print("[Utils] 🚀 Đã đến: " .. areaName)
+                task.wait(delayBetween)
+            else
+                warn("[Utils] ❌ Dịch chuyển đến area " .. areaId .. " thất bại")
+            end
+        end
+    end)
+    
+    return true
+end
+
+-- ==========================================
+-- 7. TẠO TOGGLE "AUTO DỊCH CHUYỂN KHU VỰC"
+-- ==========================================
+function Utils.CreateAreaAutoTeleport(tab, config)
+    config = config or {}
+    
+    local sectionName = config.sectionName or "--- AUTO DỊCH CHUYỂN KHU VỰC ---"
+    tab:CreateSection(sectionName)
+    
+    local areaDropdown = Utils.CreateAreaMultiSelect(tab, {
+        name = config.dropdownName or "Chọn Khu Vực Cần Dịch Chuyển",
+        flag = config.dropdownFlag or "AreaAutoTeleportSelect",
+        defaultAreas = config.defaultAreas or {},
+        callback = function(selectedIds, selectedNames)
+            if config.onAreaSelect then
+                config.onAreaSelect(selectedIds, selectedNames)
+            end
+        end
+    })
+    
+    local isEnabled = false
+    
+    local toggle = tab:CreateToggle({
+        Name = config.toggleName or "Tự Động Dịch Chuyển Đến Các Khu Vực",
+        CurrentValue = false,
+        Flag = config.toggleFlag or "AreaAutoTeleportToggle",
+        Callback = function(Value)
+            isEnabled = Value
+            if config.onToggle then
+                config.onToggle(Value)
+            end
+            
+            if Value then
+                -- Lấy danh sách area đang chọn
+                local currentOptions = areaDropdown.CurrentOption or {}
+                local areaIds = Utils.GetAreaIdsByNames(currentOptions)
+                
+                if #areaIds == 0 then
+                    game.StarterGui:SetCore("SendNotification", {
+                        Title = "⚠️ Lỗi", 
+                        Text = "Vui lòng chọn ít nhất 1 khu vực!",
+                        Duration = 3
+                    })
+                    return
+                end
+                
+                if config.onStart then
+                    config.onStart(areaIds)
+                end
+            else
+                if config.onStop then
+                    config.onStop()
+                end
+            end
+        end
+    })
+    
+    -- Hàm để lấy trạng thái
+    local function getStatus()
+        return isEnabled
+    end
+    
+    -- Hàm để lấy danh sách area đang chọn
+    local function getSelectedAreas()
+        return Utils.GetAreaIdsByNames(areaDropdown.CurrentOption or {})
+    end
+    
+    return {
+        dropdown = areaDropdown,
+        toggle = toggle,
+        isEnabled = getStatus,
+        getSelectedAreas = getSelectedAreas,
+        setAreas = function(areaNames)
+            areaDropdown:SetCurrentOption(areaNames)
+        end
+    }
+end
+
+-- ==========================================
+-- 8. HÀM LẤY DANH SÁCH KHU VỰC DẠNG OPTION
+-- ==========================================
+function Utils.GetAreaOptions()
+    local options = {}
+    for _, area in ipairs(AreaData) do
+        table.insert(options, area.name)
+    end
+    return options
+end
+
+-- ==========================================
+-- 9. THÊM KHU VỰC MỚI VÀO HỆ THỐNG
+-- ==========================================
+function Utils.AddArea(id, name, category)
+    category = category or "Khác"
+    table.insert(AreaData, {id = id, name = name, category = category})
+    AreaMap[id] = name
+    print("[Utils] ✅ Đã thêm khu vực: " .. name .. " (ID: " .. id .. ")")
+end
+
+-- ==========================================
+-- 10. DỊCH CHUYỂN ĐẾN KHU VỰC NGẪU NHIÊN TRONG DANH SÁCH
+-- ==========================================
+function Utils.TeleportToRandomArea(areaIds)
+    if not areaIds or #areaIds == 0 then
+        areaIds = {}
+        for _, area in ipairs(AreaData) do
+            table.insert(areaIds, area.id)
+        end
+    end
+    
+    local randomId = areaIds[math.random(1, #areaIds)]
+    return Utils.TeleportToArea(randomId)
+end
+
+-- ==========================================
+-- 11. LƯU DANH SÁCH KHU VỰC ĐÃ CHỌN
+-- ==========================================
+function Utils.SaveSelectedAreas(selectedIds, fileName)
+    fileName = fileName or "R_SelectedAreas.json"
+    local HttpService = game:GetService("HttpService")
+    
+    pcall(function()
+        if writefile then
+            writefile(fileName, HttpService:JSONEncode(selectedIds))
+        end
+    end)
+end
+
+-- ==========================================
+-- 12. ĐỌC DANH SÁCH KHU VỰC ĐÃ CHỌN
+-- ==========================================
+function Utils.LoadSelectedAreas(fileName)
+    fileName = fileName or "R_SelectedAreas.json"
+    local HttpService = game:GetService("HttpService")
+    
+    pcall(function()
+        if isfile and isfile(fileName) then
+            local data = HttpService:JSONDecode(readfile(fileName))
+            if type(data) == "table" then
+                return data
+            end
+        end
+    end)
+    return {}
+end
 
 -- Trả về bảng Utils
 return Utils
