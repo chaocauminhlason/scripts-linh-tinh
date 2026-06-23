@@ -42,8 +42,8 @@ if Utils then
     -- ==========================================
     -- MAIN CONTROLLER - ĐIỀU KHIỂN TRUNG TÂM
     -- ==========================================
-    local main = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/main.txt')
-    if main then main(Window, Utils) end
+    --local main = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/main.txt')
+    --if main then main(Window, Utils) end
 
     -- ==========================================
     -- CÁC MODULE CHỨC NĂNG
