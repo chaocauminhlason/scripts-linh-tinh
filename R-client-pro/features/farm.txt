@@ -8,7 +8,7 @@ return function(Window, Utils)
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local HttpService = game:GetService("HttpService")
     local LocalPlayer = Players.LocalPlayer
-
+    local DataPullFunc = ReplicatedStorage:WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc")
     -- ==========================================
     -- QUẢN LÝ TRẠNG THÁI
     -- ==========================================
@@ -386,23 +386,27 @@ return function(Window, Utils)
     })
 
     -- ==========================================
-    -- LUỒNG 1: AUTO ATTACK
+    -- LUỒNG 1: AUTO ATTACK (ĐỨNG YÊN TẠI CHỖ)
     -- ==========================================
     task.spawn(function()
         while task.wait(0.2) do
             if _G.SystemController and _G.SystemController.shouldStop then continue end
             if not camSettings.autoAttack or camSettings.isHealing then continue end
             if camSettings.yieldForBoss and ShouldPauseFarm() then continue end
+            
             local monstersFolder = Workspace:FindFirstChild("Monsters")
             if not monstersFolder then continue end
+            
             for _, monster in pairs(monstersFolder:GetChildren()) do
                 if monster:IsA("Model") then
                     local root = monster.PrimaryPart or monster:FindFirstChild("HumanoidRootPart")
+                    -- Kiểm tra xem quái còn sống (Transparency < 1) và chưa vào trạng thái bị bắt
                     if root and root:IsA("BasePart") and root.Transparency < 1 and monster:GetAttribute("CatchEndTick") == nil then
                         if IsMonsterInFilter(monster) then
                             local id = tonumber(monster.Name:match("Monster_(%d+)"))
-                            if id and MonsterSystem then 
-                                pcall(function() MonsterSystem:ClientAttackMonster(id) end)
+                            if id and DataPullFunc then 
+                                -- Gọi Remote đánh từ xa thông qua Utils, nhân vật đứng im
+                                Utils.AttackMonster(DataPullFunc, id)
                             end
                         end
                     end
@@ -412,56 +416,35 @@ return function(Window, Utils)
     end)
 
     -- ==========================================
-    -- LUỒNG 2: AUTO CATCH
+    -- LUỒNG 2: AUTO CATCH (ĐỨNG YÊN TẠI CHỖ)
     -- ==========================================
     task.spawn(function()
         while task.wait(0.5) do
             if _G.SystemController and _G.SystemController.shouldStop then continue end
             if not camSettings.autoCatch or camSettings.isHealing then continue end
             if camSettings.yieldForBoss and ShouldPauseFarm() then continue end
-            local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if not hrp then continue end
+            
             local playerId = LocalPlayer.UserId
             local monstersFolder = Workspace:FindFirstChild("Monsters")
             if not monstersFolder then continue end
-            local targetCatch, closestDist = nil, math.huge
+            
             for _, monster in pairs(monstersFolder:GetChildren()) do
                 if monster:IsA("Model") then
                     if IsMonsterInFilter(monster) then
                         local id = tonumber(monster.Name:match("Monster_(%d+)"))
                         if id then
                             local catchTaken = monster:GetAttribute("CatchTakenPlayerId")
+                            -- Nếu quái trắng máu và ID người bắt khớp với ID của mình
                             if catchTaken and catchTaken == playerId then
-                                local root = monster.PrimaryPart or monster:FindFirstChild("HumanoidRootPart")
-                                if root and root:IsA("BasePart") then
-                                    local dist = (hrp.Position - root.Position).Magnitude
-                                    if dist < closestDist then 
-                                        closestDist = dist
-                                        targetCatch = monster 
-                                    end
+                                if DataPullFunc then
+                                    -- Gửi lệnh ném bóng từ xa, TUYỆT ĐỐI KHÔNG DỊCH CHUYỂN
+                                    Utils.CatchMonster(DataPullFunc, id)
+                                    task.wait(0.2) -- Tránh spam Remote quá nhanh gây lag server
                                 end
                             end
                         end
                     end
                 end
-            end
-            if targetCatch and MonsterSystem then
-                local targetId = tonumber(targetCatch.Name:match("Monster_(%d+)"))
-                local root = targetCatch.PrimaryPart or targetCatch:FindFirstChild("HumanoidRootPart")
-                if root and root:IsA("BasePart") then
-                    SafeTeleport(CFrame.new(root.Position), 5)
-                end
-                task.spawn(function()
-                    local success, isStarted = pcall(function() return MonsterSystem:ClientCatchMonsterStart(targetId) end)
-                    if success then
-                        if isStarted == false then 
-                            task.wait(5) 
-                        else
-                            task.wait(1.5)
-                            pcall(function() MonsterSystem:ClientCatchMonsterComplete(targetId) end)
-                        end
-                    end
-                end)
             end
         end
     end)
