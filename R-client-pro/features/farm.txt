@@ -1,8 +1,9 @@
 -- ====================================================================
--- MODULE: R-GAME (AUTO BẮT, ĐÁNH, HỒI MÁU) - BẢN TỐI ƯU
--- VERSION: 3.4 - FIX LỖI LOAD
+-- MODULE: AUTO FARM - R-GAME
+-- VERSION: 3.5 - FIX LỖI KHÔNG DÙNG UTILS
 -- ====================================================================
 return function(Window, Utils)
+    -- Utils được truyền vào nhưng không sử dụng để tránh lỗi
     local Players = game:GetService("Players")
     local Workspace = game:GetService("Workspace")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -27,7 +28,7 @@ return function(Window, Utils)
     end
 
     -- ==========================================
-    -- STATE MANAGEMENT
+    -- STATE
     -- ==========================================
     local camSettings = {
         autoAttack = false,
@@ -49,7 +50,7 @@ return function(Window, Utils)
     pcall(function() MonsterSystem = require(ReplicatedStorage.CommonLogic.Monster.MonsterSystem) end)
 
     -- ==========================================
-    -- HÀM LẤY TÊN QUÁI
+    -- HELPER
     -- ==========================================
     local MonsterNameCache = {}
     local function GetCachedMonsterName(monster)
@@ -102,12 +103,11 @@ return function(Window, Utils)
     end
 
     -- ==========================================
-    -- HÀM KIỂM TRA PAUSE (KHÔNG DÙNG isModuleEnabled)
+    -- PAUSE CHECK
     -- ==========================================
     local function ShouldPauseFarm()
         if _G.SystemController and _G.SystemController.shouldStop then return true end
         if _G.SystemController and _G.SystemController.isPaused then return true end
-        -- Kiểm tra module farm có được bật không (qua toggle của main)
         if _G.SystemController and _G.SystemController.modules and _G.SystemController.modules.farm then
             if not _G.SystemController.modules.farm.enabled then return true end
         end
@@ -115,7 +115,7 @@ return function(Window, Utils)
     end
 
     -- ==========================================
-    -- HÀM DỊCH CHUYỂN AN TOÀN
+    -- SAFE TELEPORT
     -- ==========================================
     local function SafeTeleport(targetCFrame, offsetY)
         offsetY = offsetY or 5
@@ -137,7 +137,7 @@ return function(Window, Utils)
     end
 
     -- ==========================================
-    -- ĐỌC DỮ LIỆU
+    -- LOAD DATA
     -- ==========================================
     local function LoadSavedPosition()
         if isfile and isfile(posFileName) and readfile then
@@ -161,11 +161,10 @@ return function(Window, Utils)
     camSettings.targetMonsterNames = LoadMonsterFilter()
 
     -- ==========================================
-    -- UI LAYER
+    -- UI
     -- ==========================================
     local CamTab = Window:CreateTab("Auto farm", 4483345998)
 
-    -- QUẢN LÝ QUÁI
     CamTab:CreateSection("--- QUẢN LÝ QUÁI FARM ---")
 
     local function UpdateMonsterLabel()
@@ -210,7 +209,7 @@ return function(Window, Utils)
     })
 
     CamTab:CreateButton({
-        Name = "🔍 Quét danh sách quái trong game",
+        Name = "🔍 Quét danh sách quái",
         Callback = function()
             pcall(function()
                 local monsterNames = GetAllMonsterNames()
@@ -245,9 +244,7 @@ return function(Window, Utils)
         end
     })
 
-    -- CÀI ĐẶT FARM
     CamTab:CreateSection("--- CÀI ĐẶT FARM ---")
-    
     CamTab:CreateToggle({ 
         Name = "Tự Động Đánh Quái", 
         CurrentValue = false, 
@@ -261,7 +258,6 @@ return function(Window, Utils)
             end) 
         end 
     })
-    
     CamTab:CreateToggle({ 
         Name = "Tự Động Bắt Quái", 
         CurrentValue = false, 
@@ -275,7 +271,6 @@ return function(Window, Utils)
             end) 
         end 
     })
-
     CamTab:CreateToggle({ 
         Name = "Tạm dừng khi có Boss", 
         CurrentValue = true, 
@@ -285,7 +280,6 @@ return function(Window, Utils)
         end 
     })
 
-    -- TỰ ĐỘNG VỀ FARM
     CamTab:CreateSection("--- TỰ ĐỘNG VỀ FARM ---")
     CamTab:CreateToggle({
         Name = "Tự động về vị trí farm khi vào game",
@@ -304,7 +298,6 @@ return function(Window, Utils)
         end
     })
 
-    -- HỒI MÁU
     CamTab:CreateSection("--- CÀI ĐẶT HỒI MÁU ---")
     CamTab:CreateToggle({ 
         Name = "Tự Động Hồi Máu Pet", 
@@ -319,9 +312,8 @@ return function(Window, Utils)
             end) 
         end 
     })
-
     CamTab:CreateSlider({
-        Name = "Ngưỡng Pet chết để Hồi Máu",
+        Name = "Ngưỡng Pet chết",
         Range = {1, 5},
         Increment = 1,
         Suffix = " Pet",
@@ -332,11 +324,9 @@ return function(Window, Utils)
         end,
     })
 
-    -- TRẠNG THÁI
     CamTab:CreateSection("--- TRẠNG THÁI ---")
     local statusLabel = CamTab:CreateLabel("🔄 Đang chờ...")
 
-    -- TỌA ĐỘ FARM
     CamTab:CreateSection("--- TỌA ĐỘ FARM ---")
     local initText = savedFarmPosition and string.format("📍 %d, %d, %d", 
         math.floor(savedFarmPosition.Position.X), 
@@ -345,7 +335,7 @@ return function(Window, Utils)
     local FarmPosLabel = CamTab:CreateLabel("Tọa độ farm: " .. initText)
 
     CamTab:CreateButton({
-        Name = "💾 Lưu vị trí farm",
+        Name = "💾 Lưu vị trí",
         Callback = function()
             pcall(function()
                 local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -361,7 +351,6 @@ return function(Window, Utils)
             end)
         end,
     })
-
     CamTab:CreateButton({
         Name = "🚀 Về vị trí farm",
         Callback = function()
@@ -376,7 +365,7 @@ return function(Window, Utils)
     })
 
     -- ==========================================
-    -- LUỒNG 1: AUTO ATTACK
+    -- LOOPS
     -- ==========================================
     task.spawn(function()
         while task.wait(0.2) do
@@ -403,9 +392,6 @@ return function(Window, Utils)
         end
     end)
 
-    -- ==========================================
-    -- LUỒNG 2: AUTO CATCH
-    -- ==========================================
     task.spawn(function()
         while task.wait(0.5) do
             if ShouldPauseFarm() then continue end
@@ -460,9 +446,7 @@ return function(Window, Utils)
         end
     end)
 
-    -- ==========================================
-    -- LUỒNG 3: AUTO HEAL
-    -- ==========================================
+    -- Auto Heal
     local function CheckDeadPetsFromUI()
         local deadCount = 0
         local totalPets = 0
@@ -532,15 +516,12 @@ return function(Window, Utils)
         while task.wait(1) do
             if ShouldPauseFarm() then continue end
             if not camSettings.autoHeal or camSettings.isHealing then continue end
-            
             local isRiding = LocalPlayer:GetAttribute("RidePetId") ~= nil
             if isRiding then continue end
-            
             if not ShouldTriggerHeal() then continue end
             
             camSettings.isHealing = true
             local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            
             if hrp then
                 camSettings.savedPosition = savedFarmPosition or hrp.CFrame
                 local recoverPos = FindRecoverPosition()
@@ -567,9 +548,7 @@ return function(Window, Utils)
         end
     end)
 
-    -- ==========================================
-    -- TỰ ĐỘNG VỀ FARM POS
-    -- ==========================================
+    -- Auto return farm
     task.spawn(function()
         task.wait(3)
         if camSettings.autoReturnToFarm and savedFarmPosition then
@@ -578,9 +557,7 @@ return function(Window, Utils)
         end
     end)
 
-    -- ==========================================
-    -- HIỂN THỊ TRẠNG THÁI
-    -- ==========================================
+    -- Status
     task.spawn(function()
         while task.wait(2) do
             if _G.SystemController and _G.SystemController.shouldStop then
@@ -591,7 +568,7 @@ return function(Window, Utils)
             if camSettings.isHealing then 
                 status = "🔄 Đang hồi máu..."
             elseif _G.BossStatus and _G.BossStatus.bossFound and camSettings.yieldForBoss then 
-                status = "⏸️ Tạm dừng (có Boss đang xuất hiện)"
+                status = "⏸️ Tạm dừng (có Boss)"
             elseif not camSettings.autoAttack and not camSettings.autoCatch then 
                 status = "⏸️ Đã tắt Auto Farm"
             end
@@ -599,5 +576,5 @@ return function(Window, Utils)
         end
     end)
 
-    print("✅ Farm Module 3.4 loaded successfully!")
+    print("✅ Farm Module 3.5 loaded successfully!")
 end
