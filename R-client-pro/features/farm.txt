@@ -1,242 +1,333 @@
 -- ====================================================================
--- MODULE: QUẢN LÝ SERVER & AUTO HOP
--- VERSION: 2.0 - BẢN ỔN ĐỊNH (KHÔNG TÍCH HỢP)
+-- MODULE: R-GAME (AUTO BẮT, ĐÁNH, HỒI MÁU) - BẢN ỔN ĐỊNH
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
-    local TeleportService = game:GetService("TeleportService")
+    local Workspace = game:GetService("Workspace")
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local HttpService = game:GetService("HttpService")
-    local CoreGui = game:GetService("CoreGui")
     local LocalPlayer = Players.LocalPlayer
 
-    -- Blacklist
-    local blacklistFileName = "WeatherHop_Blacklist.json"
-    local visitedServers = {}
-    local isTeleporting = false
-    local hopCooldown = false
-
-    pcall(function()
-        if isfile and isfile(blacklistFileName) then
-            visitedServers = HttpService:JSONDecode(readfile(blacklistFileName))
-            if type(visitedServers) ~= "table" then visitedServers = {} end
-        end
-    end)
-
-    visitedServers[game.JobId] = true
-    pcall(function() 
-        if writefile then 
-            writefile(blacklistFileName, HttpService:JSONEncode(visitedServers)) 
-        end 
-    end)
-
-    local ServerTab = Window:CreateTab("Quản Lý Server", 4483362458)
-
-    -- Session
-    ServerTab:CreateSection("--- THÔNG TIN SESSION ---")
-    local SessionLabel = ServerTab:CreateLabel("Thời gian treo máy: 00:00:00")
-    local sessionStartTime = os.time()
-
-    task.spawn(function()
-        while task.wait(1) do
-            local diff = os.time() - sessionStartTime
-            local hours = math.floor(diff / 3600)
-            local minutes = math.floor((diff % 3600) / 60)
-            local seconds = diff % 60
-            SessionLabel:Set(string.format("Thời gian treo máy: %02d:%02d:%02d", hours, minutes, seconds))
-        end
-    end)
-
-    -- Weather
-    local WeatherMap = {
-        ["🔴 Huyết Nguyệt (Blood Moon)"] = 60001,
-        ["🐉 Hoàng Hôn Rồng (Draconic Twilight)"] = 60002,
-        ["🌟 Hào Quang Rồng (Dragon-Glow)"] = 60003,
-        ["🧚 Màn Sương Ảo Mộng (Dreamveil)"] = 60004
+    -- ==========================================
+    -- STATE
+    -- ==========================================
+    local camSettings = {
+        autoAttack = false,
+        autoCatch = false,
+        autoHeal = false,
+        isHealing = false,
+        savedPosition = nil,
+        targetMonsterNames = {},
+        yieldForBoss = true,
+        autoReturnToFarm = false,
+        healThreshold = 1
     }
 
-    ServerTab:CreateSection("--- TÌM KIẾM THỜI TIẾT VIP ---")
+    local savedFarmPosition = nil
+    local posFileName = "R_ClientPro_FarmPos.json"
+    local monsterFilterFile = "R_ClientPro_MonsterFilter.json"
 
-    local weatherHopSettings = { enabled = false, targetIds = {60001} }
-    local WeatherStatus = ServerTab:CreateLabel("Thời tiết hiện tại: Đang tải...")
+    local MonsterSystem = nil
+    pcall(function() MonsterSystem = require(ReplicatedStorage.CommonLogic.Monster.MonsterSystem) end)
 
-    task.spawn(function()
-        while task.wait(2) do
-            local env = getrenv()._G.PathTool
-            if env and env.WeatherSystem and type(env.WeatherSystem.IsWeatherActive) == "function" then
-                local currentStr = "Bình Thường"
-                for name, id in pairs(WeatherMap) do
-                    local ok, isActive = pcall(function() return env.WeatherSystem.IsWeatherActive(id) end)
-                    if ok and isActive then currentStr = name; break end
+    -- ==========================================
+    -- HELPER
+    -- ==========================================
+    local MonsterNameCache = {}
+    local function GetCachedMonsterName(monster)
+        if not monster then return "" end
+        local tmplId = monster:GetAttribute("TmplId")
+        if not tmplId then return monster.Name or "Unknown" end
+        if MonsterNameCache[tmplId] then return MonsterNameCache[tmplId] end
+        local MonsterConfigFolder = ReplicatedStorage:FindFirstChild("CommonConfig") and ReplicatedStorage.CommonConfig:FindFirstChild("Monster")
+        if MonsterConfigFolder then
+            local configFile = MonsterConfigFolder:FindFirstChild("Monster" .. tostring(tmplId))
+            if configFile then
+                local success, configData = pcall(require, configFile)
+                if success and type(configData) == "table" then
+                    local realName = configData.Name or monster.Name or "Unknown"
+                    MonsterNameCache[tmplId] = realName
+                    return realName
                 end
-                WeatherStatus:Set("Thời tiết hiện tại: " .. currentStr)
             end
         end
-    end)
+        return monster.Name or "Unknown"
+    end
 
-    ServerTab:CreateDropdown({
-        Name = "Chọn Thời Tiết Cần Tìm",
-        Options = {"🔴 Huyết Nguyệt (Blood Moon)", "🐉 Hoàng Hôn Rồng (Draconic Twilight)", "🌟 Hào Quang Rồng (Dragon-Glow)", "🧚 Màn Sương Ảo Mộng (Dreamveil)"},
-        CurrentOption = {"🔴 Huyết Nguyệt (Blood Moon)"},
-        MultipleOptions = true,
-        Flag = "WeatherSelectMulti",
-        Callback = function(Options)
-            weatherHopSettings.targetIds = {}
-            for _, selectedOption in ipairs(Options) do
-                if WeatherMap[selectedOption] then 
-                    table.insert(weatherHopSettings.targetIds, WeatherMap[selectedOption]) 
+    local function GetAllMonsterNames()
+        local monsterNames = {}
+        local nameDict = {}
+        local monstersFolder = Workspace:FindFirstChild("Monsters")
+        if not monstersFolder then return monsterNames end
+        for _, monster in pairs(monstersFolder:GetChildren()) do
+            if monster:IsA("Model") then
+                local realName = GetCachedMonsterName(monster)
+                if realName and realName ~= "" and realName ~= "Unknown" and not nameDict[realName] then
+                    nameDict[realName] = true
+                    table.insert(monsterNames, realName)
                 end
-            end
-        end,
-    })
-
-    ServerTab:CreateToggle({
-        Name = "Tự Động Nhảy Server Săn Thời Tiết",
-        CurrentValue = false,
-        Flag = "WeatherHopToggle",
-        Callback = function(Value)
-            weatherHopSettings.enabled = Value
-            if Value and #weatherHopSettings.targetIds == 0 then
-                game.StarterGui:SetCore("SendNotification", {
-                    Title = "Lỗi", 
-                    Text = "Vui lòng chọn ít nhất 1 loại thời tiết!", 
-                    Duration = 3
-                })
-                weatherHopSettings.enabled = false
-                return
             end
         end
-    })
+        table.sort(monsterNames)
+        return monsterNames
+    end
 
-    -- Hop function
-    local function GetServerList()
-        local PlaceId = game.PlaceId
-        local api = "https://games.roblox.com/v1/games/"..PlaceId.."/servers/Public?sortOrder=Asc&limit=100"
-
-        local success, data = pcall(function() return game:HttpGet(api) end)
-        if success and data then
-            local json = HttpService:JSONDecode(data)
-            if json and json.data then
-                local validServers = {}
-                for _, v in pairs(json.data) do
-                    if v.id and v.id ~= game.JobId then
-                        local playing = v.playing or 0
-                        local maxPlayers = v.maxPlayers or 0
-                        if playing < maxPlayers then
-                            if not visitedServers[v.id] then
-                                table.insert(validServers, {
-                                    id = v.id,
-                                    playing = playing,
-                                    maxPlayers = maxPlayers
-                                })
-                            end
-                        end
-                    end
-                end
-                table.sort(validServers, function(a, b) return a.playing < b.playing end)
-                return validServers
+    local function IsMonsterInFilter(monster)
+        if not camSettings.targetMonsterNames or #camSettings.targetMonsterNames == 0 then return true end
+        local realName = GetCachedMonsterName(monster)
+        for _, targetName in ipairs(camSettings.targetMonsterNames) do
+            if string.find(string.lower(realName), string.lower(targetName)) then
+                return true
             end
+        end
+        return false
+    end
+
+    -- ==========================================
+    -- SAFE TELEPORT
+    -- ==========================================
+    local function SafeTeleport(targetCFrame, offsetY)
+        offsetY = offsetY or 5
+        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not hrp then return false end
+        local targetPos = targetCFrame.Position + Vector3.new(0, offsetY, 0)
+        local rayOrigin = targetPos + Vector3.new(0, 10, 0)
+        local rayDirection = Vector3.new(0, -20, 0)
+        local raycastParams = RaycastParams.new()
+        raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+        raycastParams.FilterDescendantsInstances = {LocalPlayer.Character}
+        local rayResult = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+        if rayResult then
+            local groundY = rayResult.Position.Y
+            targetPos = Vector3.new(targetPos.X, groundY + 3, targetPos.Z)
+        end
+        hrp.CFrame = CFrame.new(targetPos)
+        return true
+    end
+
+    -- ==========================================
+    -- LOAD DATA
+    -- ==========================================
+    local function LoadSavedPosition()
+        if isfile and isfile(posFileName) and readfile then
+            local success, data = pcall(function() return HttpService:JSONDecode(readfile(posFileName)) end)
+            if success and data and data.X and data.Y and data.Z then
+                return CFrame.new(data.X, data.Y, data.Z)
+            end
+        end
+        return nil
+    end
+
+    local function LoadMonsterFilter()
+        if isfile and isfile(monsterFilterFile) and readfile then
+            local success, data = pcall(function() return HttpService:JSONDecode(readfile(monsterFilterFile)) end)
+            if success and type(data) == "table" then return data end
         end
         return {}
     end
 
-    local function HopToNewServer(hopReason)
-        if isTeleporting or hopCooldown then return false end
-        isTeleporting = true
-        hopCooldown = true
+    savedFarmPosition = LoadSavedPosition()
+    camSettings.targetMonsterNames = LoadMonsterFilter()
 
-        task.spawn(function()
-            task.wait(5)
-            hopCooldown = false
-        end)
+    -- ==========================================
+    -- UI
+    -- ==========================================
+    local CamTab = Window:CreateTab("Auto farm", 4483345998)
 
-        local PlaceId = game.PlaceId
-        local servers = GetServerList()
+    CamTab:CreateSection("--- QUẢN LÝ QUÁI FARM ---")
 
-        if #servers > 0 then
-            local maxIndex = math.min(#servers, 5)
-            local targetServer = servers[math.random(1, maxIndex)]
-
-            if targetServer and targetServer.id then
-                game.StarterGui:SetCore("SendNotification", {
-                    Title = "Server Hop", 
-                    Text = hopReason or "Đang sang server mới...", 
-                    Duration = 5
-                })
-
-                pcall(function()
-                    local autoExecLink = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/refs/heads/main/R-client-pro/auto_execute.txt"
-                    local executeCode = "if not game:IsLoaded() then game.Loaded:Wait() end; task.wait(1); pcall(function() loadstring(game:HttpGet('"..autoExecLink.."'))() end)"
-                    local queueFunc = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport) or getgenv().queue_on_teleport
-                    if queueFunc then queueFunc(executeCode) end
-                end)
-
-                task.wait(1)
-                TeleportService:TeleportToPlaceInstance(PlaceId, targetServer.id, LocalPlayer)
-                return true
-            end
+    local function UpdateMonsterLabel()
+        if #camSettings.targetMonsterNames > 0 then
+            MonsterListLabel:Set("🐾 Đang farm: " .. table.concat(camSettings.targetMonsterNames, ", "))
+        else
+            MonsterListLabel:Set("🐾 Đang farm: Tất cả quái")
         end
-
-        visitedServers = {}
-        pcall(function() 
-            if writefile then 
-                writefile(blacklistFileName, HttpService:JSONEncode(visitedServers)) 
-            end 
-        end)
-
-        isTeleporting = false
-        return false
     end
 
-    -- Master queue
-    task.spawn(function()
-        local currentlyInTargetWeather = false
-        local lastHopTime = 0
+    local MonsterListLabel = CamTab:CreateLabel("🐾 Đang farm: " .. (#camSettings.targetMonsterNames > 0 and table.concat(camSettings.targetMonsterNames, ", ") or "Tất cả quái"))
 
-        while task.wait(2) do
-            if isTeleporting then continue end
+    local MonsterDropdown = CamTab:CreateDropdown({
+        Name = "Chọn quái cần farm",
+        Options = {"Tất cả quái"},
+        CurrentOption = #camSettings.targetMonsterNames > 0 and camSettings.targetMonsterNames or {"Tất cả quái"},
+        MultipleOptions = true,
+        Flag = "MonsterSelectFarm",
+        Callback = function(Options)
+            pcall(function()
+                if table.find(Options, "Tất cả quái") then
+                    camSettings.targetMonsterNames = {}
+                    if writefile then
+                        pcall(function() writefile(monsterFilterFile, HttpService:JSONEncode(camSettings.targetMonsterNames)) end)
+                    end
+                    UpdateMonsterLabel()
+                    return
+                end
+                local filteredOptions = {}
+                for _, opt in ipairs(Options) do
+                    if opt ~= "Tất cả quái" then
+                        table.insert(filteredOptions, opt)
+                    end
+                end
+                camSettings.targetMonsterNames = filteredOptions
+                if writefile then
+                    pcall(function() writefile(monsterFilterFile, HttpService:JSONEncode(camSettings.targetMonsterNames)) end)
+                end
+                UpdateMonsterLabel()
+            end)
+        end
+    })
 
-            local currentTime = os.time()
-            if currentTime - lastHopTime < 10 then continue end
-
-            if weatherHopSettings.enabled then
-                local env = getrenv()._G.PathTool
-                if env and env.WeatherSystem then
-                    local foundTarget = false
-                    for _, tid in ipairs(weatherHopSettings.targetIds) do
-                        local ok, isActive = pcall(function() return env.WeatherSystem.IsWeatherActive(tid) end)
-                        if ok and isActive then 
-                            foundTarget = true
-                            break 
+    CamTab:CreateButton({
+        Name = "🔍 Quét danh sách quái",
+        Callback = function()
+            pcall(function()
+                local monsterNames = GetAllMonsterNames()
+                local options = {"Tất cả quái"}
+                for _, name in ipairs(monsterNames) do
+                    if name and name ~= "" then
+                        table.insert(options, name)
+                    end
+                end
+                if MonsterDropdown and MonsterDropdown.SetOptions then
+                    MonsterDropdown:SetOptions(options)
+                end
+                local currentSelection = {}
+                if #camSettings.targetMonsterNames > 0 then
+                    for _, name in ipairs(camSettings.targetMonsterNames) do
+                        if table.find(options, name) then
+                            table.insert(currentSelection, name)
                         end
                     end
+                else
+                    table.insert(currentSelection, "Tất cả quái")
+                end
+                if #currentSelection > 0 and MonsterDropdown and MonsterDropdown.SetCurrentOption then
+                    MonsterDropdown:SetCurrentOption(currentSelection)
+                end
+                game.StarterGui:SetCore("SendNotification", { 
+                    Title = "✅ Thành công", 
+                    Text = "Đã tìm thấy " .. #monsterNames .. " loại quái", 
+                    Duration = 3 
+                })
+            end)
+        end
+    })
 
-                    if foundTarget then
-                        if not currentlyInTargetWeather then
-                            currentlyInTargetWeather = true
-                            visitedServers = {}
-                            pcall(function() 
-                                if writefile then 
-                                    writefile(blacklistFileName, HttpService:JSONEncode(visitedServers)) 
-                                end 
-                            end)
-                            game.StarterGui:SetCore("SendNotification", {
-                                Title = "🎯 BINGO!", 
-                                Text = "Đang ở đúng thời tiết! Đã reset blacklist.", 
-                                Duration = 5
-                            })
-                        end
-                    else
-                        if currentlyInTargetWeather then
-                            game.StarterGui:SetCore("SendNotification", {
-                                Title = "Thời tiết đã hết!", 
-                                Text = "Đang tìm server mới...", 
-                                Duration = 5
-                            })
-                            currentlyInTargetWeather = false
-                        end
+    CamTab:CreateSection("--- CÀI ĐẶT FARM ---")
+    CamTab:CreateToggle({ 
+        Name = "Tự Động Đánh Quái", 
+        CurrentValue = false, 
+        Flag = "FarmAutoAttack", 
+        Callback = function(V) pcall(function() camSettings.autoAttack = V end) end 
+    })
+    CamTab:CreateToggle({ 
+        Name = "Tự Động Bắt Quái", 
+        CurrentValue = false, 
+        Flag = "FarmAutoCatch", 
+        Callback = function(V) pcall(function() camSettings.autoCatch = V end) end 
+    })
+    CamTab:CreateToggle({ 
+        Name = "Tạm dừng khi có Boss", 
+        CurrentValue = true, 
+        Flag = "FarmYieldForBoss", 
+        Callback = function(V) pcall(function() camSettings.yieldForBoss = V end) end 
+    })
 
-                        if HopToNewServer("Đang tìm thời tiết VIP...") then
-                            lastHopTime = currentTime
+    CamTab:CreateSection("--- TỰ ĐỘNG VỀ FARM ---")
+    CamTab:CreateToggle({
+        Name = "Tự động về vị trí farm khi vào game",
+        CurrentValue = false,
+        Flag = "AutoReturnToFarm",
+        Callback = function(Value)
+            pcall(function()
+                camSettings.autoReturnToFarm = Value
+                if Value and savedFarmPosition then
+                    task.spawn(function()
+                        task.wait(1)
+                        SafeTeleport(savedFarmPosition, 5)
+                    end)
+                end
+            end)
+        end
+    })
+
+    CamTab:CreateSection("--- CÀI ĐẶT HỒI MÁU ---")
+    CamTab:CreateToggle({ 
+        Name = "Tự Động Hồi Máu Pet", 
+        CurrentValue = false, 
+        Flag = "FarmAutoHeal", 
+        Callback = function(V) pcall(function() camSettings.autoHeal = V end) end 
+    })
+    CamTab:CreateSlider({
+        Name = "Ngưỡng Pet chết",
+        Range = {1, 5},
+        Increment = 1,
+        Suffix = " Pet",
+        CurrentValue = 1,
+        Flag = "HealThresholdSlider",
+        Callback = function(Value) pcall(function() camSettings.healThreshold = Value end) end,
+    })
+
+    CamTab:CreateSection("--- TRẠNG THÁI ---")
+    local statusLabel = CamTab:CreateLabel("🔄 Đang chờ...")
+
+    CamTab:CreateSection("--- TỌA ĐỘ FARM ---")
+    local initText = savedFarmPosition and string.format("📍 %d, %d, %d", 
+        math.floor(savedFarmPosition.Position.X), 
+        math.floor(savedFarmPosition.Position.Y), 
+        math.floor(savedFarmPosition.Position.Z)) or "📍 Chưa có"
+    local FarmPosLabel = CamTab:CreateLabel("Tọa độ farm: " .. initText)
+
+    CamTab:CreateButton({
+        Name = "💾 Lưu vị trí",
+        Callback = function()
+            pcall(function()
+                local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    savedFarmPosition = hrp.CFrame
+                    local pos = savedFarmPosition.Position
+                    if writefile then
+                        pcall(function() writefile(posFileName, HttpService:JSONEncode({X = pos.X, Y = pos.Y, Z = pos.Z})) end)
+                    end
+                    FarmPosLabel:Set(string.format("Tọa độ farm: %d, %d, %d", math.floor(pos.X), math.floor(pos.Y), math.floor(pos.Z)))
+                    game.StarterGui:SetCore("SendNotification", { Title = "✅ Thành công", Text = "Đã lưu vị trí farm", Duration = 3 })
+                end
+            end)
+        end,
+    })
+    CamTab:CreateButton({
+        Name = "🚀 Về vị trí farm",
+        Callback = function()
+            pcall(function()
+                local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if hrp and savedFarmPosition then
+                    SafeTeleport(savedFarmPosition, 5)
+                    game.StarterGui:SetCore("SendNotification", { Title = "✅ Đã về farm", Text = "Đã dịch chuyển về vị trí farm", Duration = 3 })
+                end
+            end)
+        end,
+    })
+
+    -- ==========================================
+    -- LOOPS
+    -- ==========================================
+    task.spawn(function()
+        while task.wait(0.2) do
+            if not camSettings.autoAttack or camSettings.isHealing then continue end
+            if camSettings.yieldForBoss and _G.BossStatus and _G.BossStatus.bossFound then continue end
+            
+            local monstersFolder = Workspace:FindFirstChild("Monsters")
+            if not monstersFolder then continue end
+            
+            for _, monster in pairs(monstersFolder:GetChildren()) do
+                if monster:IsA("Model") then
+                    local root = monster.PrimaryPart or monster:FindFirstChild("HumanoidRootPart")
+                    if root and root:IsA("BasePart") and root.Transparency < 1 and monster:GetAttribute("CatchEndTick") == nil then
+                        if IsMonsterInFilter(monster) then
+                            local id = tonumber(monster.Name:match("Monster_(%d+)"))
+                            if id and MonsterSystem then 
+                                pcall(function() MonsterSystem:ClientAttackMonster(id) end)
+                            end
                         end
                     end
                 end
@@ -244,65 +335,180 @@ return function(Window, Utils)
         end
     end)
 
-    -- Manual controls
-    ServerTab:CreateSection("--- ĐIỀU KHIỂN THỦ CÔNG ---")
-    ServerTab:CreateButton({ 
-        Name = "🌐 JOIN SERVER ÍT NGƯỜI NHẤT", 
-        Callback = function() 
-            HopToNewServer("Đang tìm server vắng người...") 
-        end 
-    })
-    ServerTab:CreateButton({ 
-        Name = "🔄 Rejoin Server Khác", 
-        Callback = function() 
-            TeleportService:Teleport(game.PlaceId, LocalPlayer) 
-        end 
-    })
-    ServerTab:CreateButton({ 
-        Name = "🔄 Rejoin Đúng Server Này", 
-        Callback = function() 
-            TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer) 
-        end 
-    })
-    ServerTab:CreateButton({ 
-        Name = "🗑️ Reset Blacklist", 
-        Callback = function() 
-            visitedServers = {}
-            pcall(function() 
-                if writefile then 
-                    writefile(blacklistFileName, HttpService:JSONEncode(visitedServers)) 
-                end 
-            end)
-            game.StarterGui:SetCore("SendNotification", {
-                Title = "Đã xóa", 
-                Text = "Đã xóa toàn bộ blacklist!", 
-                Duration = 3
-            })
-        end 
-    })
-
-    -- Anti-Kick
-    ServerTab:CreateSection("--- ANTI-KICK ---")
-    local autoRejoinEnabled = false
-
-    ServerTab:CreateToggle({
-        Name = "Auto Rejoin khi bị Kick",
-        CurrentValue = false,
-        Flag = "AutoRejoinKick",
-        Callback = function(Value) autoRejoinEnabled = Value end,
-    })
-
     task.spawn(function()
-        pcall(function()
-            local promptOverlay = CoreGui:WaitForChild("RobloxPromptGui"):WaitForChild("promptOverlay")
-            promptOverlay.ChildAdded:Connect(function(child)
-                if child.Name == "ErrorPrompt" and autoRejoinEnabled then
-                    task.wait(2)
-                    TeleportService:Teleport(game.PlaceId, LocalPlayer)
+        while task.wait(0.5) do
+            if not camSettings.autoCatch or camSettings.isHealing then continue end
+            if camSettings.yieldForBoss and _G.BossStatus and _G.BossStatus.bossFound then continue end
+            
+            local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if not hrp then continue end
+
+            local playerId = LocalPlayer.UserId
+            local monstersFolder = Workspace:FindFirstChild("Monsters")
+            if not monstersFolder then continue end
+
+            local targetCatch, closestDist = nil, math.huge
+            for _, monster in pairs(monstersFolder:GetChildren()) do
+                if monster:IsA("Model") and IsMonsterInFilter(monster) then
+                    local id = tonumber(monster.Name:match("Monster_(%d+)"))
+                    if id then
+                        local catchTaken = monster:GetAttribute("CatchTakenPlayerId")
+                        if catchTaken and catchTaken == playerId then
+                            local root = monster.PrimaryPart or monster:FindFirstChild("HumanoidRootPart")
+                            if root and root:IsA("BasePart") then
+                                local dist = (hrp.Position - root.Position).Magnitude
+                                if dist < closestDist then 
+                                    closestDist = dist
+                                    targetCatch = monster 
+                                end
+                            end
+                        end
+                    end
                 end
-            end)
-        end)
+            end
+
+            if targetCatch and MonsterSystem then
+                local targetId = tonumber(targetCatch.Name:match("Monster_(%d+)"))
+                local root = targetCatch.PrimaryPart or targetCatch:FindFirstChild("HumanoidRootPart")
+                if root and root:IsA("BasePart") then
+                    SafeTeleport(CFrame.new(root.Position), 5)
+                end
+                task.spawn(function()
+                    local success, isStarted = pcall(function() return MonsterSystem:ClientCatchMonsterStart(targetId) end)
+                    if success then
+                        if isStarted == false then 
+                            task.wait(5) 
+                        else
+                            task.wait(1.5)
+                            pcall(function() MonsterSystem:ClientCatchMonsterComplete(targetId) end)
+                        end
+                    end
+                end)
+            end
+        end
     end)
 
-    print("✅ Server Manager loaded successfully!")
+    -- Heal
+    local function CheckDeadPetsFromUI()
+        local deadCount = 0
+        local totalPets = 0
+        pcall(function()
+            local petListUI = LocalPlayer:FindFirstChild("PlayerGui") 
+                and LocalPlayer.PlayerGui:FindFirstChild("MainGui") 
+                and LocalPlayer.PlayerGui.MainGui:FindFirstChild("ScreenGui") 
+                and LocalPlayer.PlayerGui.MainGui.ScreenGui:FindFirstChild("MainLeftView") 
+                and LocalPlayer.PlayerGui.MainGui.ScreenGui.MainLeftView:FindFirstChild("PetList")
+            if not petListUI then return end
+            for _, cell in pairs(petListUI:GetChildren()) do
+                if cell.Name == "ItemCell" then
+                    local labName = cell:FindFirstChild("LabName", true)
+                    if labName and labName.Text ~= "Label" and labName.Text ~= "" then
+                        totalPets = totalPets + 1
+                        local hp0 = cell:FindFirstChild("hp0", true)
+                        if hp0 then
+                            local bgColor = hp0.BackgroundColor3
+                            if bgColor and (bgColor.R > 0.8 and bgColor.G < 0.3 and bgColor.B < 0.3) then
+                                deadCount = deadCount + 1
+                            end
+                        else
+                            deadCount = deadCount + 1
+                        end
+                    end
+                end
+            end
+        end)
+        return deadCount, totalPets
+    end
+
+    local function ShouldTriggerHeal()
+        if camSettings.isHealing then return false end
+        local deadCount, totalPets = CheckDeadPetsFromUI()
+        if totalPets == 0 then return false end
+        return deadCount >= camSettings.healThreshold
+    end
+
+    local function FindRecoverPosition()
+        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not hrp then return nil end
+        local bestPos, minDist = nil, math.huge
+        local areaFolder = Workspace:FindFirstChild("Area")
+        if areaFolder then
+            for _, mapFolder in ipairs(areaFolder:GetChildren()) do
+                local recFolder = mapFolder:FindFirstChild("ServerZone") and mapFolder.ServerZone:FindFirstChild("Recover")
+                if recFolder then
+                    for _, recPart in ipairs(recFolder:GetDescendants()) do
+                        if recPart:IsA("BasePart") then
+                            local dist = (hrp.Position - recPart.Position).Magnitude
+                            if dist < minDist then 
+                                minDist = dist
+                                bestPos = recPart.Position 
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        return bestPos
+    end
+
+    task.spawn(function()
+        while task.wait(1) do
+            if not camSettings.autoHeal or camSettings.isHealing then continue end
+            local isRiding = LocalPlayer:GetAttribute("RidePetId") ~= nil
+            if isRiding then continue end
+            if not ShouldTriggerHeal() then continue end
+            
+            camSettings.isHealing = true
+            local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                camSettings.savedPosition = savedFarmPosition or hrp.CFrame
+                local recoverPos = FindRecoverPosition()
+                if recoverPos then
+                    game.StarterGui:SetCore("SendNotification", { Title = "🔄 Đang hồi máu", Text = "Pet đã chết, đang dịch chuyển đến suối hồi máu...", Duration = 3 })
+                    local plat = Instance.new("Part")
+                    plat.Size = Vector3.new(20, 1, 20)
+                    plat.Position = recoverPos - Vector3.new(0, 3, 0)
+                    plat.Anchored = true
+                    plat.Transparency = 1
+                    plat.CanCollide = true
+                    plat.Parent = Workspace
+                    SafeTeleport(CFrame.new(recoverPos), 5)
+                    task.wait(10)
+                    plat:Destroy()
+                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                        SafeTeleport(camSettings.savedPosition, 5)
+                    end
+                    game.StarterGui:SetCore("SendNotification", { Title = "✅ Hồi máu hoàn tất", Text = "Đã quay lại vị trí farm", Duration = 2 })
+                end
+            end
+            camSettings.isHealing = false
+            camSettings.savedPosition = nil
+        end
+    end)
+
+    -- Auto return
+    task.spawn(function()
+        task.wait(3)
+        if camSettings.autoReturnToFarm and savedFarmPosition then
+            SafeTeleport(savedFarmPosition, 5)
+            game.StarterGui:SetCore("SendNotification", { Title = "🏠 Về farm", Text = "Đã tự động về vị trí farm", Duration = 3 })
+        end
+    end)
+
+    -- Status
+    task.spawn(function()
+        while task.wait(2) do
+            local status = "🟢 Đang chạy"
+            if camSettings.isHealing then 
+                status = "🔄 Đang hồi máu..."
+            elseif _G.BossStatus and _G.BossStatus.bossFound and camSettings.yieldForBoss then 
+                status = "⏸️ Tạm dừng (có Boss)"
+            elseif not camSettings.autoAttack and not camSettings.autoCatch then 
+                status = "⏸️ Đã tắt Auto Farm"
+            end
+            statusLabel:Set("Trạng thái: " .. status)
+        end
+    end)
+
+    print("✅ Farm Module loaded successfully!")
 end
