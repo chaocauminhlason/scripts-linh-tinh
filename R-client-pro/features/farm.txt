@@ -1,6 +1,6 @@
 -- ====================================================================
--- MODULE: R-GAME (AUTO BẮT, ĐÁNH, HỒI MÁU) - TÍCH HỢP MAIN CONTROLLER
--- VERSION: 3.1 - FIX CALLBACK ERROR
+-- MODULE: R-GAME (AUTO BẮT, ĐÁNH, HỒI MÁU)
+-- VERSION: 3.2 - TÍCH HỢP MAIN CONTROLLER & SERVER MANAGER
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -8,9 +8,26 @@ return function(Window, Utils)
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local HttpService = game:GetService("HttpService")
     local LocalPlayer = Players.LocalPlayer
-    local DataPullFunc = ReplicatedStorage:WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc")
+
     -- ==========================================
-    -- QUẢN LÝ TRẠNG THÁI
+    -- ĐĂNG KÝ VỚI MAIN CONTROLLER
+    -- ==========================================
+    local function FarmToggle(enable)
+        camSettings.autoAttack = enable
+        camSettings.autoCatch = enable
+    end
+    
+    local function HealToggle(enable)
+        camSettings.autoHeal = enable
+    end
+    
+    if _G.SystemController then
+        _G.SystemController:registerModule("farm", FarmToggle)
+        _G.SystemController:registerModule("heal", HealToggle)
+    end
+
+    -- ==========================================
+    -- STATE MANAGEMENT
     -- ==========================================
     local camSettings = {
         autoAttack = false,
@@ -32,7 +49,7 @@ return function(Window, Utils)
     pcall(function() MonsterSystem = require(ReplicatedStorage.CommonLogic.Monster.MonsterSystem) end)
 
     -- ==========================================
-    -- HÀM LẤY TÊN QUÁI (CÓ CACHE)
+    -- HÀM LẤY TÊN QUÁI
     -- ==========================================
     local MonsterNameCache = {}
     local function GetCachedMonsterName(monster)
@@ -55,9 +72,6 @@ return function(Window, Utils)
         return monster.Name or "Unknown"
     end
 
-    -- ==========================================
-    -- HÀM QUÉT TẤT CẢ QUÁI
-    -- ==========================================
     local function GetAllMonsterNames()
         local monsterNames = {}
         local nameDict = {}
@@ -89,7 +103,7 @@ return function(Window, Utils)
 
     local function ShouldPauseFarm()
         if _G.SystemController and _G.SystemController.shouldStop then return true end
-        if _G.ServerManager and _G.ServerManager.pauseFarm then return true end
+        if not _G.SystemController:isModuleEnabled("farm") then return true end
         return false
     end
 
@@ -116,7 +130,7 @@ return function(Window, Utils)
     end
 
     -- ==========================================
-    -- ĐỌC DỮ LIỆU LƯU TRỮ
+    -- ĐỌC DỮ LIỆU
     -- ==========================================
     local function LoadSavedPosition()
         if isfile and isfile(posFileName) and readfile then
@@ -140,11 +154,11 @@ return function(Window, Utils)
     camSettings.targetMonsterNames = LoadMonsterFilter()
 
     -- ==========================================
-    -- GIAO DIỆN UI
+    -- UI LAYER
     -- ==========================================
     local CamTab = Window:CreateTab("Auto farm", 4483345998)
 
-    -- SECTION QUẢN LÝ QUÁI
+    -- QUẢN LÝ QUÁI
     CamTab:CreateSection("--- QUẢN LÝ QUÁI FARM ---")
 
     local function UpdateMonsterLabel()
@@ -157,15 +171,13 @@ return function(Window, Utils)
 
     local MonsterListLabel = CamTab:CreateLabel("🐾 Đang farm: " .. (#camSettings.targetMonsterNames > 0 and table.concat(camSettings.targetMonsterNames, ", ") or "Tất cả quái"))
 
-    -- Tạo Dropdown và lưu vào biến để dùng sau
     local MonsterDropdown = CamTab:CreateDropdown({
         Name = "Chọn quái cần farm",
         Options = {"Tất cả quái"},
         CurrentOption = #camSettings.targetMonsterNames > 0 and camSettings.targetMonsterNames or {"Tất cả quái"},
         MultipleOptions = true,
-        Flag = "MonsterSelectFarm",   -- FLAG DUY NHẤT
+        Flag = "MonsterSelectFarm",
         Callback = function(Options)
-            -- Bọc trong pcall để tránh lỗi
             pcall(function()
                 if table.find(Options, "Tất cả quái") then
                     camSettings.targetMonsterNames = {}
@@ -203,8 +215,6 @@ return function(Window, Utils)
                 end
                 if MonsterDropdown and MonsterDropdown.SetOptions then
                     MonsterDropdown:SetOptions(options)
-                else
-                    warn("MonsterDropdown chưa được khởi tạo hoặc không có SetOptions")
                 end
                 local currentSelection = {}
                 if #camSettings.targetMonsterNames > 0 then
@@ -228,76 +238,52 @@ return function(Window, Utils)
         end
     })
 
-    CamTab:CreateButton({
-        Name = "➕ Thêm quái gần nhất vào danh sách",
-        Callback = function()
-            pcall(function()
-                local char = LocalPlayer.Character
-                local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                if not hrp then 
-                    game.StarterGui:SetCore("SendNotification", { Title = "❌ Lỗi", Text = "Không tìm thấy nhân vật", Duration = 2 })
-                    return 
+    -- CÀI ĐẶT FARM
+    CamTab:CreateSection("--- CÀI ĐẶT FARM ---")
+    
+    CamTab:CreateToggle({ 
+        Name = "Tự Động Đánh Quái", 
+        CurrentValue = false, 
+        Flag = "FarmAutoAttack", 
+        Callback = function(V) 
+            pcall(function() 
+                camSettings.autoAttack = V 
+                if _G.SystemController then
+                    _G.SystemController:toggleModule("farm", V or camSettings.autoCatch)
                 end
-                local monstersFolder = Workspace:FindFirstChild("Monsters")
-                if not monstersFolder then 
-                    game.StarterGui:SetCore("SendNotification", { Title = "❌ Lỗi", Text = "Không có quái trên map", Duration = 2 })
-                    return 
+            end) 
+        end 
+    })
+    
+    CamTab:CreateToggle({ 
+        Name = "Tự Động Bắt Quái", 
+        CurrentValue = false, 
+        Flag = "FarmAutoCatch", 
+        Callback = function(V) 
+            pcall(function() 
+                camSettings.autoCatch = V 
+                if _G.SystemController then
+                    _G.SystemController:toggleModule("farm", V or camSettings.autoAttack)
                 end
-                local closestMonster, closestDist = nil, math.huge
-                for _, monster in pairs(monstersFolder:GetChildren()) do
-                    if monster:IsA("Model") then
-                        local root = monster.PrimaryPart or monster:FindFirstChild("HumanoidRootPart")
-                        if root and root:IsA("BasePart") then
-                            local dist = (hrp.Position - root.Position).Magnitude
-                            if dist < closestDist then
-                                closestDist = dist
-                                closestMonster = monster
-                            end
-                        end
-                    end
-                end
-                if closestMonster and closestDist < 100 then
-                    local realName = GetCachedMonsterName(closestMonster)
-                    if not table.find(camSettings.targetMonsterNames, realName) then
-                        table.insert(camSettings.targetMonsterNames, realName)
-                        if writefile then
-                            pcall(function() writefile(monsterFilterFile, HttpService:JSONEncode(camSettings.targetMonsterNames)) end)
-                        end
-                        UpdateMonsterLabel()
-                        game.StarterGui:SetCore("SendNotification", { Title = "✅ Đã thêm", Text = "Đã thêm " .. realName .. " vào danh sách farm", Duration = 3 })
-                    else
-                        game.StarterGui:SetCore("SendNotification", { Title = "ℹ️ Thông báo", Text = "Quái này đã có trong danh sách", Duration = 2 })
-                    end
-                else
-                    game.StarterGui:SetCore("SendNotification", { Title = "❌ Lỗi", Text = "Không tìm thấy quái gần bạn", Duration = 2 })
-                end
-            end)
-        end
+            end) 
+        end 
     })
 
-    CamTab:CreateButton({
-        Name = "🗑️ Xóa tất cả quái khỏi danh sách",
-        Callback = function()
-            pcall(function()
-                camSettings.targetMonsterNames = {}
-                if writefile then
-                    pcall(function() writefile(monsterFilterFile, HttpService:JSONEncode(camSettings.targetMonsterNames)) end)
-                end
-                UpdateMonsterLabel()
-                if MonsterDropdown and MonsterDropdown.SetCurrentOption then
-                    MonsterDropdown:SetCurrentOption({"Tất cả quái"})
-                end
-                game.StarterGui:SetCore("SendNotification", { Title = "✅ Đã xóa", Text = "Đã xóa tất cả quái khỏi danh sách farm", Duration = 3 })
-            end)
-        end
+    CamTab:CreateToggle({ 
+        Name = "Tạm dừng khi có Boss", 
+        CurrentValue = true, 
+        Flag = "FarmYieldForBoss", 
+        Callback = function(V) 
+            pcall(function() camSettings.yieldForBoss = V end) 
+        end 
     })
 
-    -- SECTION TỰ ĐỘNG VỀ FARM
+    -- TỰ ĐỘNG VỀ FARM
     CamTab:CreateSection("--- TỰ ĐỘNG VỀ FARM ---")
     CamTab:CreateToggle({
         Name = "Tự động về vị trí farm khi vào game",
         CurrentValue = false,
-        Flag = "AutoReturnToFarmFlag",
+        Flag = "AutoReturnToFarm",
         Callback = function(Value)
             pcall(function()
                 camSettings.autoReturnToFarm = Value
@@ -305,48 +291,45 @@ return function(Window, Utils)
                     task.spawn(function()
                         task.wait(1)
                         SafeTeleport(savedFarmPosition, 5)
-                        game.StarterGui:SetCore("SendNotification", { Title = "✅ Đã về farm", Text = "Đã dịch chuyển về vị trí farm", Duration = 3 })
                     end)
                 end
             end)
         end
     })
 
-    -- SECTION CÀI ĐẶT FARM
-    CamTab:CreateSection("--- CÀI ĐẶT FARM ---")
-    CamTab:CreateToggle({ 
-        Name = "Tự Động Đánh Quái", 
-        CurrentValue = false, 
-        Flag = "CamAutoAttackFlag", 
-        Callback = function(V) pcall(function() camSettings.autoAttack = V end) end 
-    })
-    CamTab:CreateToggle({ 
-        Name = "Tự Động Bắt Quái", 
-        CurrentValue = false, 
-        Flag = "CamAutoCatchFlag", 
-        Callback = function(V) pcall(function() camSettings.autoCatch = V end) end 
-    })
-    CamTab:CreateToggle({ 
-        Name = "Tạm dừng farm khi có Boss (theo Server Manager)", 
-        CurrentValue = true, 
-        Flag = "CamYieldForBossFlag", 
-        Callback = function(V) pcall(function() camSettings.yieldForBoss = V end) end 
-    })
-
-    -- SECTION HỒI MÁU
+    -- HỒI MÁU
     CamTab:CreateSection("--- CÀI ĐẶT HỒI MÁU ---")
     CamTab:CreateToggle({ 
         Name = "Tự Động Hồi Máu Pet", 
         CurrentValue = false, 
-        Flag = "CamAutoHealFlag", 
-        Callback = function(V) pcall(function() camSettings.autoHeal = V end) end 
+        Flag = "FarmAutoHeal", 
+        Callback = function(V) 
+            pcall(function() 
+                camSettings.autoHeal = V 
+                if _G.SystemController then
+                    _G.SystemController:toggleModule("heal", V)
+                end
+            end) 
+        end 
     })
 
-    -- SECTION TRẠNG THÁI
+    CamTab:CreateSlider({
+        Name = "Ngưỡng Pet chết để Hồi Máu",
+        Range = {1, 5},
+        Increment = 1,
+        Suffix = " Pet",
+        CurrentValue = 1,
+        Flag = "HealThresholdSlider",
+        Callback = function(Value)
+            pcall(function() camSettings.healThreshold = Value end)
+        end,
+    })
+
+    -- TRẠNG THÁI
     CamTab:CreateSection("--- TRẠNG THÁI ---")
     local statusLabel = CamTab:CreateLabel("🔄 Đang chờ...")
 
-    -- SECTION TỌA ĐỘ FARM
+    -- TỌA ĐỘ FARM
     CamTab:CreateSection("--- TỌA ĐỘ FARM ---")
     local initText = savedFarmPosition and string.format("📍 %d, %d, %d", 
         math.floor(savedFarmPosition.Position.X), 
@@ -386,13 +369,13 @@ return function(Window, Utils)
     })
 
     -- ==========================================
-    -- LUỒNG 1: AUTO ATTACK (ĐỨNG YÊN TẠI CHỖ)
+    -- LUỒNG 1: AUTO ATTACK
     -- ==========================================
     task.spawn(function()
         while task.wait(0.2) do
-            if _G.SystemController and _G.SystemController.shouldStop then continue end
+            if ShouldPauseFarm() then continue end
             if not camSettings.autoAttack or camSettings.isHealing then continue end
-            if camSettings.yieldForBoss and ShouldPauseFarm() then continue end
+            if camSettings.yieldForBoss and _G.BossStatus and _G.BossStatus.bossFound then continue end
             
             local monstersFolder = Workspace:FindFirstChild("Monsters")
             if not monstersFolder then continue end
@@ -400,13 +383,11 @@ return function(Window, Utils)
             for _, monster in pairs(monstersFolder:GetChildren()) do
                 if monster:IsA("Model") then
                     local root = monster.PrimaryPart or monster:FindFirstChild("HumanoidRootPart")
-                    -- Kiểm tra xem quái còn sống (Transparency < 1) và chưa vào trạng thái bị bắt
                     if root and root:IsA("BasePart") and root.Transparency < 1 and monster:GetAttribute("CatchEndTick") == nil then
                         if IsMonsterInFilter(monster) then
                             local id = tonumber(monster.Name:match("Monster_(%d+)"))
-                            if id and DataPullFunc then 
-                                -- Gọi Remote đánh từ xa thông qua Utils, nhân vật đứng im
-                                Utils.AttackMonster(DataPullFunc, id)
+                            if id and MonsterSystem then 
+                                pcall(function() MonsterSystem:ClientAttackMonster(id) end)
                             end
                         end
                     end
@@ -416,41 +397,64 @@ return function(Window, Utils)
     end)
 
     -- ==========================================
-    -- LUỒNG 2: AUTO CATCH (ĐỨNG YÊN TẠI CHỖ)
+    -- LUỒNG 2: AUTO CATCH
     -- ==========================================
     task.spawn(function()
         while task.wait(0.5) do
-            if _G.SystemController and _G.SystemController.shouldStop then continue end
+            if ShouldPauseFarm() then continue end
             if not camSettings.autoCatch or camSettings.isHealing then continue end
-            if camSettings.yieldForBoss and ShouldPauseFarm() then continue end
+            if camSettings.yieldForBoss and _G.BossStatus and _G.BossStatus.bossFound then continue end
             
+            local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if not hrp then continue end
+
             local playerId = LocalPlayer.UserId
             local monstersFolder = Workspace:FindFirstChild("Monsters")
             if not monstersFolder then continue end
-            
+
+            local targetCatch, closestDist = nil, math.huge
             for _, monster in pairs(monstersFolder:GetChildren()) do
-                if monster:IsA("Model") then
-                    if IsMonsterInFilter(monster) then
-                        local id = tonumber(monster.Name:match("Monster_(%d+)"))
-                        if id then
-                            local catchTaken = monster:GetAttribute("CatchTakenPlayerId")
-                            -- Nếu quái trắng máu và ID người bắt khớp với ID của mình
-                            if catchTaken and catchTaken == playerId then
-                                if DataPullFunc then
-                                    -- Gửi lệnh ném bóng từ xa, TUYỆT ĐỐI KHÔNG DỊCH CHUYỂN
-                                    Utils.CatchMonster(DataPullFunc, id)
-                                    task.wait(0.2) -- Tránh spam Remote quá nhanh gây lag server
+                if monster:IsA("Model") and IsMonsterInFilter(monster) then
+                    local id = tonumber(monster.Name:match("Monster_(%d+)"))
+                    if id then
+                        local catchTaken = monster:GetAttribute("CatchTakenPlayerId")
+                        if catchTaken and catchTaken == playerId then
+                            local root = monster.PrimaryPart or monster:FindFirstChild("HumanoidRootPart")
+                            if root and root:IsA("BasePart") then
+                                local dist = (hrp.Position - root.Position).Magnitude
+                                if dist < closestDist then 
+                                    closestDist = dist
+                                    targetCatch = monster 
                                 end
                             end
                         end
                     end
                 end
             end
+
+            if targetCatch and MonsterSystem then
+                local targetId = tonumber(targetCatch.Name:match("Monster_(%d+)"))
+                local root = targetCatch.PrimaryPart or targetCatch:FindFirstChild("HumanoidRootPart")
+                if root and root:IsA("BasePart") then
+                    SafeTeleport(CFrame.new(root.Position), 5)
+                end
+                task.spawn(function()
+                    local success, isStarted = pcall(function() return MonsterSystem:ClientCatchMonsterStart(targetId) end)
+                    if success then
+                        if isStarted == false then 
+                            task.wait(5) 
+                        else
+                            task.wait(1.5)
+                            pcall(function() MonsterSystem:ClientCatchMonsterComplete(targetId) end)
+                        end
+                    end
+                end)
+            end
         end
     end)
 
     -- ==========================================
-    -- LUỒNG 3: AUTO HEAL (DỰA TRÊN UI)
+    -- LUỒNG 3: AUTO HEAL
     -- ==========================================
     local function CheckDeadPetsFromUI()
         local deadCount = 0
@@ -485,6 +489,7 @@ return function(Window, Utils)
 
     local function ShouldTriggerHeal()
         if camSettings.isHealing then return false end
+        if not _G.SystemController:isModuleEnabled("heal") then return false end
         local deadCount, totalPets = CheckDeadPetsFromUI()
         if totalPets == 0 then return false end
         return deadCount >= camSettings.healThreshold
@@ -516,13 +521,17 @@ return function(Window, Utils)
 
     task.spawn(function()
         while task.wait(1) do
-            if _G.SystemController and _G.SystemController.shouldStop then continue end
+            if ShouldPauseFarm() then continue end
             if not camSettings.autoHeal or camSettings.isHealing then continue end
+            
             local isRiding = LocalPlayer:GetAttribute("RidePetId") ~= nil
             if isRiding then continue end
+            
             if not ShouldTriggerHeal() then continue end
+            
             camSettings.isHealing = true
             local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            
             if hrp then
                 camSettings.savedPosition = savedFarmPosition or hrp.CFrame
                 local recoverPos = FindRecoverPosition()
@@ -550,7 +559,7 @@ return function(Window, Utils)
     end)
 
     -- ==========================================
-    -- TỰ ĐỘNG VỀ FARM POS (CHỈ KHI BẬT CÔNG TẮC)
+    -- TỰ ĐỘNG VỀ FARM POS
     -- ==========================================
     task.spawn(function()
         task.wait(3)
@@ -572,8 +581,8 @@ return function(Window, Utils)
             local status = "🟢 Đang chạy"
             if camSettings.isHealing then 
                 status = "🔄 Đang hồi máu..."
-            elseif ShouldPauseFarm() then 
-                status = "⏸️ Tạm dừng (đang săn Boss/Thời tiết)"
+            elseif _G.BossStatus and _G.BossStatus.bossFound and camSettings.yieldForBoss then 
+                status = "⏸️ Tạm dừng (có Boss đang xuất hiện)"
             elseif not camSettings.autoAttack and not camSettings.autoCatch then 
                 status = "⏸️ Đã tắt Auto Farm"
             end
@@ -581,24 +590,5 @@ return function(Window, Utils)
         end
     end)
 
-    -- ==========================================
-    -- TỰ ĐỘNG QUÉT QUÁI MỖI 30 GIÂY
-    -- ==========================================
-    task.spawn(function()
-        while task.wait(30) do
-            local monsterNames = GetAllMonsterNames()
-            local options = {"Tất cả quái"}
-            for _, name in ipairs(monsterNames) do
-                if name and name ~= "" and not table.find(options, name) then
-                    table.insert(options, name)
-                end
-            end
-            if MonsterDropdown and MonsterDropdown.SetOptions then
-                pcall(function() MonsterDropdown:SetOptions(options) end)
-            end
-        end
-    end)
-
-    print("✅ R-Game Module 3.1 loaded successfully!")
-    print("📊 Đã tìm thấy " .. #GetAllMonsterNames() .. " loại quái")
+    print("✅ Farm Module 3.2 loaded successfully!")
 end
