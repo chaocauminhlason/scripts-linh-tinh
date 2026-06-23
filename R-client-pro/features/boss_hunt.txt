@@ -1,6 +1,6 @@
 -- ====================================================================
 -- MODULE: SĂN BOSS VIP - CHỌN BOSS BẰNG SELECT WORLD
--- VERSION: 4.0 - TÍCH HỢP AREA SELECT & HOP SERVER
+-- VERSION: 4.1 - TÁI SỬ DỤNG UTILS DROPDOWN
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -30,7 +30,6 @@ return function(Window, Utils)
     -- BOSS MAPPING: World ID → Boss Keyword
     -- ==========================================
     local WorldBossMapping = {
-        -- [1] = "Starter Island",  -- Không có boss
         [2] = {"flaragon"},        -- Volcano
         [3] = {"gildron"},         -- Duneveil Isle
         [4] = {"shadeknight", "shake", "knight"}, -- Neverland
@@ -58,13 +57,6 @@ return function(Window, Utils)
         lastScanTime = 0,
         currentWorldIndex = 1
     }
-
-    -- ==========================================
-    -- HÀM LẤY DANH SÁCH BOSS TỪ WORLD ID
-    -- ==========================================
-    local function GetBossKeywordsByWorldId(worldId)
-        return WorldBossMapping[worldId] or {}
-    end
 
     -- ==========================================
     -- HÀM LẤY TẤT CẢ TỪ KHÓA BOSS TỪ CÁC WORLD ĐÃ CHỌN
@@ -105,7 +97,7 @@ return function(Window, Utils)
                 end
             end
         end)
-        return {2, 3, 4, 5, 6, 7, 8, 9, 10, 11} -- Mặc định tất cả world có boss
+        return {2, 3, 4, 5, 6, 7, 8, 9, 10, 11}
     end
 
     -- ==========================================
@@ -115,7 +107,7 @@ return function(Window, Utils)
         enabled = false,
         hitSpeed = 0.1,
         selectedWorlds = LoadSelectedWorlds(),
-        hopEnabled = false
+        isTeleporting = false
     }
 
     -- ==========================================
@@ -144,13 +136,13 @@ return function(Window, Utils)
     -- ==========================================
     local function ScanBossInCurrentWorld()
         local currentWorldId = _G.BossStatus.currentWorldId
-        if not currentWorldId then return nil, nil end
+        if not currentWorldId then return nil, nil, nil end
 
-        local keywords = GetBossKeywordsByWorldId(currentWorldId)
-        if #keywords == 0 then return nil, nil end
+        local keywords = WorldBossMapping[currentWorldId] or {}
+        if #keywords == 0 then return nil, nil, nil end
 
         local monstersFolder = Workspace:FindFirstChild("Monsters") or Workspace:FindFirstChild("Monster")
-        if not monstersFolder then return nil, nil end
+        if not monstersFolder then return nil, nil, nil end
 
         for _, obj in pairs(monstersFolder:GetChildren()) do
             if obj:IsA("Model") then
@@ -174,39 +166,6 @@ return function(Window, Utils)
             end
         end
         return nil, nil, nil
-    end
-
-    -- ==========================================
-    -- HÀM DỊCH CHUYỂN ĐẾN WORLD TIẾP THEO
-    -- ==========================================
-    local function MoveToNextWorld()
-        local selectedWorlds = attackSettings.selectedWorlds
-        if #selectedWorlds == 0 then return false end
-
-        local currentIndex = _G.BossStatus.currentWorldIndex or 1
-        local nextIndex = currentIndex % #selectedWorlds + 1
-        
-        _G.BossStatus.currentWorldIndex = nextIndex
-        _G.BossStatus.currentWorldId = selectedWorlds[nextIndex]
-        
-        -- Dịch chuyển đến world mới
-        if Utils and Utils.TeleportToArea then
-            Utils.TeleportToArea(_G.BossStatus.currentWorldId)
-            return true
-        else
-            -- Fallback: dùng remote trực tiếp
-            pcall(function()
-                local remote = ReplicatedStorage:FindFirstChild("CommonLibrary")
-                    and ReplicatedStorage.CommonLibrary:FindFirstChild("Tool")
-                    and ReplicatedStorage.CommonLibrary.Tool:FindFirstChild("RemoteManager")
-                    and ReplicatedStorage.CommonLibrary.Tool.RemoteManager:FindFirstChild("Funcs")
-                    and ReplicatedStorage.CommonLibrary.Tool.RemoteManager.Funcs:FindFirstChild("DataPullFunc")
-                if remote then
-                    remote:InvokeServer("AreaTeleportToRegionChannel", _G.BossStatus.currentWorldId)
-                end
-            end)
-            return true
-        end
     end
 
     -- ==========================================
@@ -256,128 +215,40 @@ return function(Window, Utils)
     end
 
     -- ==========================================
-    -- UI LAYER
+    -- UI LAYER - TÁI SỬ DỤNG UTILS DROPDOWN
     -- ==========================================
     local BossTab = Window:CreateTab("Săn Boss", 4483345998)
 
     BossTab:CreateSection("--- CHỌN WORLD CÓ BOSS ---")
     
-    -- Tạo dropdown chọn world (sử dụng Utils nếu có)
-    local worldDropdown = nil
-    local worldOptions = {
-        "Volcano (Flaragon)",
-        "Duneveil Isle (Gildron)",
-        "Neverland (ShadeKnight)",
-        "Frost Isle (Mountusk)",
-        "Tideland (TideVex)",
-        "Spirit Grove (Frostwyrm)",
-        "Dragon's Breath (Dracospike)",
-        "Blossom Haven (Thunderclaw)",
-        "Mobius Circus (Lampyr)",
-        "Specter Shallows (Scareaper)"
-    }
-    
-    local worldIdMap = {
-        ["Volcano (Flaragon)"] = 2,
-        ["Duneveil Isle (Gildron)"] = 3,
-        ["Neverland (ShadeKnight)"] = 4,
-        ["Frost Isle (Mountusk)"] = 5,
-        ["Tideland (TideVex)"] = 6,
-        ["Spirit Grove (Frostwyrm)"] = 7,
-        ["Dragon's Breath (Dracospike)"] = 8,
-        ["Blossom Haven (Thunderclaw)"] = 9,
-        ["Mobius Circus (Lampyr)"] = 10,
-        ["Specter Shallows (Scareaper)"] = 11
-    }
-    
-    -- Chuyển đổi ID → Tên hiển thị
-    local function GetWorldNamesFromIds(ids)
-        local names = {}
-        for _, id in ipairs(ids) do
-            for displayName, worldId in pairs(worldIdMap) do
-                if worldId == id then
-                    table.insert(names, displayName)
-                    break
+    -- Tạo dropdown từ Utils (tái sử dụng)
+    local worldDropdown = Utils.CreateAreaMultiSelect(BossTab, {
+        name = "Chọn World Có Boss",
+        flag = "BossWorldSelect",
+        defaultAreas = Utils.GetAreaNamesByIds(attackSettings.selectedWorlds),
+        callback = function(selectedIds, selectedNames)
+            attackSettings.selectedWorlds = selectedIds
+            SaveSelectedWorlds(selectedIds)
+            
+            -- Cập nhật target keywords cho server manager
+            local allKeywords = GetAllBossKeywords(selectedIds)
+            _G.BossStatus.targetBosses = allKeywords
+            
+            -- Lưu file cho server manager
+            pcall(function()
+                if writefile then
+                    writefile("RClient_SelectedBossKeywords.json", 
+                        HttpService:JSONEncode(allKeywords))
                 end
+            end)
+            
+            if #selectedIds == 0 then
+                TargetLabel:Set("⚠️ Chưa chọn world nào!")
+            else
+                TargetLabel:Set("🎯 Đã chọn " .. #selectedIds .. " world có boss")
             end
         end
-        return names
-    end
-    
-    -- Chuyển đổi Tên hiển thị → ID
-    local function GetWorldIdsFromNames(names)
-        local ids = {}
-        for _, name in ipairs(names) do
-            if worldIdMap[name] then
-                table.insert(ids, worldIdMap[name])
-            end
-        end
-        return ids
-    end
-    
-    -- Lấy danh sách tên đã chọn mặc định
-    local defaultWorldNames = GetWorldNamesFromIds(attackSettings.selectedWorlds)
-    
-    if Utils and Utils.CreateAreaMultiSelect then
-        -- Dùng Utils nếu có
-        worldDropdown = Utils.CreateAreaMultiSelect(BossTab, {
-            name = "Chọn World Có Boss",
-            flag = "BossWorldSelect",
-            defaultAreas = defaultWorldNames,
-            callback = function(selectedIds, selectedNames)
-                attackSettings.selectedWorlds = selectedIds
-                SaveSelectedWorlds(selectedIds)
-                
-                -- Cập nhật target keywords cho server manager
-                local allKeywords = GetAllBossKeywords(selectedIds)
-                _G.BossStatus.targetBosses = allKeywords
-                
-                -- Lưu file cho server manager
-                pcall(function()
-                    if writefile then
-                        writefile("RClient_SelectedBossKeywords.json", 
-                            HttpService:JSONEncode(allKeywords))
-                    end
-                end)
-                
-                if #selectedIds == 0 then
-                    TargetLabel:Set("⚠️ Chưa chọn world nào!")
-                else
-                    TargetLabel:Set("🎯 Đã chọn " .. #selectedIds .. " world có boss")
-                end
-            end
-        })
-    else
-        -- Fallback: dropdown thường
-        worldDropdown = BossTab:CreateDropdown({
-            Name = "Chọn World Có Boss",
-            Options = worldOptions,
-            CurrentOption = defaultWorldNames,
-            MultipleOptions = true,
-            Flag = "BossWorldSelect",
-            Callback = function(Options)
-                local ids = GetWorldIdsFromNames(Options)
-                attackSettings.selectedWorlds = ids
-                SaveSelectedWorlds(ids)
-                
-                local allKeywords = GetAllBossKeywords(ids)
-                _G.BossStatus.targetBosses = allKeywords
-                
-                pcall(function()
-                    if writefile then
-                        writefile("RClient_SelectedBossKeywords.json", 
-                            HttpService:JSONEncode(allKeywords))
-                    end
-                end)
-                
-                if #ids == 0 then
-                    TargetLabel:Set("⚠️ Chưa chọn world nào!")
-                else
-                    TargetLabel:Set("🎯 Đã chọn " .. #ids .. " world có boss")
-                end
-            end
-        })
-    end
+    })
 
     -- LABELS
     local TargetLabel = BossTab:CreateLabel("🎯 Đã chọn " .. #attackSettings.selectedWorlds .. " world có boss")
@@ -416,9 +287,7 @@ return function(Window, Utils)
                 _G.BossStatus.currentWorldId = attackSettings.selectedWorlds[1]
                 
                 -- Dịch chuyển đến world đầu tiên
-                if Utils and Utils.TeleportToArea then
-                    Utils.TeleportToArea(_G.BossStatus.currentWorldId)
-                end
+                Utils.TeleportToArea(_G.BossStatus.currentWorldId)
                 
                 game.StarterGui:SetCore("SendNotification", {
                     Title = "🔍 Bắt đầu săn boss", 
@@ -470,7 +339,8 @@ return function(Window, Utils)
             -- Cập nhật world hiện tại
             local currentWorldId = _G.BossStatus.currentWorldId
             if currentWorldId then
-                local worldName = Utils and Utils.GetAreaMap and Utils.GetAreaMap()[currentWorldId] or "Unknown"
+                local areaMap = Utils.GetAreaMap()
+                local worldName = areaMap and areaMap[currentWorldId] or "Unknown"
                 WorldStatusLabel:Set("🌍 World hiện tại: " .. worldName .. " (ID: " .. currentWorldId .. ")")
             end
 
@@ -552,24 +422,13 @@ return function(Window, Utils)
                             _G.BossStatus.currentWorldId = firstWorld
                             _G.BossStatus.currentWorldIndex = 1
                             
-                            if Utils and Utils.TeleportToArea then
-                                Utils.TeleportToArea(firstWorld)
-                            end
+                            Utils.TeleportToArea(firstWorld)
                         end
                     else
                         -- Di chuyển đến world tiếp theo
                         StatusLabel:Set("🔄 Trạng thái: Di chuyển đến world tiếp theo...")
                         
-                        if Utils and Utils.TeleportToArea then
-                            Utils.TeleportToArea(_G.BossStatus.currentWorldId)
-                        else
-                            -- Fallback
-                            pcall(function()
-                                if DataPullFunc then
-                                    DataPullFunc:InvokeServer("AreaTeleportToRegionChannel", _G.BossStatus.currentWorldId)
-                                end
-                            end)
-                        end
+                        Utils.TeleportToArea(_G.BossStatus.currentWorldId)
                         
                         -- Chờ load world mới
                         task.wait(3)
@@ -602,16 +461,19 @@ return function(Window, Utils)
     BossTab:CreateButton({
         Name = "🌍 DI CHUYỂN ĐẾN WORLD TIẾP THEO",
         Callback = function()
-            MoveToNextWorld()
+            -- Chuyển đến world tiếp theo trong danh sách
+            local currentIndex = _G.BossStatus.currentWorldIndex or 1
+            local nextIndex = currentIndex % #attackSettings.selectedWorlds + 1
+            _G.BossStatus.currentWorldIndex = nextIndex
+            _G.BossStatus.currentWorldId = attackSettings.selectedWorlds[nextIndex]
+            Utils.TeleportToArea(_G.BossStatus.currentWorldId)
         end
     })
 
     BossTab:CreateButton({
         Name = "🏠 VỀ STARTER ISLAND",
         Callback = function()
-            if Utils and Utils.TeleportToStarterIsland then
-                Utils.TeleportToStarterIsland()
-            end
+            Utils.TeleportToStarterIsland()
         end
     })
 
@@ -621,11 +483,12 @@ return function(Window, Utils)
     task.spawn(function()
         while task.wait(2) do
             if _G.BossStatus.currentWorldId then
-                local worldName = Utils and Utils.GetAreaMap and Utils.GetAreaMap()[_G.BossStatus.currentWorldId] or "Unknown"
+                local areaMap = Utils.GetAreaMap()
+                local worldName = areaMap and areaMap[_G.BossStatus.currentWorldId] or "Unknown"
                 WorldStatusLabel:Set("🌍 World hiện tại: " .. worldName)
             end
         end
     end)
 
-    print("✅ Boss Hunt 4.0 loaded successfully!")
+    print("✅ Boss Hunt 4.1 loaded successfully!")
 end
