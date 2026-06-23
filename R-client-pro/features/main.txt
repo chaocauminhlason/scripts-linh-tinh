@@ -1,6 +1,6 @@
 -- ====================================================================
 -- MODULE: MAIN CONTROLLER - ĐIỀU KHIỂN TẬP TRUNG
--- VERSION: 2.0 - MODULE REGISTRY & PAUSE/RESUME
+-- VERSION: 2.1 - THÊM isModuleEnabled
 -- ====================================================================
 return function(Window, Utils)
     local UserInputService = game:GetService("UserInputService")
@@ -14,7 +14,6 @@ return function(Window, Utils)
         shouldStop = false,
         pauseTime = 0,
         
-        -- MODULE REGISTRY
         modules = {
             farm = { enabled = true, toggle = nil, name = "farm" },
             boss = { enabled = true, toggle = nil, name = "boss" },
@@ -22,9 +21,6 @@ return function(Window, Utils)
             heal = { enabled = true, toggle = nil, name = "heal" }
         },
         
-        -- ==========================================
-        -- HÀM ĐĂNG KÝ MODULE
-        -- ==========================================
         registerModule = function(name, toggleFn)
             if _G.SystemController.modules[name] then
                 _G.SystemController.modules[name].toggle = toggleFn
@@ -37,29 +33,7 @@ return function(Window, Utils)
         end,
         
         -- ==========================================
-        -- HÀM BẬT/TẮT MODULE
-        -- ==========================================
-        toggleModule = function(name, enable)
-            local module = _G.SystemController.modules[name]
-            if not module then
-                warn("[System] ❌ Module not found: " .. name)
-                return false
-            end
-            
-            -- Cập nhật trạng thái
-            module.enabled = enable
-            
-            -- Gọi toggle function của module (nếu có)
-            if module.toggle then
-                pcall(function() module.toggle(enable) end)
-            end
-            
-            print("[System] 🔄 Module " .. name .. " → " .. (enable and "ON" or "OFF"))
-            return true
-        end,
-        
-        -- ==========================================
-        -- HÀM KIỂM TRA MODULE
+        -- HÀM isModuleEnabled (THÊM MỚI)
         -- ==========================================
         isModuleEnabled = function(name)
             local module = _G.SystemController.modules[name]
@@ -67,18 +41,27 @@ return function(Window, Utils)
             return module.enabled and not _G.SystemController.isPaused
         end,
         
-        -- ==========================================
-        -- HÀM PAUSE ALL
-        -- ==========================================
+        toggleModule = function(name, enable)
+            local module = _G.SystemController.modules[name]
+            if not module then
+                warn("[System] ❌ Module not found: " .. name)
+                return false
+            end
+            module.enabled = enable
+            if module.toggle then
+                pcall(function() module.toggle(enable) end)
+            end
+            print("[System] 🔄 Module " .. name .. " → " .. (enable and "ON" or "OFF"))
+            return true
+        end,
+        
         pauseAll = function(reason)
             reason = reason or "Người dùng yêu cầu"
-            
             _G.SystemController.isPaused = true
             _G.SystemController.shouldStop = true
             _G.SystemController.pauseReason = reason
             _G.SystemController.pauseTime = os.time()
             
-            -- Tắt tất cả module
             for name, module in pairs(_G.SystemController.modules) do
                 if module.toggle then
                     pcall(function() module.toggle(false) end)
@@ -90,19 +73,14 @@ return function(Window, Utils)
                 Text = "Tất cả chức năng đã tạm dừng: " .. reason,
                 Duration = 5
             })
-            
             print("[System] ⏸️ PAUSE ALL: " .. reason)
         end,
         
-        -- ==========================================
-        -- HÀM RESUME ALL
-        -- ==========================================
         resumeAll = function()
             _G.SystemController.isPaused = false
             _G.SystemController.shouldStop = false
             _G.SystemController.pauseReason = ""
             
-            -- Bật lại tất cả module
             for name, module in pairs(_G.SystemController.modules) do
                 if module.toggle then
                     pcall(function() module.toggle(true) end)
@@ -114,13 +92,9 @@ return function(Window, Utils)
                 Text = "Tất cả chức năng đã được tiếp tục",
                 Duration = 5
             })
-            
             print("[System] ▶️ RESUME ALL")
         end,
         
-        -- ==========================================
-        -- HÀM TOGGLE PAUSE
-        -- ==========================================
         togglePause = function()
             if _G.SystemController.isPaused then
                 _G.SystemController.resumeAll()
@@ -129,16 +103,10 @@ return function(Window, Utils)
             end
         end,
         
-        -- ==========================================
-        -- HÀM KIỂM TRA PAUSE
-        -- ==========================================
         shouldPause = function()
             return _G.SystemController.isPaused or _G.SystemController.shouldStop
         end,
         
-        -- ==========================================
-        -- HÀM LẤY TRẠNG THÁI
-        -- ==========================================
         getStatus = function()
             local status = {
                 isPaused = _G.SystemController.isPaused,
@@ -157,7 +125,6 @@ return function(Window, Utils)
     -- ==========================================
     local MainTab = Window:CreateTab("Main", 4483362458)
 
-    -- SECTION 1: ĐIỀU KHIỂN HỆ THỐNG
     MainTab:CreateSection("--- ĐIỀU KHIỂN HỆ THỐNG ---")
     
     local StatusLabel = MainTab:CreateLabel("📊 Trạng thái: 🟢 Đang chạy")
@@ -176,10 +143,8 @@ return function(Window, Utils)
         end
     })
 
-    -- SECTION 2: ĐIỀU KHIỂN TỪNG MODULE
     MainTab:CreateSection("--- ĐIỀU KHIỂN TỪNG MODULE ---")
     
-    -- Farm Toggle
     MainTab:CreateToggle({
         Name = "🟢 Auto Farm",
         CurrentValue = true,
@@ -189,7 +154,6 @@ return function(Window, Utils)
         end
     })
     
-    -- Boss Toggle
     MainTab:CreateToggle({
         Name = "🔴 Săn Boss",
         CurrentValue = true,
@@ -199,7 +163,6 @@ return function(Window, Utils)
         end
     })
     
-    -- Server Toggle
     MainTab:CreateToggle({
         Name = "🟣 Quản Lý Server",
         CurrentValue = true,
@@ -209,7 +172,6 @@ return function(Window, Utils)
         end
     })
     
-    -- Heal Toggle (điều khiển từ Farm)
     MainTab:CreateToggle({
         Name = "💚 Auto Heal (Pet)",
         CurrentValue = true,
@@ -219,7 +181,6 @@ return function(Window, Utils)
         end
     })
 
-    -- SECTION 3: PHÍM TẮT
     MainTab:CreateSection("--- PHÍM TẮT ---")
     MainTab:CreateLabel("⌨️ P = Pause/Resume All")
 
@@ -257,6 +218,6 @@ return function(Window, Utils)
         end
     end)
 
-    print("✅ Main Controller 2.0 loaded successfully!")
+    print("✅ Main Controller 2.1 loaded successfully!")
     print("⌨️ Phím tắt: P = Toggle Pause/Resume All")
 end
