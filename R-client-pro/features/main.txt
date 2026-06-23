@@ -1,13 +1,10 @@
 -- ====================================================================
 -- MODULE: MAIN CONTROLLER - ĐIỀU KHIỂN TẬP TRUNG
--- VERSION: 2.1 - THÊM isModuleEnabled
+-- VERSION: 2.2 - FIX LỖI THAM CHIẾU
 -- ====================================================================
 return function(Window, Utils)
     local UserInputService = game:GetService("UserInputService")
 
-    -- ==========================================
-    -- KHỞI TẠO SYSTEM CONTROLLER
-    -- ==========================================
     _G.SystemController = {
         isPaused = false,
         pauseReason = "",
@@ -32,9 +29,6 @@ return function(Window, Utils)
             return false
         end,
         
-        -- ==========================================
-        -- HÀM isModuleEnabled (THÊM MỚI)
-        -- ==========================================
         isModuleEnabled = function(name)
             local module = _G.SystemController.modules[name]
             if not module then return false end
@@ -120,31 +114,27 @@ return function(Window, Utils)
         end
     }
 
-    -- ==========================================
-    -- UI LAYER
-    -- ==========================================
+    -- UI
     local MainTab = Window:CreateTab("Main", 4483362458)
 
     MainTab:CreateSection("--- ĐIỀU KHIỂN HỆ THỐNG ---")
-    
     local StatusLabel = MainTab:CreateLabel("📊 Trạng thái: 🟢 Đang chạy")
     
     MainTab:CreateButton({
-        Name = "⏸️ PAUSE ALL (Tạm dừng toàn bộ)",
+        Name = "⏸️ PAUSE ALL",
         Callback = function()
             _G.SystemController:pauseAll("Người dùng nhấn nút Pause")
         end
     })
 
     MainTab:CreateButton({
-        Name = "▶️ RESUME ALL (Tiếp tục toàn bộ)",
+        Name = "▶️ RESUME ALL",
         Callback = function()
             _G.SystemController:resumeAll()
         end
     })
 
     MainTab:CreateSection("--- ĐIỀU KHIỂN TỪNG MODULE ---")
-    
     MainTab:CreateToggle({
         Name = "🟢 Auto Farm",
         CurrentValue = true,
@@ -153,7 +143,6 @@ return function(Window, Utils)
             _G.SystemController:toggleModule("farm", Value)
         end
     })
-    
     MainTab:CreateToggle({
         Name = "🔴 Săn Boss",
         CurrentValue = true,
@@ -162,7 +151,6 @@ return function(Window, Utils)
             _G.SystemController:toggleModule("boss", Value)
         end
     })
-    
     MainTab:CreateToggle({
         Name = "🟣 Quản Lý Server",
         CurrentValue = true,
@@ -171,7 +159,6 @@ return function(Window, Utils)
             _G.SystemController:toggleModule("server", Value)
         end
     })
-    
     MainTab:CreateToggle({
         Name = "💚 Auto Heal (Pet)",
         CurrentValue = true,
@@ -184,9 +171,6 @@ return function(Window, Utils)
     MainTab:CreateSection("--- PHÍM TẮT ---")
     MainTab:CreateLabel("⌨️ P = Pause/Resume All")
 
-    -- ==========================================
-    -- HOTKEY: P
-    -- ==========================================
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if gameProcessed then return end
         if input.KeyCode == Enum.KeyCode.P then
@@ -194,9 +178,6 @@ return function(Window, Utils)
         end
     end)
 
-    -- ==========================================
-    -- CẬP NHẬT TRẠNG THÁI
-    -- ==========================================
     task.spawn(function()
         while task.wait(1) do
             if _G.SystemController.isPaused then
@@ -209,7 +190,6 @@ return function(Window, Utils)
                 local farmStatus = _G.SystemController.modules.farm.enabled and "🟢" or "🔴"
                 local bossStatus = _G.SystemController.modules.boss.enabled and "🟢" or "🔴"
                 local serverStatus = _G.SystemController.modules.server.enabled and "🟢" or "🔴"
-                
                 StatusLabel:Set(string.format(
                     "📊 Trạng thái: 🟢 Đang chạy | Farm: %s | Boss: %s | Server: %s",
                     farmStatus, bossStatus, serverStatus
@@ -218,6 +198,5 @@ return function(Window, Utils)
         end
     end)
 
-    print("✅ Main Controller 2.1 loaded successfully!")
-    print("⌨️ Phím tắt: P = Toggle Pause/Resume All")
+    print("✅ Main Controller 2.2 loaded successfully!")
 end
