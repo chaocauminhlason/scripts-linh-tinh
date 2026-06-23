@@ -1,202 +1,54 @@
 -- ====================================================================
--- MODULE: MAIN CONTROLLER - ĐIỀU KHIỂN TẬP TRUNG
--- VERSION: 2.2 - FIX LỖI THAM CHIẾU
+-- MAIN SCRIPT: Khởi chạy R-Client Pro
 -- ====================================================================
-return function(Window, Utils)
-    local UserInputService = game:GetService("UserInputService")
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
-    _G.SystemController = {
-        isPaused = false,
-        pauseReason = "",
-        shouldStop = false,
-        pauseTime = 0,
-        
-        modules = {
-            farm = { enabled = true, toggle = nil, name = "farm" },
-            boss = { enabled = true, toggle = nil, name = "boss" },
-            server = { enabled = true, toggle = nil, name = "server" },
-            heal = { enabled = true, toggle = nil, name = "heal" }
-        },
-        
-        registerModule = function(name, toggleFn)
-            if _G.SystemController.modules[name] then
-                _G.SystemController.modules[name].toggle = toggleFn
-                _G.SystemController.modules[name].enabled = true
-                print("[System] ✅ Module registered: " .. name)
-                return true
-            end
-            warn("[System] ❌ Module not found: " .. name)
-            return false
-        end,
-        
-        isModuleEnabled = function(name)
-            local module = _G.SystemController.modules[name]
-            if not module then return false end
-            return module.enabled and not _G.SystemController.isPaused
-        end,
-        
-        toggleModule = function(name, enable)
-            local module = _G.SystemController.modules[name]
-            if not module then
-                warn("[System] ❌ Module not found: " .. name)
-                return false
-            end
-            module.enabled = enable
-            if module.toggle then
-                pcall(function() module.toggle(enable) end)
-            end
-            print("[System] 🔄 Module " .. name .. " → " .. (enable and "ON" or "OFF"))
-            return true
-        end,
-        
-        pauseAll = function(reason)
-            reason = reason or "Người dùng yêu cầu"
-            _G.SystemController.isPaused = true
-            _G.SystemController.shouldStop = true
-            _G.SystemController.pauseReason = reason
-            _G.SystemController.pauseTime = os.time()
-            
-            for name, module in pairs(_G.SystemController.modules) do
-                if module.toggle then
-                    pcall(function() module.toggle(false) end)
-                end
-            end
-            
-            game.StarterGui:SetCore("SendNotification", {
-                Title = "⏸️ PAUSE ALL", 
-                Text = "Tất cả chức năng đã tạm dừng: " .. reason,
-                Duration = 5
-            })
-            print("[System] ⏸️ PAUSE ALL: " .. reason)
-        end,
-        
-        resumeAll = function()
-            _G.SystemController.isPaused = false
-            _G.SystemController.shouldStop = false
-            _G.SystemController.pauseReason = ""
-            
-            for name, module in pairs(_G.SystemController.modules) do
-                if module.toggle then
-                    pcall(function() module.toggle(true) end)
-                end
-            end
-            
-            game.StarterGui:SetCore("SendNotification", {
-                Title = "▶️ RESUME ALL", 
-                Text = "Tất cả chức năng đã được tiếp tục",
-                Duration = 5
-            })
-            print("[System] ▶️ RESUME ALL")
-        end,
-        
-        togglePause = function()
-            if _G.SystemController.isPaused then
-                _G.SystemController.resumeAll()
-            else
-                _G.SystemController.pauseAll("Phím tắt P")
-            end
-        end,
-        
-        shouldPause = function()
-            return _G.SystemController.isPaused or _G.SystemController.shouldStop
-        end,
-        
-        getStatus = function()
-            local status = {
-                isPaused = _G.SystemController.isPaused,
-                pauseReason = _G.SystemController.pauseReason,
-                modules = {}
-            }
-            for name, module in pairs(_G.SystemController.modules) do
-                status.modules[name] = module.enabled
-            end
-            return status
-        end
-    }
+local Window = Rayfield:CreateWindow({
+    Name = "R-Client Pro Tool v2.5",
+    LoadingTitle = "Đang tải hệ thống Core...",
+    LoadingSubtitle = "Dev by Sơn",
+    ConfigurationSaving = { Enabled = true, FileName = "AutoFarmConfig" },
+    KeySystem = false,
+    DisableRayfieldPrompts = true,
+    DisableBuildWarnings = true 
+})
 
-    -- UI
-    local MainTab = Window:CreateTab("Main", 4483362458)
+local noCache = "?t=" .. tostring(os.time())
 
-    MainTab:CreateSection("--- ĐIỀU KHIỂN HỆ THỐNG ---")
-    local StatusLabel = MainTab:CreateLabel("📊 Trạng thái: 🟢 Đang chạy")
-    
-    MainTab:CreateButton({
-        Name = "⏸️ PAUSE ALL",
-        Callback = function()
-            _G.SystemController:pauseAll("Người dùng nhấn nút Pause")
+local function SafeLoad(url)
+    local success, result = pcall(function() return game:HttpGet(url .. noCache) end)
+    if success then
+        local func, err = loadstring(result)
+        if func then 
+            return func() 
+        else 
+            warn("❌ Lỗi Cú Pháp tại: " .. url .. "\n" .. tostring(err)) 
         end
-    })
-
-    MainTab:CreateButton({
-        Name = "▶️ RESUME ALL",
-        Callback = function()
-            _G.SystemController:resumeAll()
-        end
-    })
-
-    MainTab:CreateSection("--- ĐIỀU KHIỂN TỪNG MODULE ---")
-    MainTab:CreateToggle({
-        Name = "🟢 Auto Farm",
-        CurrentValue = true,
-        Flag = "MainToggleFarm",
-        Callback = function(Value)
-            _G.SystemController:toggleModule("farm", Value)
-        end
-    })
-    MainTab:CreateToggle({
-        Name = "🔴 Săn Boss",
-        CurrentValue = true,
-        Flag = "MainToggleBoss",
-        Callback = function(Value)
-            _G.SystemController:toggleModule("boss", Value)
-        end
-    })
-    MainTab:CreateToggle({
-        Name = "🟣 Quản Lý Server",
-        CurrentValue = true,
-        Flag = "MainToggleServer",
-        Callback = function(Value)
-            _G.SystemController:toggleModule("server", Value)
-        end
-    })
-    MainTab:CreateToggle({
-        Name = "💚 Auto Heal (Pet)",
-        CurrentValue = true,
-        Flag = "MainToggleHeal",
-        Callback = function(Value)
-            _G.SystemController:toggleModule("heal", Value)
-        end
-    })
-
-    MainTab:CreateSection("--- PHÍM TẮT ---")
-    MainTab:CreateLabel("⌨️ P = Pause/Resume All")
-
-    UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if gameProcessed then return end
-        if input.KeyCode == Enum.KeyCode.P then
-            _G.SystemController:togglePause()
-        end
-    end)
-
-    task.spawn(function()
-        while task.wait(1) do
-            if _G.SystemController.isPaused then
-                StatusLabel:Set(string.format(
-                    "🔴 ĐÃ DỪNG: %s (từ %s)",
-                    _G.SystemController.pauseReason,
-                    os.date("%H:%M:%S", _G.SystemController.pauseTime)
-                ))
-            else
-                local farmStatus = _G.SystemController.modules.farm.enabled and "🟢" or "🔴"
-                local bossStatus = _G.SystemController.modules.boss.enabled and "🟢" or "🔴"
-                local serverStatus = _G.SystemController.modules.server.enabled and "🟢" or "🔴"
-                StatusLabel:Set(string.format(
-                    "📊 Trạng thái: 🟢 Đang chạy | Farm: %s | Boss: %s | Server: %s",
-                    farmStatus, bossStatus, serverStatus
-                ))
-            end
-        end
-    end)
-
-    print("✅ Main Controller 2.2 loaded successfully!")
+    else
+        warn("❌ Không kết nối được: " .. url)
+    end
+    return nil
 end
+
+local Utils = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/core/utilities.txt')
+local WebhookModule = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/core/webhook.txt')
+
+if Utils then
+    local r = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/farm.txt')
+    if r then r(Window, Utils) end
+    
+    local b = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/boss_hunt.txt')
+    if b then b(Window, Utils) end
+    
+    local sm = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/server_manager.txt')
+    if sm then sm(Window, Utils) end
+    
+    -- Các module khác...
+end
+
+if WebhookModule and WebhookModule.InitTab then
+    WebhookModule.InitTab(Window, Rayfield)
+end
+
+Rayfield:LoadConfiguration()
+Rayfield:Notify({ Title = "Thành Công!", Content = "Hệ thống R-Client Pro đã nạp đầy đủ Modules!", Duration = 5 })
