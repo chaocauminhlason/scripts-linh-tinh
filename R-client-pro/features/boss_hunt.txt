@@ -1,6 +1,6 @@
 -- ====================================================================
 -- MODULE: SĂN BOSS VIP (HỖ TRỢ CHỌN NHIỀU MỤC TIÊU)
--- VERSION: 2.1 - TÍCH HỢP MAIN CONTROLLER & CHỐNG SPAM
+-- VERSION: 2.2 - FIX CALLBACK ERROR
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -11,7 +11,7 @@ return function(Window, Utils)
 
     local BossTab = Window:CreateTab("Săn Boss", 4483345998)
 
-    -- BẢNG TỪ ĐIỂN: Ghép Tên Hiển Thị (UI) với Tên Mã Hệ Thống (Path)
+    -- BẢNG TỪ ĐIỂN BOSS
     local BossMapping = {
         ["Flaragon (Volcano)"] = {"flaragon"},
         ["Gildron (Duneveil Isle)"] = {"gildron"},
@@ -29,7 +29,7 @@ return function(Window, Utils)
     for k, _ in pairs(BossMapping) do table.insert(bossKeys, k) end
 
     -- ==========================================
-    -- HÀM LƯU TỪ KHÓA BOSS (CHO SERVER MANAGER ĐỌC)
+    -- HÀM LƯU TỪ KHÓA BOSS
     -- ==========================================
     local keywordFile = "RClient_SelectedBossKeywords.json"
     local function UpdateTargetKeywords(selectedOptions)
@@ -77,25 +77,20 @@ return function(Window, Utils)
     -- ==========================================
     local function AutoDetectBossID()
         if #currentTargetKeywords == 0 then return nil, nil end
-
         local monstersFolder = Workspace:FindFirstChild("Monsters") or Workspace:FindFirstChild("Monster")
         if not monstersFolder then return nil, nil end
-
         for _, obj in pairs(monstersFolder:GetChildren()) do
             if obj:IsA("Model") then
                 local hum = obj:FindFirstChildOfClass("Humanoid")
-                -- Chỉ nhận diện boss nếu có máu >= 100k và còn sống
                 if hum and hum.Health and hum.Health > 0 and hum.MaxHealth and hum.MaxHealth >= 100000 then
                     local realNameLower = GetRealMonsterName(obj)
                     local isTargetedBoss = false
-
                     for _, k in pairs(currentTargetKeywords) do
                         if realNameLower:find(k) then 
                             isTargetedBoss = true
                             break 
                         end
                     end
-
                     if isTargetedBoss then
                         local bossId = tonumber(string.match(obj.Name, "%d+")) 
                             or obj:GetAttribute("Id") 
@@ -116,45 +111,54 @@ return function(Window, Utils)
     -- ==========================================
     BossTab:CreateSection("--- MỤC TIÊU SĂN BẮN ---")
     
-    BossTab:CreateDropdown({
+    -- TẠO CÁC LABEL TRƯỚC
+    local TargetLabel = BossTab:CreateLabel("🎯 Mục tiêu hiện tại: Trống")
+    local BossStatusLabel = BossTab:CreateLabel("📊 Boss trên map: Chưa có")
+    local StatusLabel = BossTab:CreateLabel("🔴 Trạng thái: Đang nghỉ")
+
+    -- TẠO DROPDOWN với flag DUY NHẤT
+    local BossDropdown = BossTab:CreateDropdown({
         Name = "Chọn Các Boss Muốn Săn",
         Options = bossKeys,
         CurrentOption = bossKeys,
         MultipleOptions = true,
-        Flag = "BossTargetDropdown",
+        Flag = "BossTargetDropdownHunt",   -- FLAG DUY NHẤT
         Callback = function(Options)
-            currentTargetKeywords = UpdateTargetKeywords(Options)
-            if #currentTargetKeywords == 0 then
-                TargetLabel:Set("⚠️ Chưa chọn boss nào!")
-            else
-                TargetLabel:Set("🎯 Đang nhắm: " .. #currentTargetKeywords .. " loại boss")
-            end
+            pcall(function()
+                currentTargetKeywords = UpdateTargetKeywords(Options)
+                if #currentTargetKeywords == 0 then
+                    TargetLabel:Set("⚠️ Chưa chọn boss nào!")
+                else
+                    TargetLabel:Set("🎯 Đang nhắm: " .. #currentTargetKeywords .. " loại boss")
+                end
+            end)
         end,
     })
 
     BossTab:CreateSection("--- AUTO ĐÁNH BOSS TỪ XA ---")
-    
-    local StatusLabel = BossTab:CreateLabel("🔴 Trạng thái: Đang nghỉ")
-    local TargetLabel = BossTab:CreateLabel("🎯 Mục tiêu hiện tại: Trống")
-    local BossStatusLabel = BossTab:CreateLabel("📊 Boss trên map: Chưa có")
+
+    -- Toggle với flag DUY NHẤT
+    local attackSettings = { enabled = false, hitSpeed = 0.1 }
 
     BossTab:CreateToggle({
         Name = "Bật Auto Tấn Công Boss (Khi Phát Hiện)",
         CurrentValue = false,
-        Flag = "AutoAttackBoss",
+        Flag = "AutoAttackBossFlag",   -- FLAG DUY NHẤT
         Callback = function(Value)
-            attackSettings.enabled = Value
-            if not Value then 
-                StatusLabel:Set("🔴 Trạng thái: Đã tắt") 
-            end
+            pcall(function()
+                attackSettings.enabled = Value
+                if not Value then 
+                    StatusLabel:Set("🔴 Trạng thái: Đã tắt") 
+                else
+                    StatusLabel:Set("🟢 Trạng thái: Đang chờ boss...")
+                end
+            end)
         end
     })
 
     -- ==========================================
     -- LOGIC TẤN CÔNG
     -- ==========================================
-    local attackSettings = { enabled = false, hitSpeed = 0.1 }
-
     task.spawn(function()
         local DataPullFunc = nil
         pcall(function()
@@ -166,9 +170,7 @@ return function(Window, Utils)
         end)
 
         while task.wait(attackSettings.hitSpeed) do
-            -- ==========================================
             -- KIỂM TRA DỪNG TỪ MAIN CONTROLLER
-            -- ==========================================
             if _G.SystemController and _G.SystemController.shouldStop then
                 StatusLabel:Set("⏸️ ĐÃ DỪNG (Main Controller)")
                 task.wait(0.5)
@@ -186,13 +188,12 @@ return function(Window, Utils)
 
             if attackSettings.enabled then
                 if #currentTargetKeywords == 0 then
-                    TargetLabel:Set("⚠️ Vui lòng chọn ít nhất 1 Boss!")
+                    TargetLabel:Set("⚠️ Chưa chọn boss nào!")
                     StatusLabel:Set("🔴 Trạng thái: Đang chờ lệnh...")
                     task.wait(1)
                     continue
                 end
 
-                -- Kiểm tra xem Server Manager có đang tạm dừng farm không
                 local shouldPause = _G.ServerManager and _G.ServerManager.pauseFarm
                 if shouldPause then
                     StatusLabel:Set("⏸️ Trạng thái: Tạm dừng (đang tìm server)")
@@ -200,7 +201,6 @@ return function(Window, Utils)
                     continue
                 end
 
-                -- Phát hiện boss
                 local currentBossId, currentBossName = AutoDetectBossID()
 
                 if currentBossId and DataPullFunc then
@@ -218,5 +218,5 @@ return function(Window, Utils)
         end
     end)
 
-    print("✅ Boss Hunt 2.1 loaded successfully!")
+    print("✅ Boss Hunt 2.2 loaded successfully!")
 end
