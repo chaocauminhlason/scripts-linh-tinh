@@ -1,5 +1,6 @@
 -- ====================================================================
 -- MODULE: UTILITIES (CÁC HÀM TIỆN ÍCH DÙNG CHUNG)
+-- VERSION: 2.0 - THÊM HỆ THỐNG DỊCH CHUYỂN
 -- ====================================================================
 local Utils = {}
 
@@ -7,14 +8,207 @@ local Utils = {}
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local GuiService = game:GetService("GuiService")
 local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
 
--- Hàm test kết nối (để check xem loadstring có thành công không)
-function Utils.TestKetNoi()
-    print("✅ Đã load thành công Module Utilities!")
+-- ==========================================
+-- CACHE REMOTE
+-- ==========================================
+local cachedRemote = nil
+
+local function GetDataPullFunc()
+    if cachedRemote then return cachedRemote end
+    
+    local success, remote = pcall(function()
+        return ReplicatedStorage:WaitForChild("CommonLibrary")
+            :WaitForChild("Tool")
+            :WaitForChild("RemoteManager")
+            :WaitForChild("Funcs")
+            :WaitForChild("DataPullFunc")
+    end)
+    
+    if success and remote then
+        cachedRemote = remote
+        return remote
+    end
+    return nil
 end
 
 -- ==========================================
--- 1. HÀM QUÉT UI ĐỆ QUY (Tuyệt đối)
+-- HỆ THỐNG DỊCH CHUYỂN (TELEPORT)
+-- ==========================================
+
+-- BẢNG MAP: Area ID → Tên khu vực
+local AreaMap = {
+    [1] = "Starter Island",
+    [2] = "Volcano",
+    [3] = "Duneveil Isle",
+    [4] = "Neverland",
+    [5] = "Frost Isle",
+    [6] = "Tideland",
+    [7] = "Spirit Grove",
+    [8] = "Dragon's Breath",
+    [9] = "Blossom Haven",
+    [10] = "Mobius Circus",
+    [11] = "Specter Shallows"
+}
+
+-- ==========================================
+-- 1. DỊCH CHUYỂN ĐẾN KHU VỰC BẰNG REMOTE
+-- ==========================================
+function Utils.TeleportToArea(areaId)
+    local remote = GetDataPullFunc()
+    if not remote then
+        warn("[Utils] ❌ Không tìm thấy DataPullFunc")
+        return false
+    end
+    
+    local success, result = pcall(function()
+        return remote:InvokeServer("AreaTeleportToRegionChannel", areaId)
+    end)
+    
+    if success then
+        local areaName = AreaMap[areaId] or "Unknown (" .. areaId .. ")"
+        print("[Utils] 🚀 Đã dịch chuyển đến: " .. areaName)
+        return true
+    else
+        warn("[Utils] ❌ Dịch chuyển thất bại: " .. tostring(result))
+        return false
+    end
+end
+
+-- ==========================================
+-- 2. DỊCH CHUYỂN ĐẾN STARTER ISLAND (ID: 1)
+-- ==========================================
+function Utils.TeleportToStarterIsland()
+    return Utils.TeleportToArea(1)
+end
+
+-- ==========================================
+-- 3. DỊCH CHUYỂN ĐẾN VOLCANO (ID: 2)
+-- ==========================================
+function Utils.TeleportToVolcano()
+    return Utils.TeleportToArea(2)
+end
+
+-- ==========================================
+-- 4. DỊCH CHUYỂN ĐẾN KHU VỰC THEO TÊN
+-- ==========================================
+function Utils.TeleportToAreaByName(areaName)
+    for id, name in pairs(AreaMap) do
+        if string.find(string.lower(name), string.lower(areaName)) then
+            return Utils.TeleportToArea(id)
+        end
+    end
+    warn("[Utils] ❌ Không tìm thấy khu vực: " .. areaName)
+    return false
+end
+
+-- ==========================================
+-- 5. LẤY DANH SÁCH CÁC KHU VỰC
+-- ==========================================
+function Utils.GetAreaList()
+    local areas = {}
+    for id, name in pairs(AreaMap) do
+        table.insert(areas, {id = id, name = name})
+    end
+    table.sort(areas, function(a, b) return a.id < b.id end)
+    return areas
+end
+
+-- ==========================================
+-- 6. DỊCH CHUYỂN ĐẾN VỊ TRÍ CỤ THỂ (CFrame)
+-- ==========================================
+function Utils.TeleportToPosition(position, offsetY)
+    offsetY = offsetY or 5
+    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then 
+        warn("[Utils] ❌ Không tìm thấy HumanoidRootPart")
+        return false 
+    end
+    
+    local targetPos = position.Position + Vector3.new(0, offsetY, 0)
+    hrp.CFrame = CFrame.new(targetPos)
+    return true
+end
+
+-- ==========================================
+-- 7. DỊCH CHUYỂN AN TOÀN (CÓ RAYCAST)
+-- ==========================================
+function Utils.SafeTeleport(targetCFrame, offsetY)
+    offsetY = offsetY or 5
+    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+    
+    local targetPos = targetCFrame.Position + Vector3.new(0, offsetY, 0)
+    
+    -- Raycast kiểm tra mặt đất
+    local rayOrigin = targetPos + Vector3.new(0, 10, 0)
+    local rayDirection = Vector3.new(0, -20, 0)
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+    raycastParams.FilterDescendantsInstances = {LocalPlayer.Character}
+    
+    local rayResult = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+    
+    if rayResult then
+        local groundY = rayResult.Position.Y
+        targetPos = Vector3.new(targetPos.X, groundY + 3, targetPos.Z)
+    end
+    
+    hrp.CFrame = CFrame.new(targetPos)
+    return true
+end
+
+-- ==========================================
+-- 8. DỊCH CHUYỂN ĐẾN BOSS (DÙNG CHO BOSS HUNT)
+-- ==========================================
+function Utils.TeleportToBoss(bossPosition, offsetY)
+    offsetY = offsetY or 8
+    if not bossPosition then return false end
+    
+    -- Tạo CFrame từ Vector3
+    local cframe = CFrame.new(bossPosition)
+    return Utils.SafeTeleport(cframe, offsetY)
+end
+
+-- ==========================================
+-- 9. VỀ VỊ TRÍ FARM ĐÃ LƯU
+-- ==========================================
+function Utils.GoToFarmPos()
+    local posFileName = "R_ClientPro_FarmPos.json"
+    local HttpService = game:GetService("HttpService")
+    local farmPos = nil
+    
+    pcall(function()
+        if isfile and isfile(posFileName) then
+            local data = HttpService:JSONDecode(readfile(posFileName))
+            if data and data.X and data.Y and data.Z then
+                farmPos = CFrame.new(data.X, data.Y, data.Z)
+            end
+        end
+    end)
+    
+    if farmPos then
+        return Utils.SafeTeleport(farmPos, 5)
+    end
+    return false
+end
+
+-- ==========================================
+-- HÀM TEST KẾT NỐI
+-- ==========================================
+function Utils.TestKetNoi()
+    print("✅ Đã load thành công Module Utilities 2.0!")
+    print("📋 Danh sách khu vực có thể dịch chuyển:")
+    for id, name in pairs(AreaMap) do
+        print("   [" .. id .. "] " .. name)
+    end
+end
+
+-- ==========================================
+-- HÀM QUÉT UI ĐỆ QUY
 -- ==========================================
 function Utils.FindUIElementByName(parent, name)
     if not parent then return nil end
@@ -27,7 +221,7 @@ function Utils.FindUIElementByName(parent, name)
 end
 
 -- ==========================================
--- 2. HÀM CLICK CHUỘT ẢO (Bù trừ GuiInset chống trượt)
+-- HÀM CLICK CHUỘT ẢO
 -- ==========================================
 function Utils.ClickButtonExact(button, debugName)
     if not button then return end
@@ -53,7 +247,7 @@ function Utils.ClickButtonExact(button, debugName)
 end
 
 -- ==========================================
--- 3. HÀM LẤY ID NGƯỜI CHƠI (Hệ thống R-Game)
+-- HÀM LẤY ID NGƯỜI CHƠI
 -- ==========================================
 local cachedPlayerId = nil
 function Utils.GetPlayerId()
@@ -77,109 +271,153 @@ function Utils.GetPlayerId()
     return nil
 end
 
+-- ==========================================
 -- HÀM X-RAY QUÉT MẶT ĐẤT
-local function GetGroundPosition(targetPosition)
-    -- 1. Đặt mốc phát tia: Từ vị trí mục tiêu, ta nâng lên cao 50 studs (trên trời)
+-- ==========================================
+function Utils.GetGroundPosition(targetPosition)
     local rayOrigin = targetPosition + Vector3.new(0, 50, 0)
-    
-    -- 2. Hướng bắn tia: Bắn thẳng xuống dưới mặt đất sâu 100 studs
     local rayDirection = Vector3.new(0, -100, 0)
 
-    -- 3. Cấu hình X-ray: Bộ lọc để tia này xuyên qua nhân vật và thú cưỡi (chỉ chạm đất)
     local raycastParams = RaycastParams.new()
     raycastParams.FilterType = Enum.RaycastFilterType.Exclude
     
-    -- Lọc bỏ Character của mình và thư mục Pets (thêm thư mục Pets tùy game)
     local char = game.Players.LocalPlayer.Character
     local petsFolder = game.Workspace:FindFirstChild("Pets")
     raycastParams.FilterDescendantsInstances = {char, petsFolder} 
 
-    -- 4. Thực hiện quét
     local raycastResult = game.Workspace:Raycast(rayOrigin, rayDirection, raycastParams)
 
     if raycastResult then
-        -- TRÚNG ĐÍCH: Trả về tọa độ mặt đất + bù thêm 3 studs chiều cao của chân nhân vật
         return raycastResult.Position + Vector3.new(0, 3, 0)
     else
-        -- NẾU TRƯỢT (Rất hiếm): Trả về tọa độ gốc để phòng hờ
         return targetPosition + Vector3.new(0, 3, 0)
     end
 end
 
--- ==============================================================
-    -- HỆ THỐNG CHIẾN ĐẤU & TƯƠNG TÁC REMOTE (DÙNG CHUNG)
-    -- ==============================================================
-    
-    -- 1. Lên / Xuống thú cưỡi
-    Utils.ToggleMount = function(DataPullFunc, state)
-        pcall(function() DataPullFunc:InvokeServer("PetSwitchRideStatusChannel", state) end)
-    end
+-- ==========================================
+-- HỆ THỐNG CHIẾN ĐẤU & TƯƠNG TÁC REMOTE
+-- ==========================================
 
-    -- 2. Tự động nhảy xuống thú an toàn
-    Utils.SmartDismount = function(LocalPlayer, DataPullFunc)
-        local isRiding = LocalPlayer:GetAttribute("RidePetId") ~= nil
-        if isRiding then
-            Utils.ToggleMount(DataPullFunc, false)
-            task.wait(0.3)
-            local char = LocalPlayer.Character
-            local humanoid = char and char:FindFirstChild("Humanoid")
-            if humanoid then humanoid.Jump = true end
-            task.wait(0.1)
-        end
+-- 1. Lên / Xuống thú cưỡi
+function Utils.ToggleMount(state)
+    local remote = GetDataPullFunc()
+    if remote then
+        pcall(function() remote:InvokeServer("PetSwitchRideStatusChannel", state) end)
     end
+end
 
-    -- 3. Gửi lệnh tấn công quái
-    Utils.AttackMonster = function(DataPullFunc, monsterId)
-        pcall(function() DataPullFunc:InvokeServer("MonsterAttackChannel", monsterId) end)
+-- 2. Tự động nhảy xuống thú an toàn
+function Utils.SmartDismount()
+    local isRiding = LocalPlayer:GetAttribute("RidePetId") ~= nil
+    if isRiding then
+        Utils.ToggleMount(false)
+        task.wait(0.3)
+        local char = LocalPlayer.Character
+        local humanoid = char and char:FindFirstChild("Humanoid")
+        if humanoid then humanoid.Jump = true end
+        task.wait(0.1)
     end
+end
 
-    -- 4. Gửi lệnh ném bóng bắt quái
-    Utils.CatchMonster = function(DataPullFunc, monsterId)
-        pcall(function() DataPullFunc:InvokeServer("MonsterCatchStartChannel", monsterId) end)
+-- 3. Gửi lệnh tấn công quái
+function Utils.AttackMonster(monsterId)
+    local remote = GetDataPullFunc()
+    if remote then
+        pcall(function() remote:InvokeServer("MonsterAttackChannel", monsterId) end)
     end
+end
 
-    -- 5. Gửi lệnh Rời Phòng / Thoát Trận
-    Utils.LeaveMatch = function(DataPullFunc, riftId, teamId)
+-- 4. Gửi lệnh ném bóng bắt quái
+function Utils.CatchMonster(monsterId)
+    local remote = GetDataPullFunc()
+    if remote then
+        pcall(function() remote:InvokeServer("MonsterCatchStartChannel", monsterId) end)
+    end
+end
+
+-- 5. Gửi lệnh Rời Phòng / Thoát Trận
+function Utils.LeaveMatch(riftId, teamId)
+    local remote = GetDataPullFunc()
+    if remote then
         pcall(function()
-            DataPullFunc:InvokeServer("ArenaLeaveChannel")
+            remote:InvokeServer("ArenaLeaveChannel")
             if riftId and teamId then
-                DataPullFunc:InvokeServer("DungeonLeaveTeamChannel", riftId, teamId)
+                remote:InvokeServer("DungeonLeaveTeamChannel", riftId, teamId)
             end
         end)
     end
+end
 
-    -- 6. HỆ THỐNG RADAR: Quét, phân loại và tìm quái vật gần nhất
-    Utils.ScanMonsters = function(monstersFolder, hrp)
-        local hasAlive = false
-        local deadList = {}
-        local bestTarget = nil
-        local closestDist2D = math.huge
+-- 6. HỆ THỐNG RADAR: Quét, phân loại và tìm quái vật gần nhất
+function Utils.ScanMonsters(monstersFolder, hrp)
+    local hasAlive = false
+    local deadList = {}
+    local bestTarget = nil
+    local closestDist2D = math.huge
 
-        if monstersFolder then
-            for _, m in pairs(monstersFolder:GetChildren()) do
-                if m:IsA("Model") or m:IsA("BasePart") then
-                    local hum = m:FindFirstChildOfClass("Humanoid")
-                    if hum then
-                        if hum.Health <= 0 then
-                            table.insert(deadList, m) -- Quái trắng máu để Catch
-                        else
-                            hasAlive = true
-                            local pos = m:IsA("Model") and m.PrimaryPart and m.PrimaryPart.Position or m.Position
-                            local dist2D = math.sqrt((hrp.Position.X - pos.X)^2 + (hrp.Position.Z - pos.Z)^2)
-                            if dist2D < closestDist2D then closestDist2D = dist2D; bestTarget = m end
-                        end
+    if monstersFolder then
+        for _, m in pairs(monstersFolder:GetChildren()) do
+            if m:IsA("Model") or m:IsA("BasePart") then
+                local hum = m:FindFirstChildOfClass("Humanoid")
+                if hum then
+                    if hum.Health <= 0 then
+                        table.insert(deadList, m)
                     else
                         hasAlive = true
                         local pos = m:IsA("Model") and m.PrimaryPart and m.PrimaryPart.Position or m.Position
                         local dist2D = math.sqrt((hrp.Position.X - pos.X)^2 + (hrp.Position.Z - pos.Z)^2)
-                        if dist2D < closestDist2D then closestDist2D = dist2D; bestTarget = m end
+                        if dist2D < closestDist2D then 
+                            closestDist2D = dist2D
+                            bestTarget = m 
+                        end
+                    end
+                else
+                    hasAlive = true
+                    local pos = m:IsA("Model") and m.PrimaryPart and m.PrimaryPart.Position or m.Position
+                    local dist2D = math.sqrt((hrp.Position.X - pos.X)^2 + (hrp.Position.Z - pos.Z)^2)
+                    if dist2D < closestDist2D then 
+                        closestDist2D = dist2D
+                        bestTarget = m 
                     end
                 end
             end
         end
-
-        return hasAlive, deadList, bestTarget, closestDist2D
     end
 
--- Trả về bảng Utils chứa tất cả các hàm trên để các file khác gọi lại
+    return hasAlive, deadList, bestTarget, closestDist2D
+end
+
+-- ==========================================
+-- HÀM LẤY REMOTE (CHO CÁC MODULE KHÁC DÙNG)
+-- ==========================================
+function Utils.GetRemote()
+    return GetDataPullFunc()
+end
+
+-- ==========================================
+-- HÀM LẤY DANH SÁCH AREA
+-- ==========================================
+function Utils.GetAreaMap()
+    return AreaMap
+end
+
+-- ==========================================
+-- HÀM DỊCH CHUYỂN ĐẾN AREA THEO ID (ALIAS)
+-- ==========================================
+Utils.Teleport = Utils.TeleportToArea
+Utils.TeleportTo = Utils.TeleportToArea
+
+-- ==========================================
+-- KHỞI TẠO: Kiểm tra remote khi load
+-- ==========================================
+task.spawn(function()
+    local remote = GetDataPullFunc()
+    if remote then
+        print("[Utils] ✅ DataPullFunc đã sẵn sàng")
+    else
+        warn("[Utils] ⚠️ DataPullFunc chưa sẵn sàng, sẽ thử lại sau")
+    end
+end)
+
+-- Trả về bảng Utils
 return Utils
