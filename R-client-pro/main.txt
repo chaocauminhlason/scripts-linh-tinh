@@ -60,8 +60,8 @@ if Utils then
     local b = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/boss_hunt.txt')
     if b then b(Window, Utils) end
     
-		local sm = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/chaocauminhlason-patch-1/R-client-pro/features/server_manager.txt')
-    --local sm = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/server_manager.txt')
+		--local sm = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/chaocauminhlason-patch-1/R-client-pro/features/server_manager.txt')
+    local sm = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/server_manager.txt')
     if sm then sm(Window, Utils) end
     
     local d = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/auto_dungeon.txt')
