@@ -430,101 +430,90 @@ return function(Window, Utils)
     })
 
     -- ==========================================
-    -- ANTI-KICK NÂNG CAO (BẮT CẢ ERROR 279)
-    -- ==========================================
-    ServerTab:CreateSection("--- ANTI-KICK ---")
-    local autoRejoinEnabled = false
+-- ANTI-KICK NÂNG CAO (KHÔNG CLICK LEAVE)
+-- ==========================================
+ServerTab:CreateSection("--- ANTI-KICK ---")
+local autoRejoinEnabled = false
 
-    ServerTab:CreateToggle({
-        Name = "Auto Rejoin khi bị Kick/Disconnect",
-        CurrentValue = false,
-        Flag = "AutoRejoinKick",
-        Callback = function(Value) 
-            autoRejoinEnabled = Value 
-        end,
-    })
+ServerTab:CreateToggle({
+    Name = "Auto Rejoin khi bị Kick (Tự động kết nối lại)",
+    CurrentValue = false,
+    Flag = "AutoRejoinKick",
+    Callback = function(Value) 
+        autoRejoinEnabled = Value 
+    end,
+})
 
-    -- CÁCH 1: Bắt ErrorPrompt (lỗi kick thông thường)
-    task.spawn(function()
+-- LUỒNG QUÉT POPUP
+task.spawn(function()
+    while task.wait(0.5) do
+        if not autoRejoinEnabled then continue end
+        
+        local found = false
         pcall(function()
-            local promptOverlay = CoreGui:WaitForChild("RobloxPromptGui"):WaitForChild("promptOverlay")
-            promptOverlay.ChildAdded:Connect(function(child)
-                if child.Name == "ErrorPrompt" and autoRejoinEnabled then
-                    task.wait(2)
-                    TeleportService:Teleport(game.PlaceId, LocalPlayer)
-                end
-            end)
-        end)
-    end)
-
-    -- CÁCH 2: Bắt mọi popup lỗi (bao gồm Connection Failed - Error 279)
-    task.spawn(function()
-        local function CheckForErrorPopup()
-            local promptOverlay = CoreGui:FindFirstChild("RobloxPromptGui") and CoreGui.RobloxPromptGui:FindFirstChild("promptOverlay")
-            if not promptOverlay then return false end
-            
-            -- Duyệt tất cả các con của promptOverlay
-            for _, child in pairs(promptOverlay:GetChildren()) do
-                -- Kiểm tra nếu là frame hoặc screen gui
-                if child:IsA("Frame") or child:IsA("ScreenGui") then
-                    -- Tìm text bên trong
-                    local textLabels = child:GetDescendants()
-                    for _, obj in pairs(textLabels) do
-                        if obj:IsA("TextLabel") or obj:IsA("TextButton") then
-                            local txt = obj.Text or ""
-                            if string.find(txt, "Connection Failed") or 
-                               string.find(txt, "Failed to connect") or
-                               string.find(txt, "Error Code: 279") then
-                                return true
-                            end
+            local promptOverlay = CoreGui:FindFirstChild("RobloxPromptGui")
+            if promptOverlay then
+                for _, child in pairs(promptOverlay:GetDescendants()) do
+                    if child:IsA("TextLabel") or child:IsA("TextButton") then
+                        local txt = child.Text or ""
+                        if string.find(txt, "Disconnected") or string.find(txt, "Error Code") or string.find(txt, "Connection Failed") then
+                            found = true
+                            break
                         end
                     end
                 end
             end
-            return false
-        end
-
-        while task.wait(1) do
-            if not autoRejoinEnabled then break end
+        end)
+        
+        if found then
+            game.StarterGui:SetCore("SendNotification", {
+                Title = "🔁 Auto Rejoin", 
+                Text = "Phát hiện bị kick, đang kết nối lại...",
+                Duration = 3
+            })
             
-            if CheckForErrorPopup() then
-                task.wait(2)
-                game.StarterGui:SetCore("SendNotification", {
-                    Title = "🔁 Auto Rejoin", 
-                    Text = "Phát hiện lỗi kết nối (279), đang kết nối lại...", 
-                    Duration = 3
-                })
+            -- Tìm và click nút "Retry" (nếu có)
+            local clicked = false
+            pcall(function()
+                local promptOverlay = CoreGui:FindFirstChild("RobloxPromptGui")
+                if promptOverlay then
+                    for _, child in pairs(promptOverlay:GetDescendants()) do
+                        if child:IsA("TextButton") and (child.Text == "Retry" or string.find(child.Text, "Retry")) then
+                            local absPos = child.AbsolutePosition
+                            local absSize = child.AbsoluteSize
+                            local centerX = absPos.X + (absSize.X / 2)
+                            local centerY = absPos.Y + (absSize.Y / 2)
+                            VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, true, game, 1)
+                            task.wait(0.1)
+                            VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 1)
+                            clicked = true
+                            break
+                        end
+                    end
+                end
+            end)
+            
+            -- Nếu không có Retry hoặc click thất bại, dùng TeleportService
+            if not clicked then
+                task.wait(1)
                 TeleportService:Teleport(game.PlaceId, LocalPlayer)
             end
         end
-    end)
+    end
+end)
 
-    -- CÁCH 3: Bắt mất Character (khi bị kick không popup)
-    task.spawn(function()
-        local hadCharacter = false
-        repeat
-            task.wait(0.5)
-            if LocalPlayer.Character then
-                hadCharacter = true
+-- DỰ PHÒNG: Bắt ErrorPrompt
+task.spawn(function()
+    pcall(function()
+        local promptOverlay = CoreGui:WaitForChild("RobloxPromptGui"):WaitForChild("promptOverlay")
+        promptOverlay.ChildAdded:Connect(function(child)
+            if child.Name == "ErrorPrompt" and autoRejoinEnabled then
+                task.wait(1)
+                TeleportService:Teleport(game.PlaceId, LocalPlayer)
             end
-        until hadCharacter or not autoRejoinEnabled
-        
-        while autoRejoinEnabled and hadCharacter do
-            task.wait(1)
-            local char = LocalPlayer.Character
-            if char == nil then
-                task.wait(2)
-                if LocalPlayer.Character == nil and autoRejoinEnabled then
-                    game.StarterGui:SetCore("SendNotification", {
-                        Title = "🔁 Auto Rejoin", 
-                        Text = "Phát hiện bị kick, đang kết nối lại...", 
-                        Duration = 3
-                    })
-                    TeleportService:Teleport(game.PlaceId, LocalPlayer)
-                end
-            end
-        end
+        end)
     end)
+end)
 
     -- ==========================================
     -- MASTER QUEUE
