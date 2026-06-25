@@ -429,14 +429,14 @@ return function(Window, Utils)
         end 
     })
 
-    -- ==========================================
--- ANTI-KICK NÂNG CAO (KHÔNG CLICK LEAVE)
+-- ==========================================
+-- ANTI-KICK ĐƠN GIẢN (KHÔNG CẦN CLICK)
 -- ==========================================
 ServerTab:CreateSection("--- ANTI-KICK ---")
 local autoRejoinEnabled = false
 
 ServerTab:CreateToggle({
-    Name = "Auto Rejoin khi bị Kick (Tự động kết nối lại)",
+    Name = "Auto Rejoin khi bị Kick/Disconnect",
     CurrentValue = false,
     Flag = "AutoRejoinKick",
     Callback = function(Value) 
@@ -444,19 +444,23 @@ ServerTab:CreateToggle({
     end,
 })
 
--- LUỒNG QUÉT POPUP
+-- LUỒNG QUÉT POPUP (KHÔNG CLICK, CHỈ TELEPORT)
 task.spawn(function()
-    while task.wait(0.5) do
+    while task.wait(0.3) do
         if not autoRejoinEnabled then continue end
         
         local found = false
         pcall(function()
+            -- Quét CoreGui để tìm popup lỗi
             local promptOverlay = CoreGui:FindFirstChild("RobloxPromptGui")
             if promptOverlay then
                 for _, child in pairs(promptOverlay:GetDescendants()) do
                     if child:IsA("TextLabel") or child:IsA("TextButton") then
                         local txt = child.Text or ""
-                        if string.find(txt, "Disconnected") or string.find(txt, "Error Code") or string.find(txt, "Connection Failed") then
+                        if string.find(txt, "Connection Failed") or 
+                           string.find(txt, "Error Code: 279") or
+                           string.find(txt, "Disconnected") or
+                           string.find(txt, "Error Code") then
                             found = true
                             break
                         end
@@ -468,47 +472,26 @@ task.spawn(function()
         if found then
             game.StarterGui:SetCore("SendNotification", {
                 Title = "🔁 Auto Rejoin", 
-                Text = "Phát hiện bị kick, đang kết nối lại...",
-                Duration = 3
+                Text = "Phát hiện lỗi, đang kết nối lại...",
+                Duration = 2
             })
             
-            -- Tìm và click nút "Retry" (nếu có)
-            local clicked = false
-            pcall(function()
-                local promptOverlay = CoreGui:FindFirstChild("RobloxPromptGui")
-                if promptOverlay then
-                    for _, child in pairs(promptOverlay:GetDescendants()) do
-                        if child:IsA("TextButton") and (child.Text == "Retry" or string.find(child.Text, "Retry")) then
-                            local absPos = child.AbsolutePosition
-                            local absSize = child.AbsoluteSize
-                            local centerX = absPos.X + (absSize.X / 2)
-                            local centerY = absPos.Y + (absSize.Y / 2)
-                            VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, true, game, 1)
-                            task.wait(0.1)
-                            VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 1)
-                            clicked = true
-                            break
-                        end
-                    end
-                end
-            end)
+            -- Teleport ngay lập tức (không cần click)
+            TeleportService:Teleport(game.PlaceId, LocalPlayer)
             
-            -- Nếu không có Retry hoặc click thất bại, dùng TeleportService
-            if not clicked then
-                task.wait(1)
-                TeleportService:Teleport(game.PlaceId, LocalPlayer)
-            end
+            -- Thoát vòng lặp để tránh gọi Teleport nhiều lần
+            break
         end
     end
 end)
 
--- DỰ PHÒNG: Bắt ErrorPrompt
+-- DỰ PHÒNG: Bắt ErrorPrompt (cách cũ)
 task.spawn(function()
     pcall(function()
         local promptOverlay = CoreGui:WaitForChild("RobloxPromptGui"):WaitForChild("promptOverlay")
         promptOverlay.ChildAdded:Connect(function(child)
             if child.Name == "ErrorPrompt" and autoRejoinEnabled then
-                task.wait(1)
+                task.wait(0.5)
                 TeleportService:Teleport(game.PlaceId, LocalPlayer)
             end
         end)
