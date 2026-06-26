@@ -1,22 +1,17 @@
 -- ====================================================================
--- MODULE: SMART AUTO HATCH V6 (SMART STATE & SYNC CHUẨN UI)
+-- MODULE: SMART AUTO HATCH V7 (DOT SYNTAX & MULTI-POTION SUPPORT)
 -- ====================================================================
 return function(Window, Utils)
     local EggTab = Window:CreateTab("Trứng & Ấp", 4483362458)
 
     local hatchSettings = {
-        autoClaim = false,
         autoStart = false,
+        autoSkip = false,
+        autoClaim = false,
         stopIfBagFull = true,
         eggIdToHatch = 1,
-        maxSlots = 1 -- Mặc định chỉ ấp lò số 1 để chống lỗi UI máy khóa
+        maxSlots = 1 
     }
-
-    -- [ĐÃ FIX]: Đưa luồng tìm kiếm BackendAPI vào task.spawn để không block UI
-    local BackendAPI = nil
-    task.spawn(function()
-        BackendAPI = game:GetService("ReplicatedStorage"):WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc")
-    end)
 
     -- ==========================================
     -- QUÉT DỮ LIỆU TỰ ĐỘNG
@@ -56,8 +51,6 @@ return function(Window, Utils)
     local BagStatusLabel = EggTab:CreateLabel("Túi Pet: Đang tải...")
 
     EggTab:CreateSection("--- CÀI ĐẶT LÒ ẤP ---")
-    
-    -- THANH TRƯỢT SỬA LỖI MÁY KHÓA
     EggTab:CreateSlider({
         Name = "Số Lò Ấp Bạn Đã Mở Khóa",
         Range = {1, 5},
@@ -70,15 +63,7 @@ return function(Window, Utils)
         end,
     })
 
-    EggTab:CreateSection("--- TỰ ĐỘNG ẤP (HYBRID) ---")
-
-    EggTab:CreateToggle({
-        Name = "Tự Động Thu Hoạch (Auto Claim)",
-        CurrentValue = false,
-        Flag = "AutoClaimEgg",
-        Callback = function(Value) hatchSettings.autoClaim = Value end
-    })
-
+    EggTab:CreateSection("--- CHỌN TRỨNG ---")
     local EggDropdown = EggTab:CreateDropdown({
         Name = "Chọn Loại Trứng",
         Options = eggOptions,
@@ -104,13 +89,30 @@ return function(Window, Utils)
         end
     })
 
-    EggTab:CreateToggle({
-        Name = "Tự Động Bỏ Trứng (Auto Start)",
+    EggTab:CreateSection("--- TỰ ĐỘNG HÓA (3 CÔNG TẮC CHÍNH) ---")
+    
+    local ToggleStart = EggTab:CreateToggle({
+        Name = "1. Tự Động Bỏ Trứng (Auto Start)",
         CurrentValue = false,
         Flag = "AutoStartEgg",
         Callback = function(Value) hatchSettings.autoStart = Value end
     })
 
+    local ToggleSkip = EggTab:CreateToggle({
+        Name = "2. Tự Động Cắn Vé/Thuốc (Auto Skip)",
+        CurrentValue = false,
+        Flag = "AutoSkipEgg",
+        Callback = function(Value) hatchSettings.autoSkip = Value end
+    })
+
+    local ToggleClaim = EggTab:CreateToggle({
+        Name = "3. Tự Động Thu Hoạch (Auto Claim)",
+        CurrentValue = false,
+        Flag = "AutoClaimEgg",
+        Callback = function(Value) hatchSettings.autoClaim = Value end
+    })
+
+    EggTab:CreateSection("--- BẢO VỆ ---")
     EggTab:CreateToggle({
         Name = "Dừng ấp khi Túi đầy (An Toàn)",
         CurrentValue = true,
@@ -119,7 +121,7 @@ return function(Window, Utils)
     })
 
     -- ==========================================
-    -- LUỒNG 1: THEO DÕI TÚI PET CHỐNG TRÀN
+    -- LUỒNG 1: THEO DÕI TÚI PET (BAG MONITOR)
     -- ==========================================
     task.spawn(function()
         while task.wait(1) do
@@ -127,17 +129,24 @@ return function(Window, Utils)
             if env and env.BossRoomSystemClient and env.BossRoomSystemClient.gamePlayer and env.BossRoomSystemClient.gamePlayer.pet then
                 local realPetData = env.BossRoomSystemClient.gamePlayer.pet
                 pcall(function()
-                    local currentPets = realPetData.GetBagAmount(realPetData)
-                    local maxPets = realPetData.GetBagCapacity(realPetData)
+                    local currentPets = type(realPetData.GetBagAmount) == "function" and realPetData.GetBagAmount(realPetData) or 0
+                    local maxPets = type(realPetData.GetBagCapacity) == "function" and realPetData.GetBagCapacity(realPetData) or 0
                     
-                    if currentPets and maxPets then
-                        BagStatusLabel:Set("Túi Pet: " .. currentPets .. " / " .. maxPets)
-                        if hatchSettings.stopIfBagFull and currentPets >= maxPets then
-                            if hatchSettings.autoClaim or hatchSettings.autoStart then
-                                hatchSettings.autoClaim = false
-                                hatchSettings.autoStart = false
-                                game.StarterGui:SetCore("SendNotification", {Title = "CẢNH BÁO", Text = "Túi Pet ĐẦY! Đã ngắt Auto ấp trứng.", Duration = 5})
-                            end
+                    BagStatusLabel:Set("Túi Pet: " .. currentPets .. " / " .. maxPets)
+                    
+                    if hatchSettings.stopIfBagFull and currentPets >= maxPets and maxPets > 0 then
+                        if hatchSettings.autoClaim or hatchSettings.autoStart or hatchSettings.autoSkip then
+                            -- Ép tắt các công tắc ở Backend
+                            hatchSettings.autoClaim = false
+                            hatchSettings.autoStart = false
+                            hatchSettings.autoSkip = false
+                            
+                            -- Cập nhật lại giao diện UI Rayfield để người dùng thấy nó bị tắt
+                            ToggleStart:Set(false)
+                            ToggleSkip:Set(false)
+                            ToggleClaim:Set(false)
+                            
+                            game.StarterGui:SetCore("SendNotification", {Title = "CẢNH BÁO", Text = "Túi Pet ĐẦY! Đã tự động ngắt Auto Ấp Trứng.", Duration = 5})
                         end
                     end
                 end)
@@ -146,80 +155,55 @@ return function(Window, Utils)
     end)
 
     -- ==========================================
-    -- LUỒNG 2: AUTO CLAIM (SỬ DỤNG GIỜ SERVER CHUẨN)
+    -- LUỒNG 2: CORE LOGIC (START -> SKIP -> CLAIM)
     -- ==========================================
     task.spawn(function()
-        while task.wait(0.5) do
-            if not hatchSettings.autoClaim then continue end
+        while task.wait(0.5) do -- Quét nửa giây một lần
             local env = getrenv()._G.PathTool
-            if env and env.BossRoomSystemClient and env.BossRoomSystemClient.gamePlayer.egg then
-                local clientEgg = env.BossRoomSystemClient.gamePlayer.egg
-                local H = clientEgg.saveData and clientEgg.saveData.H or {}
-                
-                -- SỬA LỖI: Dùng giờ của Server Roblox thay vì giờ PC để không bao giờ bị lệch
-                local currentTime = workspace:GetServerTimeNow()
+            if not env or not env.EggSystem then continue end
+            
+            local clientEgg = env.BossRoomSystemClient and env.BossRoomSystemClient.gamePlayer.egg
+            if not clientEgg then continue end
+            
+            local H = clientEgg.saveData and clientEgg.saveData.H or {}
+            local currentTime = workspace:GetServerTimeNow()
 
-                for slot = 1, hatchSettings.maxSlots do
-                    local slotData = H[slot]
-                    
-                    if slotData and slotData.T and currentTime >= slotData.T then
-                        pcall(function()
-                            -- [ĐÃ FIX]: Check an toàn BackendAPI trước khi gọi
-                            if BackendAPI then
-                                -- 1. Bắn lệnh thu hoạch
-                                BackendAPI:InvokeServer("EggHatchTakenChannel", slot)
-                                
-                                -- 2. Chỉ Update UI, tuyệt đối không gán H[slot] = nil. 
-                                -- DataPullManager của game sẽ tự động xóa H[slot] khi Server xác nhận.
-                                if type(clientEgg.Taken) == "function" then
-                                    clientEgg.Taken(clientEgg, slot)
-                                end
-                            end
-                        end)
-                        task.wait(0.1) -- Delay nhẹ tránh spam gói tin
-                    end
+            for slotNum = 1, hatchSettings.maxSlots do
+                local slotStr = tostring(slotNum) -- [QUAN TRỌNG]: Key của Data là String
+                local slotData = H[slotStr]
+
+                -- TRƯỜNG HỢP 1: Lò trống -> Bỏ trứng vào
+                if hatchSettings.autoStart and not slotData then
+                    pcall(function()
+                        -- [ĐÃ ĐẢO THAM SỐ]: (slot, eggId) theo đúng test 8
+                        env.EggSystem.ClientHatchStart(slotNum, hatchSettings.eggIdToHatch)
+                    end)
+                    task.wait(0.2)
+                    continue -- Bỏ trứng xong thì qua slot khác, nhường nhịp sau xử lý tiếp
                 end
-            end
-        end
-    end)
 
-    -- ==========================================
-    -- LUỒNG 3: AUTO START (ĐỌC HATCH TIME ĐỘNG TỪ GAME)
-    -- ==========================================
-    task.spawn(function()
-        while task.wait(1) do
-            if not hatchSettings.autoStart then continue end
-            local env = getrenv()._G.PathTool
-            if env and env.BossRoomSystemClient and env.BossRoomSystemClient.gamePlayer.egg then
-                local clientEgg = env.BossRoomSystemClient.gamePlayer.egg
-                local H = clientEgg.saveData and clientEgg.saveData.H or {}
-                
-                for slot = 1, hatchSettings.maxSlots do
-                    if not H[slot] then
+                if slotData then
+                    local T = slotData.T or 0
+
+                    -- TRƯỜNG HỢP 2: Trứng đã chín -> Thu hoạch
+                    if hatchSettings.autoClaim and (T == 0 or currentTime >= T) then
                         pcall(function()
-                            -- [ĐÃ FIX]: Check an toàn BackendAPI trước khi gọi
-                            if BackendAPI then
-                                -- SỬA LỖI: Lấy chính xác thời gian ấp của quả trứng đang chọn từ hệ thống
-                                local hatchTime = 60
-                                if env.CfgEgg and env.CfgEgg.Tmpls and env.CfgEgg.Tmpls[hatchSettings.eggIdToHatch] then
-                                    -- Tên biến có thể là Time, HatchTime, hoặc CostTime. Ta quét để lấy.
-                                    local eggInfo = env.CfgEgg.Tmpls[hatchSettings.eggIdToHatch]
-                                    hatchTime = eggInfo.Time or eggInfo.HatchTime or eggInfo.CostTime or 60
-                                end
-
-                                -- 1. Bắn lệnh lên Server
-                                local response = BackendAPI:InvokeServer("EggHatchStartChannel", slot, hatchSettings.eggIdToHatch)
-                                
-                                if response then
-                                    -- 2. Kích hoạt hoạt ảnh UI
-                                    if type(clientEgg.StartHatch) == "function" then
-                                        clientEgg.StartHatch(clientEgg, slot, hatchSettings.eggIdToHatch)
-                                    end
-                                    -- Không cần gán tay H[slot] = ... nữa. Gói response hoặc DataPull sẽ tự nạp vào!
-                                end
-                            end
+                            -- [DOT SYNTAX]: Dùng dấu chấm theo đúng test 18
+                            env.EggSystem.ClientHatchTaken(slotNum)
                         end)
                         task.wait(0.2)
+                        continue
+                    end
+
+                    -- TRƯỜNG HỢP 3: Trứng đang ấp -> Cắn vé
+                    if hatchSettings.autoSkip and T > 0 and currentTime < T then
+                        pcall(function()
+                            -- [THAM SỐ ẨN]: Truyền true để xác nhận xài vé theo đúng test 13
+                            env.EggSystem.ClientHatchSkip(slotNum, true)
+                        end)
+                        -- Delay 0.5s để server trừ giờ. Lần quét kế tiếp nếu vẫn còn giờ (T > currentTime) thì nó tự vã thêm lọ nữa.
+                        task.wait(0.5) 
+                        continue
                     end
                 end
             end
