@@ -75,3 +75,6 @@ if game_env.PathTool then
 else
     warn("❌ Vẫn không thấy PathTool! Có thể game chưa load xong hoặc Dev đã giấu nó qua Module.")
 end
+
+-- Một số kiến trúc logic
+-- https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/refs/heads/main/R-client-pro/docs/features/auto_dungeon.md
