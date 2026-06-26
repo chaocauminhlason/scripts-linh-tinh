@@ -1,6 +1,6 @@
 -- ====================================================================
 -- MODULE: DUNGEON AUTO (AUTO ATTACK, AUTO EXIT, AUTO JOIN & AUTO CREATE)
--- BẢN CẬP NHẬT: FIX LỖI TELE ĐẾN QUÁI BỊ LÚN XUỐNG ĐẤT (CỘNG TRỤC Y)
+-- BẢN CẬP NHẬT: THÊM LOGIC CHỜ 60S KHI ĐI KÉ (AUTO JOIN)
 -- ====================================================================
 return function(Window, Utils, WebhookModule)
     local Players = game:GetService("Players")
@@ -21,27 +21,26 @@ return function(Window, Utils, WebhookModule)
     local autoJoinOthersEnabled = false
     local autoCreateEnabled = false
     local targetPlayerCount = 1
-    local targetDifficulty = 1 -- 1: Normal, 2: Hard, 3: Nightmare, 4: Inferno
+    local targetDifficulty = 1 
     
     local dungeonStuckTimer = 0
     local dungeonLastPosition = nil
     local isStartingDungeon = false
+    
+    -- Các biến mới phục vụ logic đếm giờ đi ké
+    local waitingForHost = false
+    local dungeonCompletionTime = 0
 
     -- API Game
-    
     local AbyssSystem = nil
     pcall(function() AbyssSystem = require(ReplicatedStorage.CommonLogic.Abyss.AbyssSystem) end)
 
--- ==========================================
+    -- ==========================================
     -- HÀM REMOTE: LÊN / XUỐNG THÚ
     -- ==========================================
     local function ToggleMount(state)
-        -- state = true (Lên thú), state = false (Xuống thú)
         pcall(function()
-            local args = {
-                "PetSwitchRideStatusChannel",
-                state
-            }
+            local args = { "PetSwitchRideStatusChannel", state }
             ReplicatedStorage:WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc"):InvokeServer(unpack(args))
         end)
     end
@@ -49,14 +48,36 @@ return function(Window, Utils, WebhookModule)
     local function SmartDismount()
         local isRiding = LocalPlayer:GetAttribute("RidePetId") ~= nil
         if isRiding then
-            ToggleMount(false) -- Gọi Remote để XUỐNG THÚ
-            
+            ToggleMount(false) 
             task.wait(0.3)
             local char = LocalPlayer.Character
             local humanoid = char and char:FindFirstChild("Humanoid")
             if humanoid then humanoid.Jump = true end
             task.wait(0.1)
         end
+    end
+
+    -- ==========================================
+    -- HÀM TIỆN ÍCH: ĐẾM NGƯỜI TRONG HẦM NGỤC
+    -- ==========================================
+    local function GetPlayersInDungeon(myHrp)
+        local count = 1 -- Luôn có bản thân mình
+        if not myHrp then return count end
+        
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character then
+                local pChar = p.Character
+                local pHrp = pChar:FindFirstChild("HumanoidRootPart")
+                local pHum = pChar:FindFirstChild("Humanoid")
+                if pHrp and pHum and pHum.Health > 0 then
+                    -- Kiểm tra xem người đó có đang ở cùng khu vực với mình không (bán kính 1000 stud)
+                    if (pHrp.Position - myHrp.Position).Magnitude < 1000 then
+                        count = count + 1
+                    end
+                end
+            end
+        end
+        return count
     end
 
     -- ==========================================
@@ -87,7 +108,7 @@ return function(Window, Utils, WebhookModule)
 
     DungeonTab:CreateSection("--- LOGIC TRONG HẦM NGỤC ---")
     DungeonTab:CreateToggle({ Name = "Tự Động Đánh Quái (Tối Ưu Phím M)", CurrentValue = false, Flag = "AutoAttack_V2", Callback = function(Value) autoAttackEnabled = Value end })
-    DungeonTab:CreateToggle({ Name = "Tự Động Thoát Màn 20", CurrentValue = false, Flag = "AutoExitDungeon", Callback = function(Value) autoExitEnabled = Value if not Value then autoExitTriggered = false stage20ClockStarted = false end end })
+    DungeonTab:CreateToggle({ Name = "Tự Động Thoát Màn 20 (Smart Exit)", CurrentValue = false, Flag = "AutoExitDungeon", Callback = function(Value) autoExitEnabled = Value if not Value then autoExitTriggered = false stage20ClockStarted = false waitingForHost = false end end })
 
     DungeonTab:CreateSection("--- LOGIC NGOÀI SẢNH (LOBBY) ---")
     DungeonTab:CreateToggle({ Name = "Tự Động Join Phòng Người Khác", CurrentValue = false, Flag = "AutoJoinOthers", Callback = function(Value) autoJoinOthersEnabled = Value end })
@@ -104,7 +125,6 @@ return function(Window, Utils, WebhookModule)
             elseif Option[1] == "2 (Hard)" then targetDifficulty = 2
             elseif Option[1] == "3 (Nightmare)" then targetDifficulty = 3
             elseif Option[1] == "4 (Inferno)" then targetDifficulty = 4
-            
             end
         end,
     })
@@ -119,24 +139,21 @@ return function(Window, Utils, WebhookModule)
         Callback = function(Value) targetPlayerCount = Value end,
     })
 
--- LOGIC GỌI REMOTE THOÁT
+    -- LOGIC GỌI REMOTE THOÁT
     local function SafeExitRoutine()
-        -- Gọi thẳng Remote để thoát thay vì click UI
         pcall(function()
-            local args = {
-                "ArenaLeaveChannel"
-            }
+            local args = { "ArenaLeaveChannel" }
             ReplicatedStorage:WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc"):InvokeServer(unpack(args))
         end)
         
         task.wait(1.5)
         
-        -- Cập nhật lại các biến trạng thái
         local checkLabStage = Utils.FindUIElementByName(playerGui, "LabStage")
         local currentStageText = checkLabStage and checkLabStage.Text or "Unknown"
         if currentStageText == "Unknown" or not string.match(currentStageText, "20/20") then 
             autoExitTriggered = false
             stage20ClockStarted = false 
+            waitingForHost = false
         else 
             autoExitTriggered = false 
         end
@@ -158,6 +175,7 @@ return function(Window, Utils, WebhookModule)
             local isInDungeon = (labStage and labStage.Text ~= "Unknown" and labStage.Text ~= "")
          
             if isInDungeon then
+                -- [LOGIC ĐÁNH QUÁI GIỮ NGUYÊN]
                 if autoAttackEnabled then
                     local monstersFolder = Workspace:FindFirstChild("Monsters")
                     local closestDist2D = math.huge
@@ -179,43 +197,34 @@ return function(Window, Utils, WebhookModule)
                     if bestTarget then
                         local targetPos = bestTarget:IsA("Model") and bestTarget.PrimaryPart and bestTarget.PrimaryPart.Position or bestTarget.Position
                         
-                        -- FIX Y-OFFSET (CỘNG THÊM 3 VÀO TRỤC Y) KHI TELEPORT ĐỂ KHÔNG BỊ LÚN ĐẤT
-                        -- NẾU QUÁI Ở XA HƠN 40 STUDS
                         if closestDist2D > 40 then
-                            ToggleMount(true) -- [LỆNH MỚI] Gọi Remote để CƯỠI THÚ LÊN trước khi Teleport
+                            ToggleMount(true)
                             task.wait(0.2)
-                            
                             hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 4)) 
                             task.wait(0.2)
                             humanoid:MoveTo(hrp.Position) 
                             dungeonLastPosition = hrp.Position 
                             dungeonStuckTimer = 0 
-                            SmartDismount() -- Bay tới nơi thì tự động gọi Remote XUỐNG THÚ
+                            SmartDismount()
                         elseif closestDist2D > 12 then
                             humanoid:MoveTo(targetPos)
                             if dungeonLastPosition and (hrp.Position - dungeonLastPosition).Magnitude < 1 then
                                 dungeonStuckTimer = dungeonStuckTimer + 0.5
                                 if dungeonStuckTimer >= 3 then 
-                                    -- CỘNG THÊM 3 VÀO TRỤC Y KHI BỊ KẸT
                                     hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 3)) 
                                     dungeonStuckTimer = 0 
                                 end
                             else dungeonStuckTimer = 0 end
                             dungeonLastPosition = hrp.Position
                         else
-                            -- KHI ĐÃ ĐỦ TẦM ĐÁNH
                             humanoid:MoveTo(hrp.Position) 
                             dungeonStuckTimer = 0 
                             SmartDismount()
                             
                             local id = tonumber(bestTarget.Name:match("Monster_(%d+)"))
                             if id then
-                                -- Gọi thẳng Remote đánh quái
                                 pcall(function()
-                                    local args = {
-                                        "MonsterAttackChannel",
-                                        id
-                                    }
+                                    local args = { "MonsterAttackChannel", id }
                                     ReplicatedStorage:WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc"):InvokeServer(unpack(args))
                                 end)
                             end
@@ -223,21 +232,64 @@ return function(Window, Utils, WebhookModule)
                     else dungeonStuckTimer = 0 SmartDismount() end
                 end
 
+                -- [LOGIC THOÁT HẦM NGỤC THÔNG MINH (CẬP NHẬT MỚI)]
                 if autoExitEnabled and not autoExitTriggered then
                     local fmTimeFrame = nil
                     pcall(function() fmTimeFrame = playerGui.MainGui.ScreenGui.ArenaMainRightTopView.FmTime end)
                     local currentStage, maxStage = string.match(labStage.Text, "(%d+)/(%d+)")
+                    
                     if currentStage and maxStage and tonumber(currentStage) == tonumber(maxStage) then
-                        if fmTimeFrame and fmTimeFrame.Visible == true then if not stage20ClockStarted then stage20ClockStarted = true DungeonStatus:Set("Trạng thái: Đồng hồ màn 20 đã chạy...") end end
-                        if stage20ClockStarted and (not fmTimeFrame or fmTimeFrame.Visible == false) then
-                            autoExitTriggered = true DungeonStatus:Set("Trạng thái: Boss gục, chuẩn bị click thoát...")
-                            task.spawn(function() if WebhookModule and WebhookModule.SendNotification then WebhookModule.SendNotification("**" .. LocalPlayer.Name .. "** vừa hoàn thành vòng Dungeon 20/20!") end end)
-                            task.spawn(SafeExitRoutine)
+                        if fmTimeFrame and fmTimeFrame.Visible == true then 
+                            if not stage20ClockStarted then 
+                                stage20ClockStarted = true
+                                waitingForHost = false -- Đảm bảo biến chờ được reset
+                                DungeonStatus:Set("Trạng thái: Đồng hồ màn 20 đã chạy...") 
+                            end 
                         end
-                    else stage20ClockStarted = false; autoExitTriggered = false end
+                        
+                        if stage20ClockStarted and (not fmTimeFrame or fmTimeFrame.Visible == false) then
+                            -- Nếu đang bật chế độ Đi Ké -> Bật logic đếm ngược 60s
+                            if autoJoinOthersEnabled then
+                                if not waitingForHost then
+                                    waitingForHost = true
+                                    dungeonCompletionTime = tick()
+                                    DungeonStatus:Set("Trạng thái: Đợi chủ phòng chạy lại (Tối đa 60s)...")
+                                else
+                                    local elapsed = math.floor(tick() - dungeonCompletionTime)
+                                    local playersInside = GetPlayersInDungeon(hrp)
+                                    
+                                    -- Kiểm tra 2 điều kiện: Quá 60s HOẶC chỉ còn lại 1 mình
+                                    if playersInside <= 1 then
+                                        autoExitTriggered = true 
+                                        DungeonStatus:Set("Trạng thái: Chủ phòng đã out (hết key), tự động thoát!")
+                                        task.spawn(function() if WebhookModule and WebhookModule.SendNotification then WebhookModule.SendNotification("**" .. LocalPlayer.Name .. "** thoát Hầm ngục vì chủ phòng sủi.") end end)
+                                        task.spawn(SafeExitRoutine)
+                                    elseif elapsed >= 60 then
+                                        autoExitTriggered = true 
+                                        DungeonStatus:Set("Trạng thái: Hết 60s chờ, tự động thoát!")
+                                        task.spawn(function() if WebhookModule and WebhookModule.SendNotification then WebhookModule.SendNotification("**" .. LocalPlayer.Name .. "** thoát Hầm ngục do Timeout 60s.") end end)
+                                        task.spawn(SafeExitRoutine)
+                                    else
+                                        DungeonStatus:Set(string.format("Trạng thái: Đợi chủ phòng (%ds/60s) - Số người: %d", elapsed, playersInside))
+                                    end
+                                end
+                            else
+                                -- Nếu đang Solo/Tự tạo phòng -> Thoát ngay lập tức như cũ
+                                autoExitTriggered = true 
+                                DungeonStatus:Set("Trạng thái: Boss gục, chuẩn bị click thoát...")
+                                task.spawn(function() if WebhookModule and WebhookModule.SendNotification then WebhookModule.SendNotification("**" .. LocalPlayer.Name .. "** vừa hoàn thành vòng Dungeon 20/20!") end end)
+                                task.spawn(SafeExitRoutine)
+                            end
+                        end
+                    else 
+                        -- Nếu màn chơi bị reset về 1/20 (chủ phòng bấm Start lại) -> Xóa toàn bộ trạng thái
+                        stage20ClockStarted = false
+                        autoExitTriggered = false 
+                        waitingForHost = false
+                    end
                 end
 
-            -- LOGIC SẢNH LOBBY
+            -- [LOGIC SẢNH LOBBY GIỮ NGUYÊN]
             else
                 if autoJoinOthersEnabled or autoCreateEnabled then
                     pcall(function()
@@ -260,7 +312,7 @@ return function(Window, Utils, WebhookModule)
                             local closestEmptyDist = math.huge
                             
                             local isPreparingRoom = false
-                            local preparingRoomNode = nil -- [THÊM MỚI] Lưu lại Object của phòng để lấy số hiệu Abyss
+                            local preparingRoomNode = nil 
 
                             for _, room in ipairs(abyssFolder:GetChildren()) do
                                 if string.match(room.Name, "Abyss_") then
@@ -302,7 +354,7 @@ return function(Window, Utils, WebhookModule)
 
                                             if surfaceGui.FmPrepare.Visible and dist < 12 then
                                                 isPreparingRoom = true
-                                                preparingRoomNode = room -- [THÊM MỚI] Gán phòng đang đứng vào biến
+                                                preparingRoomNode = room
                                             end
 
                                             if surfaceGui.FmEmpty.Visible and not autoJoinOthersEnabled then
@@ -316,7 +368,7 @@ return function(Window, Utils, WebhookModule)
                                 end
                             end
 
-                            -- THỰC THI HÀNH ĐỘNG
+                            -- THỰC THI HÀNH ĐỘNG SẢNH
                             if autoJoinOthersEnabled then
                                 DungeonStatus:Set("Sảnh: Đang tìm phòng có người...")
                                 if shouldJumpOut then if jumpOutTarget then hrp.CFrame = CFrame.new(jumpOutTarget + Vector3.new(0, 3, 0)) else hrp.CFrame = hrp.CFrame * CFrame.new(0, 0, 20) end task.wait(2)
@@ -325,7 +377,6 @@ return function(Window, Utils, WebhookModule)
                             elseif autoCreateEnabled then
                                 if isStartingDungeon then return end
 
-                                -- GIAI ĐOẠN 3: PHÒNG ĐÃ TẠO -> ĐỢI ĐỦ NGƯỜI VÀ BẤM START
                                 if isMyRoom and myRoomNode then
                                     local currentPlayerCount = 0
                                     for key, _ in pairs(myRoomNode:GetAttributes()) do
@@ -389,29 +440,17 @@ return function(Window, Utils, WebhookModule)
                                         DungeonStatus:Set("Sảnh: Đang chờ người " .. currentPlayerCount .. "/" .. targetPlayerCount) 
                                     end
 
-                                -- GIAI ĐOẠN 2: CHÂN ĐÃ CHẠM BỤC TRỐNG -> GỌI REMOTE TẠO PHÒNG
                                 elseif isPreparingRoom and preparingRoomNode then
                                     DungeonStatus:Set("Sảnh: Đang thiết lập Độ Khó và Tạo bằng Remote...")
-                                    
-                                    -- Lấy số hiệu bục (VD: Đứng ở "Abyss_2" thì sẽ bóc tách lấy số 2)
                                     local abyssIndex = tonumber(string.match(preparingRoomNode.Name, "Abyss_(%d+)")) or 1
-                                    
-                                    -- Tính toán độ khó (1 -> 1001, 2 -> 1002, 3 -> 1003)
                                     local difficultyCode = 1000 + targetDifficulty 
                                     
                                     pcall(function()
-                                        local args = {
-                                            "AbyssCreateTeamChannel",
-                                            abyssIndex,
-                                            difficultyCode,
-                                            targetPlayerCount -- Lấy trực tiếp từ thanh trượt cài đặt của UI (1-4)
-                                        }
+                                        local args = { "AbyssCreateTeamChannel", abyssIndex, difficultyCode, targetPlayerCount }
                                         game:GetService("ReplicatedStorage"):WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc"):InvokeServer(unpack(args))
                                     end)
-                                    
-                                    task.wait(1.5) -- Đợi một nhịp nhỏ để server load xong phòng
+                                    task.wait(1.5)
 
-                                -- GIAI ĐOẠN 1: TÌM BỤC TRỐNG ĐỂ NHẢY VÀO
                                 elseif emptyRoomToCreate then
                                     local distToEmpty = (hrp.Position - emptyRoomToCreate).Magnitude
                                     if distToEmpty > 15 then
