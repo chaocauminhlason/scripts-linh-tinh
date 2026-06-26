@@ -8,19 +8,18 @@ return function(Window, Utils)
     -- ==========================================
     -- HÀM XỬ LÝ CỐT LÕI (BYPASS UI)
     -- ==========================================
-    local function OpenGameUI(viewName)
+    local function OpenGameUI(viewName, ...)
+        local args = {...}
         local success, err = pcall(function()
             local env = getrenv()._G.PathTool
             if env then
-                -- Ưu tiên dùng ViewManagerBase
-                if env.ViewManagerBase and env.ViewManagerBase.OpenView then
-                    pcall(function() env.ViewManagerBase.OpenView(viewName) end)
-                    pcall(function() env.ViewManagerBase:OpenView(viewName) end)
+                -- Ưu tiên dùng ViewManagerBase với DẤU CHẤM
+                if env.ViewManagerBase and type(env.ViewManagerBase.OpenView) == "function" then
+                    env.ViewManagerBase.OpenView(viewName, unpack(args))
                 
                 -- Phương án dự phòng: Gọi thẳng hàm OnOpen
-                elseif env[viewName] and env[viewName].OnOpen then
-                    pcall(function() env[viewName].OnOpen(env[viewName]) end)
-                    pcall(function() env[viewName]:OnOpen() end)
+                elseif env[viewName] and type(env[viewName].OnOpen) == "function" then
+                    env[viewName].OnOpen(unpack(args))
                 end
             end
         end)
@@ -60,10 +59,19 @@ return function(Window, Utils)
     GuiTab:CreateButton({ Name = "🗼 Cửa Hàng Tháp (Tower Shop)", Callback = function() OpenGameUI("TowerShopView") end })
     GuiTab:CreateButton({ Name = "⚒️ Xưởng Chế Tạo (Craft)", Callback = function() OpenGameUI("SyntheticView") end })
     GuiTab:CreateButton({ Name = "🌌 Cửa Hàng Vực Thẳm (Abyss Shop)", Callback = function() OpenGameUI("AbyssShopView") end })
+    -- [THÊM MỚI]: Nút bấm Shop Trang bị Pet
+    GuiTab:CreateButton({ Name = "⚙️ Cửa Hàng Trang Bị Pet (Pet Gear Roll)", Callback = function() OpenGameUI("PetGearRollView") end })
 
     GuiTab:CreateSection("--- HOẠT ĐỘNG & SỰ KIỆN ---")
     GuiTab:CreateButton({ Name = "📋 Bảng Nhiệm Vụ (Tasks)", Callback = function() OpenGameUI("TaskView") end })
     GuiTab:CreateButton({ Name = "🎉 Trung Tâm Sự Kiện (Activity)", Callback = function() OpenGameUI("ActivityView") end })
+    
+    -- [THÊM MỚI]: Nút bấm sự kiện Trader Event (Mã sự kiện: 27)
+    GuiTab:CreateButton({ 
+        Name = "🎪 Cửa Hàng Sự Kiện (Trader Event)", 
+        Callback = function() OpenGameUI("ActivityPrizePullView", 27) end 
+    })
+    
     --GuiTab:CreateButton({ Name = "🎁 Vòng Quay/Gacha (Gamble)", Callback = function() OpenGameUI("GambleRewardView") end })
     GuiTab:CreateButton({ Name = "🏅 Nhiệm Vụ Sưu Tập (Collection/Medal)", Callback = function() OpenGameUI("MedalView") end })
     GuiTab:CreateButton({ Name = "🏆 Thành Tựu (Achieve)", Callback = function() OpenGameUI("AchieveView") end })
@@ -71,14 +79,6 @@ return function(Window, Utils)
     --GuiTab:CreateSection("--- HỆ THỐNG ---")
     --GuiTab:CreateButton({ Name = "⚙️ Mở Cài Đặt Game (Settings)", Callback = function() OpenGameUI("SettingView") end })
     --GuiTab:CreateButton({ Name = "🔑 Nhập Code (Code View)", Callback = function() OpenGameUI("CodeView") end })
-
-    -- ==========================================
-    -- GIAO DIỆN NÚT BẤM (CẬP NHẬT THÊM TRỨNG & PET)
-    -- ==========================================
-
-    --GuiTab:CreateSection("--- TRỨNG & ẤP TRỨNG ---")
-    --GuiTab:CreateButton({ Name = "🥚 Bảng Chọn Trứng (Egg Select)", Callback = function() OpenGameUI("EggSelectView") end })
-    --GuiTab:CreateButton({ Name = "⏩ Skip Ấp Trứng (Egg Hatch Skip)", Callback = function() OpenGameUI("EggHatchSkipView") end })
 
     GuiTab:CreateSection("--- KHO TÀNG & TÁI CHẾ PET ---")
     GuiTab:CreateButton({ Name = "🏦 Kho Lưu Trữ Pet (Pet Vault)", Callback = function() OpenGameUI("PetVaultView") end })
