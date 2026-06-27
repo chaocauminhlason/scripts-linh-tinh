@@ -1,6 +1,6 @@
 -- ====================================================================
 -- MODULE: DUNGEON AUTO (AUTO ATTACK, AUTO EXIT, AUTO JOIN & AUTO CREATE)
--- BẢN CẬP NHẬT: THÊM LOGIC CHỜ 60S KHI ĐI KÉ (AUTO JOIN)
+-- BẢN CẬP NHẬT: THÊM SLIDER CHỈNH THỜI GIAN CHỜ CHỦ PHÒNG (PHÚT)
 -- ====================================================================
 return function(Window, Utils, WebhookModule)
     local Players = game:GetService("Players")
@@ -30,6 +30,7 @@ return function(Window, Utils, WebhookModule)
     -- Các biến mới phục vụ logic đếm giờ đi ké
     local waitingForHost = false
     local dungeonCompletionTime = 0
+    local waitHostTimeoutMinutes = 1 -- Mặc định là 1 phút
 
     -- API Game
     local AbyssSystem = nil
@@ -70,7 +71,6 @@ return function(Window, Utils, WebhookModule)
                 local pHrp = pChar:FindFirstChild("HumanoidRootPart")
                 local pHum = pChar:FindFirstChild("Humanoid")
                 if pHrp and pHum and pHum.Health > 0 then
-                    -- Kiểm tra xem người đó có đang ở cùng khu vực với mình không (bán kính 1000 stud)
                     if (pHrp.Position - myHrp.Position).Magnitude < 1000 then
                         count = count + 1
                     end
@@ -109,6 +109,17 @@ return function(Window, Utils, WebhookModule)
     DungeonTab:CreateSection("--- LOGIC TRONG HẦM NGỤC ---")
     DungeonTab:CreateToggle({ Name = "Tự Động Đánh Quái (Tối Ưu Phím M)", CurrentValue = false, Flag = "AutoAttack_V2", Callback = function(Value) autoAttackEnabled = Value end })
     DungeonTab:CreateToggle({ Name = "Tự Động Thoát Màn 20 (Smart Exit)", CurrentValue = false, Flag = "AutoExitDungeon", Callback = function(Value) autoExitEnabled = Value if not Value then autoExitTriggered = false stage20ClockStarted = false waitingForHost = false end end })
+    
+    -- [THÊM MỚI]: Slider chỉnh thời gian chờ tính bằng Phút
+    DungeonTab:CreateSlider({
+        Name = "Thời gian tối đa chờ Chủ phòng (Phút)",
+        Range = {1, 5},
+        Increment = 1,
+        Suffix = "Phút",
+        CurrentValue = 1,
+        Flag = "WaitHostTimeout",
+        Callback = function(Value) waitHostTimeoutMinutes = Value end,
+    })
 
     DungeonTab:CreateSection("--- LOGIC NGOÀI SẢNH (LOBBY) ---")
     DungeonTab:CreateToggle({ Name = "Tự Động Join Phòng Người Khác", CurrentValue = false, Flag = "AutoJoinOthers", Callback = function(Value) autoJoinOthersEnabled = Value end })
@@ -232,7 +243,7 @@ return function(Window, Utils, WebhookModule)
                     else dungeonStuckTimer = 0 SmartDismount() end
                 end
 
-                -- [LOGIC THOÁT HẦM NGỤC THÔNG MINH (CẬP NHẬT MỚI)]
+                -- [LOGIC THOÁT HẦM NGỤC THÔNG MINH (CÓ SLIDER PHÚT)]
                 if autoExitEnabled and not autoExitTriggered then
                     local fmTimeFrame = nil
                     pcall(function() fmTimeFrame = playerGui.MainGui.ScreenGui.ArenaMainRightTopView.FmTime end)
@@ -242,39 +253,37 @@ return function(Window, Utils, WebhookModule)
                         if fmTimeFrame and fmTimeFrame.Visible == true then 
                             if not stage20ClockStarted then 
                                 stage20ClockStarted = true
-                                waitingForHost = false -- Đảm bảo biến chờ được reset
+                                waitingForHost = false
                                 DungeonStatus:Set("Trạng thái: Đồng hồ màn 20 đã chạy...") 
                             end 
                         end
                         
                         if stage20ClockStarted and (not fmTimeFrame or fmTimeFrame.Visible == false) then
-                            -- Nếu đang bật chế độ Đi Ké -> Bật logic đếm ngược 60s
                             if autoJoinOthersEnabled then
                                 if not waitingForHost then
                                     waitingForHost = true
                                     dungeonCompletionTime = tick()
-                                    DungeonStatus:Set("Trạng thái: Đợi chủ phòng chạy lại (Tối đa 60s)...")
+                                    DungeonStatus:Set(string.format("Trạng thái: Đợi chủ phòng chạy lại (Tối đa %d phút)...", waitHostTimeoutMinutes))
                                 else
                                     local elapsed = math.floor(tick() - dungeonCompletionTime)
                                     local playersInside = GetPlayersInDungeon(hrp)
+                                    local maxWaitSeconds = waitHostTimeoutMinutes * 60 -- Đổi Phút sang Giây
                                     
-                                    -- Kiểm tra 2 điều kiện: Quá 60s HOẶC chỉ còn lại 1 mình
                                     if playersInside <= 1 then
                                         autoExitTriggered = true 
                                         DungeonStatus:Set("Trạng thái: Chủ phòng đã out (hết key), tự động thoát!")
                                         task.spawn(function() if WebhookModule and WebhookModule.SendNotification then WebhookModule.SendNotification("**" .. LocalPlayer.Name .. "** thoát Hầm ngục vì chủ phòng sủi.") end end)
                                         task.spawn(SafeExitRoutine)
-                                    elseif elapsed >= 60 then
+                                    elseif elapsed >= maxWaitSeconds then
                                         autoExitTriggered = true 
-                                        DungeonStatus:Set("Trạng thái: Hết 60s chờ, tự động thoát!")
-                                        task.spawn(function() if WebhookModule and WebhookModule.SendNotification then WebhookModule.SendNotification("**" .. LocalPlayer.Name .. "** thoát Hầm ngục do Timeout 60s.") end end)
+                                        DungeonStatus:Set("Trạng thái: Hết thời gian chờ, tự động thoát!")
+                                        task.spawn(function() if WebhookModule and WebhookModule.SendNotification then WebhookModule.SendNotification(string.format("**%s** thoát Hầm ngục do Timeout (%d phút).", LocalPlayer.Name, waitHostTimeoutMinutes)) end end)
                                         task.spawn(SafeExitRoutine)
                                     else
-                                        DungeonStatus:Set(string.format("Trạng thái: Đợi chủ phòng (%ds/60s) - Số người: %d", elapsed, playersInside))
+                                        DungeonStatus:Set(string.format("Trạng thái: Đợi chủ phòng (%ds/%ds) - Số người: %d", elapsed, maxWaitSeconds, playersInside))
                                     end
                                 end
                             else
-                                -- Nếu đang Solo/Tự tạo phòng -> Thoát ngay lập tức như cũ
                                 autoExitTriggered = true 
                                 DungeonStatus:Set("Trạng thái: Boss gục, chuẩn bị click thoát...")
                                 task.spawn(function() if WebhookModule and WebhookModule.SendNotification then WebhookModule.SendNotification("**" .. LocalPlayer.Name .. "** vừa hoàn thành vòng Dungeon 20/20!") end end)
@@ -282,7 +291,6 @@ return function(Window, Utils, WebhookModule)
                             end
                         end
                     else 
-                        -- Nếu màn chơi bị reset về 1/20 (chủ phòng bấm Start lại) -> Xóa toàn bộ trạng thái
                         stage20ClockStarted = false
                         autoExitTriggered = false 
                         waitingForHost = false
