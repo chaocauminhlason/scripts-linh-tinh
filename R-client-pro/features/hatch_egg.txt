@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: SMART AUTO HATCH V7 (DOT SYNTAX & MULTI-POTION SUPPORT)
+-- MODULE: SMART AUTO HATCH V8 (FIX GHOST DATA & EMPTY TABLES)
 -- ====================================================================
 return function(Window, Utils)
     local EggTab = Window:CreateTab("Trứng & Ấp", 4483362458)
@@ -136,16 +136,12 @@ return function(Window, Utils)
                     
                     if hatchSettings.stopIfBagFull and currentPets >= maxPets and maxPets > 0 then
                         if hatchSettings.autoClaim or hatchSettings.autoStart or hatchSettings.autoSkip then
-                            -- Ép tắt các công tắc ở Backend
                             hatchSettings.autoClaim = false
                             hatchSettings.autoStart = false
                             hatchSettings.autoSkip = false
-                            
-                            -- Cập nhật lại giao diện UI Rayfield để người dùng thấy nó bị tắt
                             ToggleStart:Set(false)
                             ToggleSkip:Set(false)
                             ToggleClaim:Set(false)
-                            
                             game.StarterGui:SetCore("SendNotification", {Title = "CẢNH BÁO", Text = "Túi Pet ĐẦY! Đã tự động ngắt Auto Ấp Trứng.", Duration = 5})
                         end
                     end
@@ -158,7 +154,7 @@ return function(Window, Utils)
     -- LUỒNG 2: CORE LOGIC (START -> SKIP -> CLAIM)
     -- ==========================================
     task.spawn(function()
-        while task.wait(0.5) do -- Quét nửa giây một lần
+        while task.wait(0.5) do
             local env = getrenv()._G.PathTool
             if not env or not env.EggSystem then continue end
             
@@ -169,26 +165,31 @@ return function(Window, Utils)
             local currentTime = workspace:GetServerTimeNow()
 
             for slotNum = 1, hatchSettings.maxSlots do
-                local slotStr = tostring(slotNum) -- [QUAN TRỌNG]: Key của Data là String
+                local slotStr = tostring(slotNum)
                 local slotData = H[slotStr]
 
+                -- [ĐIỂM MẤU CHỐT]: Kiểm tra slot rỗng bằng hàm next() để chống lỗi Table Rỗng
+                local isSlotEmpty = false
+                if not slotData or next(slotData) == nil then
+                    isSlotEmpty = true
+                end
+
                 -- TRƯỜNG HỢP 1: Lò trống -> Bỏ trứng vào
-                if hatchSettings.autoStart and not slotData then
+                if hatchSettings.autoStart and isSlotEmpty then
                     pcall(function()
-                        -- [ĐÃ ĐẢO THAM SỐ]: (slot, eggId) theo đúng test 8
                         env.EggSystem.ClientHatchStart(slotNum, hatchSettings.eggIdToHatch)
                     end)
                     task.wait(0.2)
-                    continue -- Bỏ trứng xong thì qua slot khác, nhường nhịp sau xử lý tiếp
+                    continue 
                 end
 
-                if slotData then
+                -- TRƯỜNG HỢP CÓ TRỨNG
+                if not isSlotEmpty then
                     local T = slotData.T or 0
 
                     -- TRƯỜNG HỢP 2: Trứng đã chín -> Thu hoạch
                     if hatchSettings.autoClaim and (T == 0 or currentTime >= T) then
                         pcall(function()
-                            -- [DOT SYNTAX]: Dùng dấu chấm theo đúng test 18
                             env.EggSystem.ClientHatchTaken(slotNum)
                         end)
                         task.wait(0.2)
@@ -198,10 +199,8 @@ return function(Window, Utils)
                     -- TRƯỜNG HỢP 3: Trứng đang ấp -> Cắn vé
                     if hatchSettings.autoSkip and T > 0 and currentTime < T then
                         pcall(function()
-                            -- [THAM SỐ ẨN]: Truyền true để xác nhận xài vé theo đúng test 13
                             env.EggSystem.ClientHatchSkip(slotNum, true)
                         end)
-                        -- Delay 0.5s để server trừ giờ. Lần quét kế tiếp nếu vẫn còn giờ (T > currentTime) thì nó tự vã thêm lọ nữa.
                         task.wait(0.5) 
                         continue
                     end
