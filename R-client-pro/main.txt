@@ -1,12 +1,16 @@
 -- ====================================================================
 -- MAIN SCRIPT: Khởi chạy R-Client Pro (BẢN CHỐNG CACHE GITHUB)
--- VERSION: 2.6 - THÊM MAIN CONTROLLER
+-- VERSION: 2.7 - QUẢN LÝ NHÁNH (BRANCH) ĐỂ DỄ DÀNG TEST CODE
 -- ====================================================================
+-- [!] BIẾN QUẢN LÝ NHÁNH GITHUB (Thay đổi ở đây khi cần test bản nháp)
+local branch = "main" -- VD: Đổi thành "chaocauminhlason-patch-1" hoặc "dev"
+local repoUrl = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/" .. branch .. "/R-client-pro/"
+
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-    Name = "R-Client Pro Tool v2.5",
-    LoadingTitle = "Đang tải hệ thống Core...",
+    Name = "R-Client Pro Tool v2.7",
+    LoadingTitle = "Đang tải hệ thống Core... [" .. branch .. "]",
     LoadingSubtitle = "Dev by Sơn",
     ConfigurationSaving = { Enabled = true, FileName = "AutoFarmConfig" },
     KeySystem = false,
@@ -18,62 +22,64 @@ local Window = Rayfield:CreateWindow({
 local noCache = "?t=" .. tostring(os.time())
 
 -- Hàm tải an toàn siêu việt
-local function SafeLoad(url)
-    local success, result = pcall(function() return game:HttpGet(url .. noCache) end)
+local function SafeLoad(filePath)
+    -- Tự động ghép nối nhánh GitHub và đường dẫn file
+    local fullUrl = repoUrl .. filePath
+    
+    local success, result = pcall(function() return game:HttpGet(fullUrl .. noCache) end)
     if success then
         local func, err = loadstring(result)
         if func then 
             return func() 
         else 
-            warn("❌ Lỗi Cú Pháp tại: " .. url .. "\n" .. tostring(err)) 
+            warn("❌ Lỗi Cú Pháp tại: " .. fullUrl .. "\n" .. tostring(err)) 
         end
     else
-        warn("❌ Không kết nối được: " .. url)
+        warn("❌ Không kết nối được: " .. fullUrl)
     end
     return nil
 end
 
--- 1. Kéo các file Core
-local Utils = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/core/utilities.txt')
-local WebhookModule = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/core/webhook.txt')
+-- 1. Kéo các file Core (Chỉ cần ghi đường dẫn tương đối)
+local Utils = SafeLoad('core/utilities.txt')
+local WebhookModule = SafeLoad('core/webhook.txt')
 
 -- 2. Kéo các Features
 if Utils then
     -- ==========================================
     -- MAIN CONTROLLER - ĐIỀU KHIỂN TRUNG TÂM
     -- ==========================================
-    --local main = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/main.txt')
-    --if main then main(Window, Utils) end
+    -- local main = SafeLoad('features/main.txt')
+    -- if main then main(Window, Utils) end
 
     -- ==========================================
     -- CÁC MODULE CHỨC NĂNG
     -- ==========================================
-    local t = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/tracker.txt')
+    local t = SafeLoad('features/tracker.txt')
     if t then t(Window, Utils) end
 
-    local sg = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/shops_and_guis.txt')
+    local sg = SafeLoad('features/shops_and_guis.txt')
     if sg then sg(Window, Utils) end
 
-    local r = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/farm.txt')
+    local r = SafeLoad('features/farm.txt')
     if r then r(Window, Utils) end
     
-    local b = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/boss_hunt.txt')
+    local b = SafeLoad('features/boss_hunt.txt')
     if b then b(Window, Utils) end
     
-		local sm = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/chaocauminhlason-patch-1/R-client-pro/features/server_manager.txt')
-    --local sm = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/server_manager.txt')
+    local sm = SafeLoad('features/server_manager.txt')
     if sm then sm(Window, Utils) end
     
-    local d = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/auto_dungeon.txt')
+    local d = SafeLoad('features/auto_dungeon.txt')
     if d then d(Window, Utils, WebhookModule) end
     
-    local h = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/hatch_egg.txt')
+    local h = SafeLoad('features/hatch_egg.txt')
     if h then h(Window, Utils) end
 
-    local rift = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/auto_rift.txt')
+    local rift = SafeLoad('features/auto_rift.txt')
     if rift then rift(Window, Utils) end
     
-    local o = SafeLoad('https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/R-client-pro/features/optimization.txt')
+    local o = SafeLoad('features/optimization.txt')
     if o then o(Window, Utils) end
 end
 
@@ -82,4 +88,4 @@ if WebhookModule and WebhookModule.InitTab then
 end
 
 Rayfield:LoadConfiguration()
-Rayfield:Notify({ Title = "Thành Công!", Content = "Hệ thống R-Client Pro đã nạp đầy đủ Modules!", Duration = 5 })
+Rayfield:Notify({ Title = "Thành Công!", Content = "Hệ thống R-Client Pro (Nhánh: " .. branch .. ") đã nạp đầy đủ!", Duration = 5 })
