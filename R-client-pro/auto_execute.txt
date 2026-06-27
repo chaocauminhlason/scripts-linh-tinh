@@ -1,17 +1,24 @@
 -- =================================================================
--- KHÓA CHỐNG NHÂN BẢN (GLOBAL LOCK) - QUAN TRỌNG NHẤT
+-- KHÓA CHỐNG NHÂN BẢN (GLOBAL LOCK) 
 -- =================================================================
 if getgenv().R_Client_Pro_Running then 
-    warn("⏳ Tool đã hoạt động, chặn thực thi trùng lặp!")
-    return -- Nếu tool đã chạy rồi thì hủy luôn các bản sao khác
+    warn("⏳ Tool đã hoạt động, chặn thực thi trùng lặp! (Khởi động lại game nếu muốn test bản mới)")
+    return 
 end
 getgenv().R_Client_Pro_Running = true
 
 -- =================================================================
--- KHỞI TẠO ĐƯỜNG DẪN TỪ GITHUB CỦA BẠN
+-- KHỞI TẠO ĐƯỜNG DẪN (ĐỒNG BỘ NHÁNH VỚI MAIN.TXT)
 -- =================================================================
-local mainScriptLink = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/refs/heads/main/R-client-pro/main.txt"
-local autoExecLink = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/refs/heads/main/R-client-pro/auto_execute.txt"
+-- [!] Thay đổi nhánh ở đây cho khớp với main.txt đang test
+local branch = "main" 
+local repoUrl = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/" .. branch .. "/R-client-pro/"
+
+local mainScriptLink = repoUrl .. "main.txt"
+local autoExecLink = repoUrl .. "auto_execute.txt"
+
+-- Xuyên thủng cache GitHub 5 phút
+local noCache = "?t=" .. tostring(os.time())
 
 -- =================================================================
 -- 1. KỸ THUẬT A: VÒNG LẶP QUEUE ON TELEPORT VĨNH CỬU
@@ -22,26 +29,37 @@ local executeCode = [[
     -- Đợi PathTool tải xong hoàn toàn để chống Crash ngầm
     repeat task.wait(0.5) until getrenv()._G and getrenv()._G.PathTool
     
-    -- Load lại file auto_execute để tạo vòng lặp không bao giờ đứt
+    -- Load lại file auto_execute xuyên cache
     pcall(function()
-        loadstring(game:HttpGet("]] .. autoExecLink .. [["))()
+        loadstring(game:HttpGet("]] .. autoExecLink .. noCache .. [["))()
     end)
 ]]
 
 local queueFunc = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport) or getgenv().queue_on_teleport
 
 if queueFunc then
-    -- Chỉ cài queue 1 lần duy nhất, bỏ sự kiện OnTeleport đi vì nó gây nhân bản
     pcall(function() queueFunc(executeCode) end)
 end
 
 -- =================================================================
--- 2. CHẠY MAIN SCRIPT Ở SERVER HIỆN TẠI
+-- 2. CHẠY MAIN SCRIPT Ở SERVER HIỆN TẠI (CÓ BẮT LỖI CÚ PHÁP)
 -- =================================================================
 task.spawn(function()
-    pcall(function()
-        loadstring(game:HttpGet(mainScriptLink))()
+    local success, result = pcall(function() 
+        return game:HttpGet(mainScriptLink .. noCache) 
     end)
+    
+    if success then
+        local func, err = loadstring(result)
+        if func then 
+            func() -- Thực thi main.txt
+        else 
+            -- Bắt quả tang ngay nếu main.txt bị lỗi gõ phím
+            warn("❌ LỖI CÚ PHÁP TẠI MAIN.TXT:\n" .. tostring(err)) 
+        end
+    else
+        warn("❌ KHÔNG KẾT NỐI ĐƯỢC VỚI GITHUB! Kiểm tra lại Link hoặc Mạng.")
+    end
 end)
 
-print("🚀 Đã kích hoạt hệ thống Bám Dính Vĩnh Cửu (Đã bọc chống Clone)!")
+print("🚀 Đã kích hoạt hệ thống Bám Dính Vĩnh Cửu (Nhánh: " .. branch .. ")!")
