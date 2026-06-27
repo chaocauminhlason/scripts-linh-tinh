@@ -113,7 +113,7 @@ return function(Window, Utils, WebhookModule)
     -- [THÊM MỚI]: Slider chỉnh thời gian chờ tính bằng Phút
     DungeonTab:CreateSlider({
         Name = "Thời gian tối đa chờ Chủ phòng (Phút)",
-        Range = {1, 5},
+        Range = {1, 20},
         Increment = 1,
         Suffix = "Phút",
         CurrentValue = 1,
