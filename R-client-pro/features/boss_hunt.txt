@@ -78,7 +78,7 @@ print("DEBUG: Module BossHunt đang bắt đầu load...")
     -- ==========================================
     -- LƯU DANH SÁCH WORLD ĐÃ CHỌN
     -- ==========================================
-    local selectedWorldFile = "R_SelectedBossWorlds.json"
+    selectedWorlds = (Utils and Utils.LoadSelectedAreas) and Utils.LoadSelectedAreas("R_SelectedBossWorlds.json") or {2,3,4,5,6,7,8,9,10,11,12}
     
 
     local attackSettings = {
