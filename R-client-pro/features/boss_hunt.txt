@@ -1,20 +1,25 @@
 -- ====================================================================
--- MODULE: SĂN BOSS VIP (BẢN 4.2 - SMART RAM SCANNER)
--- DEV BY: SƠN | FIX LỖI ẨN HUMANOID VÀ CLIENTMONSTERS
+-- MODULE: SĂN BOSS VIP (BẢN 4.3 - FINAL FIX & CHAT INTEGRATION)
+-- DEV BY: SƠN | ĐỘC LẬP TÁC CHIẾN (RAM SCANNER + CHAT SCANNER)
 -- ====================================================================
 return function(Window, Utils)
---print("DEBUG: Module BossHunt đang bắt đầu load...")
-    local TextChatService = game:GetService("TextChatService")
     local Players = game:GetService("Players")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local HttpService = game:GetService("HttpService")
     local Workspace = game:GetService("Workspace")
-    local TeleportService = game:GetService("TeleportService")
+    local TextChatService = game:GetService("TextChatService")
     local LocalPlayer = Players.LocalPlayer
 
     -- ==========================================
     -- ĐĂNG KÝ VỚI MAIN CONTROLLER
     -- ==========================================
+    local attackSettings = {
+        enabled = false,
+        hitSpeed = 0.1,
+        selectedWorlds = {},
+        isTeleporting = false
+    }
+
     local function BossToggle(enable)
         attackSettings.enabled = enable
         _G.BossStatus.isActive = enable
@@ -29,7 +34,7 @@ return function(Window, Utils)
     end
 
     -- ==========================================
-    -- BOSS MAPPING: World ID → Boss Keyword
+    -- BOSS MAPPING & BIẾN TOÀN CỤC
     -- ==========================================
     local WorldBossMapping = {
         [2] = {"flaragon"},        -- Volcano
@@ -42,12 +47,9 @@ return function(Window, Utils)
         [9] = {"thunderclaw", "thunder", "claw"}, -- Blossom Haven
         [10] = {"lampyr"},         -- Mobius Circus
         [11] = {"scareaper", "scare", "reaper"},   -- Specter Shallows
-        [12] = {"Null"} -- Next update
+        [12] = {"Null"}            -- Nova Coast
     }
 
-    -- ==========================================
-    -- BIẾN TOÀN CỤC (BÁO CHO SERVER MANAGER)
-    -- ==========================================
     _G.BossStatus = _G.BossStatus or {
         isActive = false,
         bossFound = false,
@@ -63,13 +65,12 @@ return function(Window, Utils)
 
     local function GetAllBossKeywords(worldIds)
         local keywords = {}
+        if type(worldIds) ~= "table" then return keywords end
         for _, worldId in ipairs(worldIds) do
             local bossKws = WorldBossMapping[worldId]
             if bossKws then
                 for _, kw in ipairs(bossKws) do
-                    if not table.find(keywords, kw) then
-                        table.insert(keywords, kw)
-                    end
+                    if not table.find(keywords, kw) then table.insert(keywords, kw) end
                 end
             end
         end
@@ -77,23 +78,60 @@ return function(Window, Utils)
     end
 
     -- ==========================================
-    -- LƯU DANH SÁCH WORLD ĐÃ CHỌN
+    -- KHỞI TẠO DỮ LIỆU WORLD
     -- ==========================================
-    selectedWorlds = (Utils and Utils.LoadSelectedAreas) and Utils.LoadSelectedAreas("R_SelectedBossWorlds.json") or {2,3,4,5,6,7,8,9,10,11,12}
+    local defaultWorlds = {2,3,4,5,6,7,8,9,10,11,12}
+    local savedWorlds = nil
+    pcall(function()
+        if Utils and Utils.LoadSelectedAreas then
+            savedWorlds = Utils.LoadSelectedAreas("R_SelectedBossWorlds.json")
+        end
+    end)
     
-
--- Lấy data từ file JSON qua Utils an toàn
-    local savedWorlds = (Utils and Utils.LoadSelectedAreas) and Utils.LoadSelectedAreas("R_SelectedBossWorlds.json") or {2,3,4,5,6,7,8,9,10,11,12}
-
-    local attackSettings = {
-        enabled = false,
-        hitSpeed = 0.1,
-        selectedWorlds = savedWorlds, -- Truyền biến ở trên vào đây
-        isTeleporting = false
-    }
+    if type(savedWorlds) == "table" and #savedWorlds > 0 then
+        attackSettings.selectedWorlds = savedWorlds
+    else
+        attackSettings.selectedWorlds = defaultWorlds
+    end
 
     -- ==========================================
-    -- HÀM QUÉT BOSS MỚI (LẤY DỮ LIỆU TỪ RAM)
+    -- HỆ THỐNG ĐỌC CHAT TÌM BOSS (TÍCH HỢP)
+    -- ==========================================
+    local lastBossAlertTime = 0
+    local BOSS_ALERT_COOLDOWN = 30
+
+    local function CheckChatMessage(msg)
+        local lowerMsg = string.lower(msg)
+        if string.find(lowerMsg, "special boss") then return end
+        if not attackSettings.enabled then return end 
+        
+        if string.find(lowerMsg, " appear at ") or string.find(lowerMsg, " spawned") then
+            local currentTime = os.time()
+            if currentTime - lastBossAlertTime < BOSS_ALERT_COOLDOWN then return end
+            lastBossAlertTime = currentTime
+            
+            pcall(function()
+                if writefile then writefile("RClient_BossGlobalTimer.json", HttpService:JSONEncode({EndTime = os.time() + 300})) end
+            end)
+            
+            game.StarterGui:SetCore("SendNotification", { Title = "⚔️ Boss Alert!", Text = "Phát hiện Boss trên chat! Đang nhảy server...", Duration = 5 })
+            
+            if Utils and Utils.HopServer then Utils.HopServer("Phát hiện Boss từ kênh Chat...") end
+        end
+    end
+
+    local chatEvents = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
+    if chatEvents then 
+        chatEvents.OnMessageDoneFiltering.OnClientEvent:Connect(function(msgData) 
+            if msgData and msgData.Message then CheckChatMessage(msgData.Message) end
+        end) 
+    end
+    TextChatService.MessageReceived:Connect(function(msg) 
+        if msg and msg.Text then CheckChatMessage(msg.Text) end
+    end)
+
+    -- ==========================================
+    -- HÀM QUÉT BOSS TỪ RAM (THUẬT TOÁN TEST 34)
     -- ==========================================
     local function ScanBossInCurrentWorld()
         local currentWorldId = _G.BossStatus.currentWorldId
@@ -115,7 +153,6 @@ return function(Window, Utils)
                 local idStr = string.match(obj.Name, "Monster_(%d+)")
                 if idStr then
                     local uid = tonumber(idStr)
-                    
                     local success, info = pcall(function() return mgrMonster:GetMonsterInfo(uid) end)
                     if not success or not info then
                         success, info = pcall(function() return mgrMonster.GetMonsterInfo(uid) end)
@@ -146,93 +183,49 @@ return function(Window, Utils)
     end
 
     -- ==========================================
-    -- HÀM HOP SERVER
-    -- ==========================================
-    local function HopToNewServer(hopReason)
-        if attackSettings.isTeleporting then return false end
-        attackSettings.isTeleporting = true
-        
-        local PlaceId = game.PlaceId
-        local success, result = pcall(function()
-            local api = "https://games.roblox.com/v1/games/"..PlaceId.."/servers/Public?sortOrder=Asc&limit=100"
-            local data = game:HttpGet(api)
-            local json = HttpService:JSONDecode(data)
-            
-            if json and json.data then
-                local validServers = {}
-                for _, v in pairs(json.data) do
-                    if v.id and v.id ~= game.JobId then
-                        local playing = v.playing or 0
-                        local maxPlayers = v.maxPlayers or 0
-                        if playing < maxPlayers then
-                            table.insert(validServers, v.id)
-                        end
-                    end
-                end
-                
-                if #validServers > 0 then
-                    local targetId = validServers[math.random(1, math.min(#validServers, 5))]
-                    if targetId then
-                        game.StarterGui:SetCore("SendNotification", {
-                            Title = "🚀 Server Hop", 
-                            Text = hopReason or "Đang tìm server mới...",
-                            Duration = 5
-                        })
-                        TeleportService:TeleportToPlaceInstance(PlaceId, targetId, LocalPlayer)
-                        return true
-                    end
-                end
-            end
-            return false
-        end)
-        
-        attackSettings.isTeleporting = false
-        return success and result or false
-    end
-
-    -- ==========================================
-    -- UI LAYER 
+    -- UI LAYER (ĐÃ SỬA LỖI CALLBACK)
     -- ==========================================
     local BossTab = Window:CreateTab("Săn Boss", 4483345998)
     BossTab:CreateSection("--- CHỌN WORLD CÓ BOSS ---")
+    
+    local TargetLabel = BossTab:CreateLabel("🎯 Đã chọn " .. #attackSettings.selectedWorlds .. " world có boss")
     
     local worldDropdown = Utils.CreateAreaMultiSelect(BossTab, {
         name = "Chọn World Có Boss",
         flag = "BossWorldSelect",
         defaultAreas = Utils.GetAreaNamesByIds(attackSettings.selectedWorlds),
         callback = function(selectedIds, selectedNames)
-            -- Sửa lỗi dính chữ và thêm kiểm tra an toàn
-            local loadedWorlds = (Utils and Utils.LoadSelectedAreas) and Utils.LoadSelectedAreas("R_SelectedBossWorlds.json") or {2,3,4,5,6,7,8,9,10,11,12}
-            attackSettings.selectedWorlds = loadedWorlds
-            
-            if Utils and Utils.SaveSelectedAreas then
-                Utils.SaveSelectedAreas(selectedIds, "R_SelectedBossWorlds.json")
-            end
-            
-            local allKeywords = GetAllBossKeywords(selectedIds)
-            _G.BossStatus.targetBosses = allKeywords
-            
-            pcall(function()
-                if writefile then
-                    writefile("RClient_SelectedBossKeywords.json", HttpService:JSONEncode(allKeywords))
+            if type(selectedIds) == "table" then
+                attackSettings.selectedWorlds = selectedIds -- Lưu trực tiếp vào biến nhớ
+                
+                -- Lưu xuống File JSON
+                if Utils and Utils.SaveSelectedAreas then
+                    Utils.SaveSelectedAreas(selectedIds, "R_SelectedBossWorlds.json")
                 end
-            end)
-            
-            if #selectedIds == 0 then 
-                TargetLabel:Set("⚠️ Chưa chọn world nào!") 
-            else 
-                TargetLabel:Set("🎯 Đã chọn " .. #selectedIds .. " world có boss") 
+                
+                -- Cập nhật Keywords cho ServerManager
+                local allKeywords = GetAllBossKeywords(selectedIds)
+                _G.BossStatus.targetBosses = allKeywords
+                pcall(function()
+                    if writefile then writefile("RClient_SelectedBossKeywords.json", HttpService:JSONEncode(allKeywords)) end
+                end)
+                
+                if #selectedIds == 0 then 
+                    TargetLabel:Set("⚠️ Chưa chọn world nào!") 
+                else 
+                    TargetLabel:Set("🎯 Đã chọn " .. #selectedIds .. " world có boss") 
+                end
             end
         end
     })
 
-    local TargetLabel = BossTab:CreateLabel("🎯 Đã chọn " .. #attackSettings.selectedWorlds .. " world có boss")
     local BossStatusLabel = BossTab:CreateLabel("📊 Boss trên map: Chưa có")
     local WorldStatusLabel = BossTab:CreateLabel("🌍 World hiện tại: Chưa xác định")
 
     BossTab:CreateSection("--- AUTO SĂN BOSS & HOP SERVER ---")
     local StatusLabel = BossTab:CreateLabel("🔴 Trạng thái: Đang nghỉ")
 
+    -- NÚT BẬT TẮT ĐÃ TRỞ LẠI!
     BossTab:CreateToggle({
         Name = "Bật Auto Săn Boss (Tự động quét & hop server)",
         CurrentValue = false,
@@ -261,58 +254,8 @@ return function(Window, Utils)
         end
     })
 
--- ==========================================
-    -- HỆ THỐNG ĐỌC CHAT TÌM BOSS (CHUYỂN TỪ SERVER MANAGER)
     -- ==========================================
-    local lastBossAlertTime = 0
-    local BOSS_ALERT_COOLDOWN = 30
-
-    local function CheckChatMessage(msg)
-        local lowerMsg = string.lower(msg)
-        
-        -- Bỏ qua tin nhắn nạp thẻ/hệ thống linh tinh
-        if string.find(lowerMsg, "special boss") then return end
-        
-        -- Chỉ nghe chat khi Nút Auto Săn Boss đang BẬT
-        if not attackSettings.enabled then return end 
-        
-        if string.find(lowerMsg, " appear at ") or string.find(lowerMsg, " spawned") then
-            local currentTime = os.time()
-            if currentTime - lastBossAlertTime < BOSS_ALERT_COOLDOWN then return end
-            lastBossAlertTime = currentTime
-            
-            -- Ghi đè file Timer
-            if Utils and Utils.SaveJSON then
-                Utils.SaveJSON("RClient_BossGlobalTimer.json", {EndTime = os.time() + 300})
-            end
-            
-            game.StarterGui:SetCore("SendNotification", { 
-                Title = "⚔️ Boss Alert!", 
-                Text = "Phát hiện Boss trên chat! Đang nhảy server...", 
-                Duration = 5 
-            })
-            
-            -- Gọi Utils nhảy server luôn
-            if Utils and Utils.HopServer then
-                Utils.HopServer("Phát hiện Boss từ kênh Chat...")
-            end
-        end
-    end
-
-    -- Kết nối vào 2 hệ thống Chat cũ và mới của Roblox
-    local chatEvents = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
-    if chatEvents then 
-        chatEvents.OnMessageDoneFiltering.OnClientEvent:Connect(function(msgData) 
-            if msgData and msgData.Message then CheckChatMessage(msgData.Message) end
-        end) 
-    end
-    
-    TextChatService.MessageReceived:Connect(function(msg) 
-        if msg and msg.Text then CheckChatMessage(msg.Text) end
-    end)
-
-    -- ==========================================
-    -- MAIN LOOP
+    -- MAIN LOOP 
     -- ==========================================
     task.spawn(function()
         local DataPullFunc = nil
@@ -374,12 +317,14 @@ return function(Window, Utils)
                     
                     if nextIndex == 1 then
                         StatusLabel:Set("🔄 Trạng thái: Đã quét hết world, hop server...")
-                        if HopToNewServer("Không tìm thấy boss, đang tìm server mới...") then
-                            task.wait(5)
-                            local firstWorld = attackSettings.selectedWorlds[1]
-                            _G.BossStatus.currentWorldId = firstWorld
-                            _G.BossStatus.currentWorldIndex = 1
-                            Utils.TeleportToArea(firstWorld)
+                        if Utils and Utils.HopServer then
+                            if Utils.HopServer("Không tìm thấy boss, đang tìm server mới...") then
+                                task.wait(5)
+                                local firstWorld = attackSettings.selectedWorlds[1]
+                                _G.BossStatus.currentWorldId = firstWorld
+                                _G.BossStatus.currentWorldIndex = 1
+                                Utils.TeleportToArea(firstWorld)
+                            end
                         end
                     else
                         StatusLabel:Set("🔄 Trạng thái: Di chuyển đến world tiếp theo...")
@@ -392,7 +337,7 @@ return function(Window, Utils)
     end)
 
     BossTab:CreateSection("--- ĐIỀU KHIỂN THỦ CÔNG ---")
-    BossTab:CreateButton({ Name = "🌐 HOP SERVER TÌM BOSS", Callback = function() HopToNewServer("Đang tìm server có boss...") end })
+    BossTab:CreateButton({ Name = "🌐 HOP SERVER TÌM BOSS", Callback = function() if Utils and Utils.HopServer then Utils.HopServer("Đang tìm server có boss...") end end })
     BossTab:CreateButton({
         Name = "🌍 DI CHUYỂN ĐẾN WORLD TIẾP THEO",
         Callback = function()
@@ -405,5 +350,5 @@ return function(Window, Utils)
     })
     BossTab:CreateButton({ Name = "🏠 VỀ STARTER ISLAND", Callback = function() Utils.TeleportToStarterIsland() end })
 
-    print("✅ Boss Hunt 4.2 (Smart RAM Scanner) loaded successfully!")
+    print("✅ Boss Hunt 4.3 (Final Fix) loaded successfully!")
 end
