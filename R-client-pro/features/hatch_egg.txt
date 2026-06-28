@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: SMART AUTO HATCH V8 (FIX GHOST DATA & EMPTY TABLES)
+-- MODULE: SMART AUTO HATCH V9 (MULTI-EGG SELECT)
 -- ====================================================================
 return function(Window, Utils)
     local EggTab = Window:CreateTab("Trứng & Ấp", 4483362458)
@@ -9,8 +9,9 @@ return function(Window, Utils)
         autoSkip = false,
         autoClaim = false,
         stopIfBagFull = true,
-        eggIdToHatch = 1,
-        maxSlots = 1 
+        selectedEggIds = {},      -- Danh sách ID các loại trứng được chọn
+        maxSlots = 1,
+        currentEggIndex = 1       -- Dùng để luân phiên chọn trứng
     }
 
     -- ==========================================
@@ -44,6 +45,13 @@ return function(Window, Utils)
         eggIdMap["⚠️ Bấm Refresh để tải danh sách!"] = 1
     end
 
+    -- Mặc định chọn tất cả
+    for _, opt in ipairs(eggOptions) do
+        if eggIdMap[opt] and eggIdMap[opt] ~= 1 then
+            table.insert(hatchSettings.selectedEggIds, eggIdMap[opt])
+        end
+    end
+
     -- ==========================================
     -- GIAO DIỆN UI
     -- ==========================================
@@ -63,18 +71,40 @@ return function(Window, Utils)
         end,
     })
 
-    EggTab:CreateSection("--- CHỌN TRỨNG ---")
-    local EggDropdown = EggTab:CreateDropdown({
-        Name = "Chọn Loại Trứng",
-        Options = eggOptions,
-        CurrentOption = {eggOptions[1]},
-        MultipleOptions = false,
-        Flag = "EggSelectDropdown",
-        Callback = function(Options)
-            local selectedString = Options[1]
-            if eggIdMap[selectedString] then
-                hatchSettings.eggIdToHatch = eggIdMap[selectedString]
+    EggTab:CreateSection("--- CHỌN TRỨNG (ĐA CHỌN) ---")
+    
+    -- Lấy danh sách tên đã chọn mặc định
+    local function GetDefaultSelectedNames()
+        local names = {}
+        for _, id in ipairs(hatchSettings.selectedEggIds) do
+            for displayStr, eid in pairs(eggIdMap) do
+                if eid == id then
+                    table.insert(names, displayStr)
+                    break
+                end
             end
+        end
+        return names
+    end
+
+    local EggDropdown = EggTab:CreateDropdown({
+        Name = "Chọn Các Loại Trứng (Chọn nhiều)",
+        Options = eggOptions,
+        CurrentOption = #hatchSettings.selectedEggIds > 0 and GetDefaultSelectedNames() or {eggOptions[1]},
+        MultipleOptions = true,
+        Flag = "EggSelectMultiDropdown",
+        Callback = function(Options)
+            -- Cập nhật danh sách ID được chọn
+            local ids = {}
+            for _, opt in ipairs(Options) do
+                if eggIdMap[opt] then
+                    table.insert(ids, eggIdMap[opt])
+                end
+            end
+            hatchSettings.selectedEggIds = ids
+            
+            -- Reset index luân phiên
+            hatchSettings.currentEggIndex = 1
         end,
     })
 
@@ -85,6 +115,14 @@ return function(Window, Utils)
             eggIdMap = {}
             if LoadEggData() and #eggOptions > 0 then
                 EggDropdown:Refresh(eggOptions)
+                -- Reset selected
+                hatchSettings.selectedEggIds = {}
+                for _, opt in ipairs(eggOptions) do
+                    if eggIdMap[opt] and eggIdMap[opt] ~= 1 then
+                        table.insert(hatchSettings.selectedEggIds, eggIdMap[opt])
+                    end
+                end
+                EggDropdown:SetCurrentOption(GetDefaultSelectedNames())
             end
         end
     })
@@ -164,21 +202,41 @@ return function(Window, Utils)
             local H = clientEgg.saveData and clientEgg.saveData.H or {}
             local currentTime = workspace:GetServerTimeNow()
 
+            -- Nếu không có loại trứng nào được chọn, bỏ qua
+            if #hatchSettings.selectedEggIds == 0 then
+                -- Hiển thị cảnh báo trên UI (có thể thêm label)
+                continue
+            end
+
             for slotNum = 1, hatchSettings.maxSlots do
                 local slotStr = tostring(slotNum)
                 local slotData = H[slotStr]
 
-                -- [ĐIỂM MẤU CHỐT]: Kiểm tra slot rỗng bằng hàm next() để chống lỗi Table Rỗng
                 local isSlotEmpty = false
                 if not slotData or next(slotData) == nil then
                     isSlotEmpty = true
                 end
 
-                -- TRƯỜNG HỢP 1: Lò trống -> Bỏ trứng vào
+                -- TRƯỜNG HỢP 1: Lò trống -> Bỏ trứng vào (luân phiên các loại đã chọn)
                 if hatchSettings.autoStart and isSlotEmpty then
+                    -- Lấy eggId tiếp theo trong danh sách (luân phiên)
+                    local eggId = hatchSettings.selectedEggIds[hatchSettings.currentEggIndex]
+                    if not eggId then
+                        -- Nếu index vượt quá, quay lại đầu
+                        hatchSettings.currentEggIndex = 1
+                        eggId = hatchSettings.selectedEggIds[1]
+                    end
+                    
                     pcall(function()
-                        env.EggSystem.ClientHatchStart(slotNum, hatchSettings.eggIdToHatch)
+                        env.EggSystem.ClientHatchStart(slotNum, eggId)
                     end)
+                    
+                    -- Chuyển sang loại trứng tiếp theo cho lần sau
+                    hatchSettings.currentEggIndex = hatchSettings.currentEggIndex + 1
+                    if hatchSettings.currentEggIndex > #hatchSettings.selectedEggIds then
+                        hatchSettings.currentEggIndex = 1
+                    end
+                    
                     task.wait(0.2)
                     continue 
                 end
