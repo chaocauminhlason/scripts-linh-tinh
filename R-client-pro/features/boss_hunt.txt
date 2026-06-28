@@ -81,10 +81,13 @@ print("DEBUG: Module BossHunt đang bắt đầu load...")
     selectedWorlds = (Utils and Utils.LoadSelectedAreas) and Utils.LoadSelectedAreas("R_SelectedBossWorlds.json") or {2,3,4,5,6,7,8,9,10,11,12}
     
 
+-- Lấy data từ file JSON qua Utils an toàn
+    local savedWorlds = (Utils and Utils.LoadSelectedAreas) and Utils.LoadSelectedAreas("R_SelectedBossWorlds.json") or {2,3,4,5,6,7,8,9,10,11,12}
+
     local attackSettings = {
         enabled = false,
         hitSpeed = 0.1,
-        selectedWorlds = LoadSelectedWorlds(),
+        selectedWorlds = savedWorlds, -- Truyền biến ở trên vào đây
         isTeleporting = false
     }
 
@@ -197,7 +200,13 @@ print("DEBUG: Module BossHunt đang bắt đầu load...")
         flag = "BossWorldSelect",
         defaultAreas = Utils.GetAreaNamesByIds(attackSettings.selectedWorlds),
         callback = function(selectedIds, selectedNames)
-            attackSettings.selectedWorlds = pcall(function() return Utils.LoadSelectedAreas("R_SelectedBossWorlds.json") end) and Utils.LoadSelectedAreas("R_SelectedBossWorlds.json") or {2,3,4,5,6,7,8,9,10,11,12}Utils.SaveSelectedAreas(selectedIds, "R_SelectedBossWorlds.json")
+            -- Sửa lỗi dính chữ và thêm kiểm tra an toàn
+            local loadedWorlds = (Utils and Utils.LoadSelectedAreas) and Utils.LoadSelectedAreas("R_SelectedBossWorlds.json") or {2,3,4,5,6,7,8,9,10,11,12}
+            attackSettings.selectedWorlds = loadedWorlds
+            
+            if Utils and Utils.SaveSelectedAreas then
+                Utils.SaveSelectedAreas(selectedIds, "R_SelectedBossWorlds.json")
+            end
             
             local allKeywords = GetAllBossKeywords(selectedIds)
             _G.BossStatus.targetBosses = allKeywords
@@ -208,7 +217,11 @@ print("DEBUG: Module BossHunt đang bắt đầu load...")
                 end
             end)
             
-            if #selectedIds == 0 then TargetLabel:Set("⚠️ Chưa chọn world nào!") else TargetLabel:Set("🎯 Đã chọn " .. #selectedIds .. " world có boss") end
+            if #selectedIds == 0 then 
+                TargetLabel:Set("⚠️ Chưa chọn world nào!") 
+            else 
+                TargetLabel:Set("🎯 Đã chọn " .. #selectedIds .. " world có boss") 
+            end
         end
     })
 
