@@ -39,7 +39,8 @@ return function(Window, Utils)
         [8] = {"dracospike", "draco", "gai"},     -- Dragon's Breath
         [9] = {"thunderclaw", "thunder", "claw"}, -- Blossom Haven
         [10] = {"lampyr"},         -- Mobius Circus
-        [11] = {"scareaper", "scare", "reaper"}   -- Specter Shallows
+        [11] = {"scareaper", "scare", "reaper"},   -- Specter Shallows
+        [12] = {"Null"} -- Next update
     }
 
     -- ==========================================
@@ -195,8 +196,7 @@ return function(Window, Utils)
         flag = "BossWorldSelect",
         defaultAreas = Utils.GetAreaNamesByIds(attackSettings.selectedWorlds),
         callback = function(selectedIds, selectedNames)
-            attackSettings.selectedWorlds = Utils.LoadSelectedAreas("R_SelectedBossWorlds.json")
-            Utils.SaveSelectedAreas(selectedIds, "R_SelectedBossWorlds.json")
+            attackSettings.selectedWorlds = pcall(function() return Utils.LoadSelectedAreas("R_SelectedBossWorlds.json") end) and Utils.LoadSelectedAreas("R_SelectedBossWorlds.json") or {2,3,4,5,6,7,8,9,10,11,12}Utils.SaveSelectedAreas(selectedIds, "R_SelectedBossWorlds.json")
             
             local allKeywords = GetAllBossKeywords(selectedIds)
             _G.BossStatus.targetBosses = allKeywords
