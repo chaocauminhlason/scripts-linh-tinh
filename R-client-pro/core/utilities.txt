@@ -716,5 +716,66 @@ function Utils.LoadSelectedAreas(fileName)
     return {}
 end
 
+-- ==========================================
+-- HÀM MỞ RỘNG CHO UTILITIES
+-- ==========================================
+
+-- 1. Lưu/Đọc JSON an toàn
+function Utils.SaveJSON(fileName, data)
+    pcall(function() if writefile then writefile(fileName, HttpService:JSONEncode(data)) end end)
+end
+
+function Utils.LoadJSON(fileName)
+    if isfile and isfile(fileName) then
+        local success, data = pcall(function() return HttpService:JSONDecode(readfile(fileName)) end)
+        return success and data or {}
+    end
+    return {}
+end
+
+-- 2. Hệ thống Boss Scanner Core (Sử dụng logic của Test Script 34)
+function Utils.ScanBossByKeywords(keywords)
+    local env = getrenv()._G.PathTool
+    if not env or not env.MgrMonsterClient or not env.CfgMonster then return nil end
+    
+    local clientMonsters = Workspace:FindFirstChild("ClientMonsters")
+    if not clientMonsters then return nil end
+
+    for _, obj in pairs(clientMonsters:GetChildren()) do
+        local idStr = string.match(obj.Name, "Monster_(%d+)")
+        if idStr then
+            local uid = tonumber(idStr)
+            local success, info = pcall(function() return env.MgrMonsterClient:GetMonsterInfo(uid) end)
+            if success and info then
+                local tmplId = info.tmplId or info.TmplId or info.id
+                local cfgData = env.CfgMonster.Tmpls[tostring(tmplId)] or env.CfgMonster.Tmpls[tonumber(tmplId)]
+                if cfgData then
+                    local realName = (cfgData.Name or ""):lower()
+                    for _, kw in pairs(keywords) do
+                        if realName:find(kw:lower()) then
+                            local root = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+                            return {name = realName, pos = root and root.Position or obj.Position, uid = uid}
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+-- Kiểm tra thời tiết hiện tại
+function Utils.GetCurrentWeather(weatherMap)
+    local env = getrenv()._G.PathTool
+    if env and env.WeatherSystem and type(env.WeatherSystem.IsWeatherActive) == "function" then
+        for name, id in pairs(weatherMap) do
+            local ok, isActive = pcall(function() return env.WeatherSystem.IsWeatherActive(id) end)
+            if ok and isActive then return name, id end
+        end
+    end
+    return "Bình Thường", 0
+end
+
+
+
 -- Trả về bảng Utils
 return Utils
