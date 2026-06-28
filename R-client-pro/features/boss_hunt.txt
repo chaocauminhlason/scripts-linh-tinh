@@ -3,7 +3,8 @@
 -- DEV BY: SƠN | FIX LỖI ẨN HUMANOID VÀ CLIENTMONSTERS
 -- ====================================================================
 return function(Window, Utils)
-print("DEBUG: Module BossHunt đang bắt đầu load...")
+--print("DEBUG: Module BossHunt đang bắt đầu load...")
+    local TextChatService = game:GetService("TextChatService")
     local Players = game:GetService("Players")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local HttpService = game:GetService("HttpService")
@@ -259,6 +260,56 @@ print("DEBUG: Module BossHunt đang bắt đầu load...")
             end
         end
     })
+
+-- ==========================================
+    -- HỆ THỐNG ĐỌC CHAT TÌM BOSS (CHUYỂN TỪ SERVER MANAGER)
+    -- ==========================================
+    local lastBossAlertTime = 0
+    local BOSS_ALERT_COOLDOWN = 30
+
+    local function CheckChatMessage(msg)
+        local lowerMsg = string.lower(msg)
+        
+        -- Bỏ qua tin nhắn nạp thẻ/hệ thống linh tinh
+        if string.find(lowerMsg, "special boss") then return end
+        
+        -- Chỉ nghe chat khi Nút Auto Săn Boss đang BẬT
+        if not attackSettings.enabled then return end 
+        
+        if string.find(lowerMsg, " appear at ") or string.find(lowerMsg, " spawned") then
+            local currentTime = os.time()
+            if currentTime - lastBossAlertTime < BOSS_ALERT_COOLDOWN then return end
+            lastBossAlertTime = currentTime
+            
+            -- Ghi đè file Timer
+            if Utils and Utils.SaveJSON then
+                Utils.SaveJSON("RClient_BossGlobalTimer.json", {EndTime = os.time() + 300})
+            end
+            
+            game.StarterGui:SetCore("SendNotification", { 
+                Title = "⚔️ Boss Alert!", 
+                Text = "Phát hiện Boss trên chat! Đang nhảy server...", 
+                Duration = 5 
+            })
+            
+            -- Gọi Utils nhảy server luôn
+            if Utils and Utils.HopServer then
+                Utils.HopServer("Phát hiện Boss từ kênh Chat...")
+            end
+        end
+    end
+
+    -- Kết nối vào 2 hệ thống Chat cũ và mới của Roblox
+    local chatEvents = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
+    if chatEvents then 
+        chatEvents.OnMessageDoneFiltering.OnClientEvent:Connect(function(msgData) 
+            if msgData and msgData.Message then CheckChatMessage(msgData.Message) end
+        end) 
+    end
+    
+    TextChatService.MessageReceived:Connect(function(msg) 
+        if msg and msg.Text then CheckChatMessage(msg.Text) end
+    end)
 
     -- ==========================================
     -- MAIN LOOP
