@@ -1,27 +1,20 @@
 -- ====================================================================
--- MODULE: QUẢN LÝ SERVER & AUTO HOP (V3.1 - FULL FEATURES RESTORED)
--- TÍCH HỢP: ANTI-KICK 279, CHAT SCANNER, VÀ SMART UTILS
+-- MODULE: QUẢN LÝ SERVER & AUTO HOP (V3.3 - THUẦN TÚY WEATHER & ANTI-KICK)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
     local TeleportService = game:GetService("TeleportService")
-    local TextChatService = game:GetService("TextChatService")
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local HttpService = game:GetService("HttpService")
     local CoreGui = game:GetService("CoreGui")
     local VirtualInputManager = game:GetService("VirtualInputManager")
     local LocalPlayer = Players.LocalPlayer
 
     -- Biến cấu hình nội bộ
     local weatherHopSettings = { enabled = false, targetIds = {60001} }
-    local bossHopSettings = { enabled = false }
     local autoRejoinEnabled = false
-    
-    local lastBossAlertTime = 0
-    local BOSS_ALERT_COOLDOWN = 30
     local sessionStartTime = os.time()
 
     _G.ServerManager = {
-        isBossPresent = false,
         pauseFarm = false,
         currentWeather = "Bình Thường"
     }
@@ -45,7 +38,7 @@ return function(Window, Utils)
         end
     end)
 
-    ServerTab:CreateSection("--- TÌM KIẾM THỜI TIẾT & BOSS ---")
+    ServerTab:CreateSection("--- TÌM KIẾM THỜI TIẾT VIP ---")
 
     local WeatherMap = {
         ["Ban Ngày (Day)"] = 10001, ["Ban Đêm (Night)"] = 10002, ["Nhiều Mây (Cloudy)"] = 20002,
@@ -80,20 +73,81 @@ return function(Window, Utils)
         Callback = function(Value) weatherHopSettings.enabled = Value end
     })
 
-
-
+    -- ==========================================
+    -- HÀM MANUAL HOP (DÙNG RIÊNG CHO NÚT BẤM)
+    -- ==========================================
+    local isManualTeleporting = false
+    local function ManualHop(mode)
+        if isManualTeleporting then return end
+        isManualTeleporting = true
+        
+        local PlaceId = game.PlaceId
+        pcall(function()
+            local api = "https://games.roblox.com/v1/games/"..PlaceId.."/servers/Public?sortOrder=Asc&limit=100"
+            local data = game:HttpGet(api)
+            local json = HttpService:JSONDecode(data)
+            
+            if json and json.data then
+                local validServers = {}
+                for _, v in pairs(json.data) do
+                    if v.id and v.id ~= game.JobId then
+                        local playing = v.playing or 0
+                        local maxPlayers = v.maxPlayers or 0
+                        if playing < maxPlayers then
+                            table.insert(validServers, {id = v.id, playing = playing})
+                        end
+                    end
+                end
+                
+                if #validServers > 0 then
+                    -- Luôn sort số người chơi từ thấp lên cao
+                    table.sort(validServers, function(a, b) return a.playing < b.playing end)
+                    
+                    local targetId
+                    if mode == "least" then
+                        targetId = validServers[1].id -- Lấy thằng đầu tiên (ít người nhất)
+                    else
+                        targetId = validServers[math.random(1, #validServers)].id -- Bốc random 1 server bất kỳ
+                    end
+                    
+                    if targetId then
+                        game.StarterGui:SetCore("SendNotification", {
+                            Title = "🚀 Server Hop", 
+                            Text = mode == "least" and "Đang nhảy qua server vắng nhất..." or "Đang nhảy qua server ngẫu nhiên...",
+                            Duration = 5
+                        })
+                        TeleportService:TeleportToPlaceInstance(PlaceId, targetId, LocalPlayer)
+                    end
+                end
+            end
+        end)
+        task.wait(2)
+        isManualTeleporting = false
+    end
 
     -- ==========================================
     -- ĐIỀU KHIỂN THỦ CÔNG & ANTI-KICK
     -- ==========================================
     ServerTab:CreateSection("--- ĐIỀU KHIỂN THỦ CÔNG ---")
 
-    ServerTab:CreateButton({ Name = "🌐 HOP SERVER TÌM BOSS", Callback = function() Utils.HopServer("Người dùng yêu cầu hop server...") end })
-    ServerTab:CreateButton({ Name = "🔄 Rejoin Đúng Server Này", Callback = function() TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer) end })
+    ServerTab:CreateButton({ 
+        Name = "👤 JOIN SERVER ÍT NGƯỜI NHẤT", 
+        Callback = function() ManualHop("least") end 
+    })
+    
+    ServerTab:CreateButton({ 
+        Name = "🔀 JOIN SERVER KHÁC (RANDOM)", 
+        Callback = function() ManualHop("random") end 
+    })
+    
+    ServerTab:CreateButton({ 
+        Name = "🔄 Rejoin Đúng Server Này", 
+        Callback = function() TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer) end 
+    })
 
     ServerTab:CreateSection("--- ANTI-KICK ---")
     ServerTab:CreateToggle({
-        Name = "Auto Rejoin khi bị Kick (Xử lý Error 279)",
+        Name = "Auto Rejoin khi bị Kick",
         CurrentValue = false,
         Callback = function(Value) autoRejoinEnabled = Value end,
     })
@@ -132,7 +186,6 @@ return function(Window, Utils)
                     Duration = 3
                 })
                 
-                -- Tìm và click nút Retry/Cancel
                 pcall(function()
                     local promptOverlay = CoreGui:FindFirstChild("RobloxPromptGui")
                     if promptOverlay then
@@ -158,7 +211,7 @@ return function(Window, Utils)
     end)
 
     -- ==========================================
-    -- MASTER LOOP: ĐIỀU PHỐI HỆ THỐNG
+    -- MASTER LOOP: ĐIỀU PHỐI THỜI TIẾT
     -- ==========================================
     task.spawn(function()
         local currentlyInTargetWeather = false
@@ -166,30 +219,7 @@ return function(Window, Utils)
         while task.wait(2) do
             if _G.SystemController and _G.SystemController.shouldStop then continue end
 
-            -- 1. Quét Boss (Dùng Utils)
-            local bossKeywords = Utils.LoadJSON("RClient_SelectedBossKeywords.json")
-            local bossInfo = Utils.ScanBossByKeywords(bossKeywords)
-            
-            _G.ServerManager.isBossPresent = (bossInfo ~= nil)
-
-            -- Kiểm tra thêm cờ Global Timer từ Chat
-            local bossGlobalActive = false
-            local timerData = Utils.LoadJSON("RClient_BossGlobalTimer.json")
-            if timerData and timerData.EndTime and (timerData.EndTime - os.time() > 0) then
-                bossGlobalActive = true
-            end
-
-            -- 2. Logic Ưu tiên Boss
-            if (bossInfo or bossGlobalActive) and bossHopSettings.enabled then
-                _G.ServerManager.pauseFarm = true
-                if not bossInfo then
-                    -- Có thông báo chat nhưng chưa thấy boss trên RAM -> Hop liên tục tìm
-                    Utils.HopServer("ƯU TIÊN BOSS: Đang tìm server mới...")
-                end
-                continue 
-            end
-
-            -- 3. Logic Thời tiết
+            -- Logic Thời tiết
             if weatherHopSettings.enabled then
                 local currentName, currentId = Utils.GetCurrentWeather(WeatherMap)
                 _G.ServerManager.currentWeather = currentName
@@ -209,7 +239,7 @@ return function(Window, Utils)
                         game.StarterGui:SetCore("SendNotification", {Title = "Thời tiết đã hết!", Text = "Đang hop server...", Duration = 5})
                         currentlyInTargetWeather = false
                     end
-                    Utils.HopServer("Đang tìm thời tiết VIP...")
+                    if Utils and Utils.HopServer then Utils.HopServer("Đang tìm thời tiết VIP...") end
                 end
             else
                 _G.ServerManager.pauseFarm = false
@@ -221,5 +251,5 @@ return function(Window, Utils)
         end
     end)
     
-    print("✅ Server Manager 3.1 (Full Features Restored) loaded!")
+    print("✅ Server Manager 3.3 (Clean Weather & Manual Hop) loaded!")
 end
