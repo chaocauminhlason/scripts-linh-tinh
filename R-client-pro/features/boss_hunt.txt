@@ -3,6 +3,7 @@
 -- DEV BY: SƠN | FIX LỖI ẨN HUMANOID VÀ CLIENTMONSTERS
 -- ====================================================================
 return function(Window, Utils)
+print("DEBUG: Module BossHunt đang bắt đầu load...")
     local Players = game:GetService("Players")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local HttpService = game:GetService("HttpService")
