@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: AUTO RIFT SYSTEM V8.8 (FULL EDGE CASES & PET SYNC)
+-- MODULE: AUTO RIFT SYSTEM V8.9 (FIX LỖI GIẬT TELEPORT & TỐI ƯU COMBAT)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -131,11 +131,10 @@ return function(Window, Utils)
             end
 
             -- ========================================================
-            -- 🛠️ HOOK: KIỂM TRA TRẠNG THÁI PET (ĐÃ NÂNG CẤP)
+            -- 🛠️ HOOK: KIỂM TRA TRẠNG THÁI PET
             -- ========================================================
             local isAllPetsDead = false
             pcall(function()
-                -- Bước 1: Đếm tổng số Pet đang được trang bị trên UI
                 local petListUI = LocalPlayer:FindFirstChild("PlayerGui")
                     and LocalPlayer.PlayerGui:FindFirstChild("MainGui")
                     and LocalPlayer.PlayerGui.MainGui:FindFirstChild("ScreenGui")
@@ -155,7 +154,6 @@ return function(Window, Utils)
                     end
                 end
 
-                -- Bước 2: Đếm số Pet CÒN SỐNG đang xuất hiện trên Map
                 local alivePetsMap = 0
                 local petsFolder = Workspace:FindFirstChild("Pets")
                 local myId = tostring(LocalPlayer.UserId)
@@ -175,18 +173,19 @@ return function(Window, Utils)
                     end
                 end
 
-                -- Bước 3: Chỉ khi có mang Pet đi VÀ không còn con nào sống trên map
                 if totalPetsUI > 0 and alivePetsMap == 0 then
                     isAllPetsDead = true
                 end
             end)
             
             if isAllPetsDead and riftState == "COMBAT" then
-                RiftStatus:Set("STATUS: 🚨 Toàn bộ Pet đã chết! Đang ép thoát để bảo toàn mạng...")
+                RiftStatus:Set("STATUS: 🚨 Toàn bộ Pet đã chết! Đang ép thoát...")
                 riftState = "EXITING"
             end
-            -- ========================================================
 
+            -- ========================================================
+            -- XỬ LÝ SCAN RIFT & COMBAT
+            -- ========================================================
             local monstersFolder = Workspace:FindFirstChild("Monsters")
             local hasAliveMonsters, deadMonsters, bestTarget, closestDist2D = false, {}, nil, math.huge
             local unhandledDeadCount = 0
@@ -279,7 +278,6 @@ return function(Window, Utils)
                     targetExpireDuration = bestPortal.penalty
                     
                     RiftStatus:Set("STATUS: Đã khóa mục tiêu: " .. tostring(targetRiftId))
-                    
                     hrp.CFrame = CFrame.new(bestPortal.pos + Vector3.new(0, 3, 0))
                     task.wait(0.2) 
 
@@ -287,19 +285,13 @@ return function(Window, Utils)
                     local safe_team = bestPortal.teamId
                     currentTeamId = safe_team
 
-                    -- ========================================================
-                    -- 🛠️ HOOK: HÀM GỬI LỆNH RETRY
-                    -- ========================================================
                     local function SendEnterRemote()
                         pcall(function()
-                            local createArgs = { "DungeonCreateTeamChannel", safe_id, safe_team }
-                            local startArgs = { "DungeonStartChannel", safe_id, safe_team }
-                            DataPullFunc:InvokeServer(unpack(createArgs))
-                            DataPullFunc:InvokeServer(unpack(startArgs))
+                            DataPullFunc:InvokeServer("DungeonCreateTeamChannel", safe_id, safe_team)
+                            DataPullFunc:InvokeServer("DungeonStartChannel", safe_id, safe_team)
                         end)
                     end
 
-                    -- GỬI LẦN 1
                     task.spawn(SendEnterRemote)
                     RiftStatus:Set("STATUS: Đang đợi Server dịch chuyển (Lần 1)...")
                     task.wait(1.5) 
@@ -307,13 +299,11 @@ return function(Window, Utils)
                     local checkChar = LocalPlayer.Character
                     local checkHrp = checkChar and checkChar:FindFirstChild("HumanoidRootPart")
                     
-                    -- KIỂM TRA LẦN 1 VÀ GỬI LẠI LẦN 2 NẾU CẦN
                     if checkHrp and (checkHrp.Position - bestPortal.pos).Magnitude < 50 then
                         RiftStatus:Set("STATUS: Chưa vào được, đang gửi lại Remote (Lần 2)...")
                         task.spawn(SendEnterRemote)
                         task.wait(1.5)
                         
-                        -- KIỂM TRA LẦN 2 (CHỐT KẾT QUẢ)
                         if checkHrp and (checkHrp.Position - bestPortal.pos).Magnitude < 50 then
                             RiftStatus:Set("STATUS: Bị Server chặn, bỏ qua cổng này!")
                             completedRifts[targetRiftKey] = os.time() + 60 
@@ -324,8 +314,6 @@ return function(Window, Utils)
                     else
                         dungeonStuckTimer = 0; riftState = "COMBAT"
                     end
-                    -- ========================================================
-
                 else
                     task.wait(0.5) 
                 end
@@ -340,7 +328,7 @@ return function(Window, Utils)
                             if catchCount[id] >= 3 then catchingMemory[id] = true end
                             
                             task.spawn(function()
-                                pcall(function() Utils.CatchMonster(DataPullFunc, id) end)
+                                pcall(function() Utils.CatchMonster(id) end)
                             end)
                         end
                     end
@@ -349,28 +337,22 @@ return function(Window, Utils)
                     if bestTarget then
                         local targetPos = bestTarget.Position
                         
-                        if closestDist2D > 40 then
-                            Utils.ToggleMount(DataPullFunc, true); task.wait(0.2)
+                        if closestDist2D > 12 then
+                            -- Nếu mục tiêu ở xa hơn 40 studs, tự động nhảy lên thú cưỡi để chạy nhanh hơn
+                            if closestDist2D > 40 then
+                                pcall(function() Utils.ToggleMount(true) end)
+                            end
                             
-                            -- SỬA LỖI 1: Tính toán Vector hướng để Teleport luôn rơi vào khoảng trống giữa mình và quái
-                            local direction = (hrp.Position - targetPos).Unit
-                            -- Tọa độ mới: Cách quái 4 studs về phía mình, cao 3 studs để không lún đất
-                            local safeOffset = Vector3.new(direction.X * 4, 3, direction.Z * 4) 
-                            
-                            hrp.CFrame = CFrame.new(targetPos + safeOffset); task.wait(0.2)
-                            humanoid:MoveTo(hrp.Position); dungeonLastPosition = hrp.Position; dungeonStuckTimer = 0
-                            Utils.SmartDismount(LocalPlayer, DataPullFunc)
-                            
-                        elseif closestDist2D > 12 then
+                            -- Dùng MoveTo để di chuyển mượt mà, không bị Server đánh giá là hack dịch chuyển
                             humanoid:MoveTo(targetPos)
                             
+                            -- HỆ THỐNG GỠ KẸT (STUCK DETECTION)
                             if dungeonLastPosition and (hrp.Position - dungeonLastPosition).Magnitude < 1 then
                                 dungeonStuckTimer = dungeonStuckTimer + 0.5
-                                if dungeonStuckTimer >= 3 then 
-                                    -- SỬA LỖI 2: Giảm độ cao hất tung từ 5 xuống 3, cộng thêm offset hướng an toàn
-                                    local direction = (hrp.Position - targetPos).Unit
-                                    local unstickOffset = Vector3.new(direction.X * 2, 3, direction.Z * 2)
-                                    hrp.CFrame = CFrame.new(targetPos + unstickOffset)
+                                if dungeonStuckTimer >= 2 then 
+                                    -- Nhảy lên và nhích lên trên một chút để vượt vật cản thay vì tele ngang
+                                    humanoid.Jump = true
+                                    hrp.CFrame = hrp.CFrame + Vector3.new(0, 5, 0)
                                     dungeonStuckTimer = 0 
                                 end
                             else 
@@ -378,11 +360,15 @@ return function(Window, Utils)
                             end
                             dungeonLastPosition = hrp.Position
                         else
-                            humanoid:MoveTo(hrp.Position); dungeonStuckTimer = 0; Utils.SmartDismount(LocalPlayer, DataPullFunc)
+                            -- Đã áp sát mục tiêu (<= 12 studs)
+                            humanoid:MoveTo(hrp.Position) -- Dừng chạy
+                            dungeonStuckTimer = 0 
+                            pcall(function() Utils.SmartDismount() end)
+                            
                             local id = tonumber(bestTarget.Name:match("Monster_(%d+)"))
                             if id then 
                                 task.spawn(function()
-                                    pcall(function() Utils.AttackMonster(DataPullFunc, id) end)
+                                    pcall(function() Utils.AttackMonster(id) end)
                                 end)
                             end 
                         end
@@ -399,12 +385,9 @@ return function(Window, Utils)
                 
                 task.spawn(function()
                     pcall(function()
-                        local leaveArenaArgs = { "ArenaLeaveChannel" }
-                        DataPullFunc:InvokeServer(unpack(leaveArenaArgs))
-                        
+                        DataPullFunc:InvokeServer("ArenaLeaveChannel")
                         if exit_id and exit_team then
-                            local leaveTeamArgs = { "DungeonLeaveTeamChannel", exit_id, exit_team }
-                            DataPullFunc:InvokeServer(unpack(leaveTeamArgs))
+                            DataPullFunc:InvokeServer("DungeonLeaveTeamChannel", exit_id, exit_team)
                         end
                     end)
                 end)
