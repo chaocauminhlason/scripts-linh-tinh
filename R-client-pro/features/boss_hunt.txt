@@ -1,6 +1,6 @@
 -- ====================================================================
--- MODULE: SĂN BOSS VIP - CHỌN BOSS BẰNG SELECT WORLD
--- VERSION: 4.1 - TÁI SỬ DỤNG UTILS DROPDOWN
+-- MODULE: SĂN BOSS VIP (BẢN 4.2 - SMART RAM SCANNER)
+-- DEV BY: SƠN | FIX LỖI ẨN HUMANOID VÀ CLIENTMONSTERS
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -58,9 +58,6 @@ return function(Window, Utils)
         currentWorldIndex = 1
     }
 
-    -- ==========================================
-    -- HÀM LẤY TẤT CẢ TỪ KHÓA BOSS TỪ CÁC WORLD ĐÃ CHỌN
-    -- ==========================================
     local function GetAllBossKeywords(worldIds)
         local keywords = {}
         for _, worldId in ipairs(worldIds) do
@@ -100,9 +97,6 @@ return function(Window, Utils)
         return {2, 3, 4, 5, 6, 7, 8, 9, 10, 11}
     end
 
-    -- ==========================================
-    -- BIẾN QUẢN LÝ
-    -- ==========================================
     local attackSettings = {
         enabled = false,
         hitSpeed = 0.1,
@@ -111,28 +105,7 @@ return function(Window, Utils)
     }
 
     -- ==========================================
-    -- HÀM LẤY TÊN THẬT CỦA QUÁI
-    -- ==========================================
-    local function GetRealMonsterName(obj)
-        local name = obj.Name:lower()
-        local tmplId = obj:GetAttribute("TmplId") or obj:GetAttribute("Id")
-        if tmplId then
-            pcall(function()
-                local cfgFolder = ReplicatedStorage:FindFirstChild("CommonConfig")
-                if cfgFolder and cfgFolder:FindFirstChild("Monster") then
-                    local cfgFile = cfgFolder.Monster:FindFirstChild("Monster" .. tostring(tmplId))
-                    if cfgFile then
-                        local data = require(cfgFile)
-                        if data and data.Name then name = data.Name:lower() end
-                    end
-                end
-            end)
-        end
-        return name
-    end
-
-    -- ==========================================
-    -- HÀM PHÁT HIỆN BOSS TRONG WORLD HIỆN TẠI
+    -- HÀM QUÉT BOSS MỚI (LẤY DỮ LIỆU TỪ RAM)
     -- ==========================================
     local function ScanBossInCurrentWorld()
         local currentWorldId = _G.BossStatus.currentWorldId
@@ -141,25 +114,41 @@ return function(Window, Utils)
         local keywords = WorldBossMapping[currentWorldId] or {}
         if #keywords == 0 then return nil, nil, nil end
 
-        local monstersFolder = Workspace:FindFirstChild("Monsters") or Workspace:FindFirstChild("Monster")
-        if not monstersFolder then return nil, nil, nil end
+        local env = getrenv()._G.PathTool
+        if not env or not env.MgrMonsterClient or not env.CfgMonster then return nil, nil, nil end
 
-        for _, obj in pairs(monstersFolder:GetChildren()) do
+        local mgrMonster = env.MgrMonsterClient
+        local cfgMonster = env.CfgMonster.Tmpls
+        local clientMonsters = Workspace:FindFirstChild("ClientMonsters")
+        if not clientMonsters then return nil, nil, nil end
+
+        for _, obj in pairs(clientMonsters:GetChildren()) do
             if obj:IsA("Model") then
-                local hum = obj:FindFirstChildOfClass("Humanoid")
-                if hum and hum.Health and hum.Health > 0 and hum.MaxHealth and hum.MaxHealth >= 100000 then
-                    local realNameLower = GetRealMonsterName(obj)
-                    for _, kw in pairs(keywords) do
-                        if realNameLower:find(kw) then
-                            local bossId = tonumber(string.match(obj.Name, "%d+")) 
-                                or obj:GetAttribute("Id") 
-                                or obj:GetAttribute("TmplId") 
-                                or obj:GetAttribute("Uid")
-                            
-                            local root = obj.PrimaryPart or obj:FindFirstChild("HumanoidRootPart")
-                            local position = root and root.Position or obj.Position
-                            
-                            return bossId, obj.Name, position
+                local idStr = string.match(obj.Name, "Monster_(%d+)")
+                if idStr then
+                    local uid = tonumber(idStr)
+                    
+                    local success, info = pcall(function() return mgrMonster:GetMonsterInfo(uid) end)
+                    if not success or not info then
+                        success, info = pcall(function() return mgrMonster.GetMonsterInfo(uid) end)
+                    end
+                    
+                    if success and type(info) == "table" then
+                        local tmplId = info.tmplId or info.TmplId or info.cfgId or info.id
+                        if tmplId then
+                            local cfgData = cfgMonster[tostring(tmplId)] or cfgMonster[tonumber(tmplId)]
+                            if cfgData then
+                                local realName = cfgData.Name or cfgData.name or "Unknown"
+                                local lowerName = realName:lower()
+                                
+                                for _, kw in pairs(keywords) do
+                                    if lowerName:find(kw) then
+                                        local root = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+                                        local pos = root and root.Position or obj.Position
+                                        return uid, realName, pos
+                                    end
+                                end
+                            end
                         end
                     end
                 end
@@ -169,11 +158,10 @@ return function(Window, Utils)
     end
 
     -- ==========================================
-    -- HÀM HOP SERVER (KÉO VỀ BOSS MODULE)
+    -- HÀM HOP SERVER
     -- ==========================================
     local function HopToNewServer(hopReason)
         if attackSettings.isTeleporting then return false end
-        
         attackSettings.isTeleporting = true
         
         local PlaceId = game.PlaceId
@@ -215,13 +203,11 @@ return function(Window, Utils)
     end
 
     -- ==========================================
-    -- UI LAYER - TÁI SỬ DỤNG UTILS DROPDOWN
+    -- UI LAYER 
     -- ==========================================
     local BossTab = Window:CreateTab("Săn Boss", 4483345998)
-
     BossTab:CreateSection("--- CHỌN WORLD CÓ BOSS ---")
     
-    -- Tạo dropdown từ Utils (tái sử dụng)
     local worldDropdown = Utils.CreateAreaMultiSelect(BossTab, {
         name = "Chọn World Có Boss",
         flag = "BossWorldSelect",
@@ -230,37 +216,26 @@ return function(Window, Utils)
             attackSettings.selectedWorlds = selectedIds
             SaveSelectedWorlds(selectedIds)
             
-            -- Cập nhật target keywords cho server manager
             local allKeywords = GetAllBossKeywords(selectedIds)
             _G.BossStatus.targetBosses = allKeywords
             
-            -- Lưu file cho server manager
             pcall(function()
                 if writefile then
-                    writefile("RClient_SelectedBossKeywords.json", 
-                        HttpService:JSONEncode(allKeywords))
+                    writefile("RClient_SelectedBossKeywords.json", HttpService:JSONEncode(allKeywords))
                 end
             end)
             
-            if #selectedIds == 0 then
-                TargetLabel:Set("⚠️ Chưa chọn world nào!")
-            else
-                TargetLabel:Set("🎯 Đã chọn " .. #selectedIds .. " world có boss")
-            end
+            if #selectedIds == 0 then TargetLabel:Set("⚠️ Chưa chọn world nào!") else TargetLabel:Set("🎯 Đã chọn " .. #selectedIds .. " world có boss") end
         end
     })
 
-    -- LABELS
     local TargetLabel = BossTab:CreateLabel("🎯 Đã chọn " .. #attackSettings.selectedWorlds .. " world có boss")
     local BossStatusLabel = BossTab:CreateLabel("📊 Boss trên map: Chưa có")
     local WorldStatusLabel = BossTab:CreateLabel("🌍 World hiện tại: Chưa xác định")
 
-    -- SECTION: AUTO HUNT
     BossTab:CreateSection("--- AUTO SĂN BOSS & HOP SERVER ---")
-    
     local StatusLabel = BossTab:CreateLabel("🔴 Trạng thái: Đang nghỉ")
 
-    -- Toggle: Auto Hunt Boss
     BossTab:CreateToggle({
         Name = "Bật Auto Săn Boss (Tự động quét & hop server)",
         CurrentValue = false,
@@ -271,29 +246,16 @@ return function(Window, Utils)
             
             if Value then
                 if #attackSettings.selectedWorlds == 0 then
-                    game.StarterGui:SetCore("SendNotification", {
-                        Title = "⚠️ Lỗi", 
-                        Text = "Vui lòng chọn ít nhất 1 world có boss!",
-                        Duration = 3
-                    })
+                    game.StarterGui:SetCore("SendNotification", { Title = "⚠️ Lỗi", Text = "Vui lòng chọn ít nhất 1 world có boss!", Duration = 3 })
                     attackSettings.enabled = false
                     _G.BossStatus.isActive = false
                     return
                 end
                 
                 StatusLabel:Set("🟢 Trạng thái: Đang quét boss...")
-                -- Bắt đầu từ world đầu tiên
                 _G.BossStatus.currentWorldIndex = 1
                 _G.BossStatus.currentWorldId = attackSettings.selectedWorlds[1]
-                
-                -- Dịch chuyển đến world đầu tiên
                 Utils.TeleportToArea(_G.BossStatus.currentWorldId)
-                
-                game.StarterGui:SetCore("SendNotification", {
-                    Title = "🔍 Bắt đầu săn boss", 
-                    Text = "Đang quét " .. #attackSettings.selectedWorlds .. " world...",
-                    Duration = 3
-                })
             else
                 StatusLabel:Set("🔴 Trạng thái: Đã tắt")
                 _G.BossStatus.bossFound = false
@@ -303,40 +265,18 @@ return function(Window, Utils)
     })
 
     -- ==========================================
-    -- MAIN LOOP: QUÉT TUẦN TỰ CÁC WORLD
+    -- MAIN LOOP
     -- ==========================================
     task.spawn(function()
         local DataPullFunc = nil
-        pcall(function()
-            DataPullFunc = ReplicatedStorage:WaitForChild("CommonLibrary")
-                :WaitForChild("Tool")
-                :WaitForChild("RemoteManager")
-                :WaitForChild("Funcs")
-                :WaitForChild("DataPullFunc")
-        end)
+        pcall(function() DataPullFunc = ReplicatedStorage:WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc") end)
 
         local bossCheckCooldown = 0
 
         while task.wait(0.2) do
-            -- KIỂM TRA PAUSE
-            if _G.SystemController and _G.SystemController.shouldStop then
-                StatusLabel:Set("⏸️ ĐÃ DỪNG (Main Controller)")
-                task.wait(0.5)
-                continue
-            end
+            if _G.SystemController and _G.SystemController.shouldStop then StatusLabel:Set("⏸️ ĐÃ DỪNG (Main Controller)") task.wait(0.5) continue end
+            if not attackSettings.enabled or #attackSettings.selectedWorlds == 0 then task.wait(1) continue end
 
-            if not attackSettings.enabled then
-                task.wait(1)
-                continue
-            end
-
-            if #attackSettings.selectedWorlds == 0 then
-                StatusLabel:Set("⚠️ Chưa chọn world nào!")
-                task.wait(1)
-                continue
-            end
-
-            -- Cập nhật world hiện tại
             local currentWorldId = _G.BossStatus.currentWorldId
             if currentWorldId then
                 local areaMap = Utils.GetAreaMap()
@@ -344,19 +284,14 @@ return function(Window, Utils)
                 WorldStatusLabel:Set("🌍 World hiện tại: " .. worldName .. " (ID: " .. currentWorldId .. ")")
             end
 
-            -- ==========================================
-            -- QUÉT BOSS TRONG WORLD HIỆN TẠI
-            -- ==========================================
             bossCheckCooldown = bossCheckCooldown + 1
-            if bossCheckCooldown >= 5 then -- Mỗi 1 giây quét 1 lần
+            if bossCheckCooldown >= 5 then 
                 bossCheckCooldown = 0
-                
                 _G.BossStatus.scanning = true
                 local bossId, bossName, bossPos = ScanBossInCurrentWorld()
                 _G.BossStatus.scanning = false
 
                 if bossId and DataPullFunc then
-                    -- TÌM THẤY BOSS!
                     _G.BossStatus.bossFound = true
                     _G.BossStatus.bossId = bossId
                     _G.BossStatus.bossName = bossName
@@ -366,28 +301,15 @@ return function(Window, Utils)
                     BossStatusLabel:Set("📊 Boss trên map: ✅ " .. bossName)
                     StatusLabel:Set("⚔️ Trạng thái: Đang đánh boss!")
 
-                    -- Di chuyển đến boss
                     if bossPos then
                         local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                        if hrp then
-                            hrp.CFrame = CFrame.new(bossPos + Vector3.new(0, 8, 0))
-                        end
+                        if hrp then hrp.CFrame = CFrame.new(bossPos + Vector3.new(0, 8, 0)) end
                     end
 
-                    -- Đánh boss
-                    pcall(function()
-                        DataPullFunc:InvokeServer("MonsterAttackChannel", bossId)
-                    end)
-
+                    pcall(function() DataPullFunc:InvokeServer("MonsterAttackChannel", bossId) end)
                 else
-                    -- KHÔNG CÓ BOSS
                     if _G.BossStatus.bossFound then
-                        -- Boss vừa mới chết
-                        game.StarterGui:SetCore("SendNotification", {
-                            Title = "💀 Boss đã chết", 
-                            Text = "Di chuyển đến world tiếp theo...",
-                            Duration = 3
-                        })
+                        game.StarterGui:SetCore("SendNotification", { Title = "💀 Boss đã chết", Text = "Di chuyển đến world tiếp theo...", Duration = 3 })
                     end
                     
                     _G.BossStatus.bossFound = false
@@ -398,39 +320,23 @@ return function(Window, Utils)
                     BossStatusLabel:Set("📊 Boss trên map: ❌ Không có")
                     StatusLabel:Set("🔍 Trạng thái: Đang quét world...")
 
-                    -- ==========================================
-                    -- CHUYỂN SANG WORLD TIẾP THEO
-                    -- ==========================================
                     local currentIndex = _G.BossStatus.currentWorldIndex or 1
                     local nextIndex = currentIndex % #attackSettings.selectedWorlds + 1
-                    
                     _G.BossStatus.currentWorldIndex = nextIndex
                     _G.BossStatus.currentWorldId = attackSettings.selectedWorlds[nextIndex]
                     
-                    -- ==========================================
-                    -- HOP SERVER NẾU QUÉT HẾT TẤT CẢ WORLD
-                    -- ==========================================
                     if nextIndex == 1 then
-                        -- Đã quét hết tất cả world, hop server
                         StatusLabel:Set("🔄 Trạng thái: Đã quét hết world, hop server...")
-                        
                         if HopToNewServer("Không tìm thấy boss, đang tìm server mới...") then
-                            -- Chờ load server mới
                             task.wait(5)
-                            -- Dịch chuyển đến world đầu tiên sau khi hop
                             local firstWorld = attackSettings.selectedWorlds[1]
                             _G.BossStatus.currentWorldId = firstWorld
                             _G.BossStatus.currentWorldIndex = 1
-                            
                             Utils.TeleportToArea(firstWorld)
                         end
                     else
-                        -- Di chuyển đến world tiếp theo
                         StatusLabel:Set("🔄 Trạng thái: Di chuyển đến world tiếp theo...")
-                        
                         Utils.TeleportToArea(_G.BossStatus.currentWorldId)
-                        
-                        -- Chờ load world mới
                         task.wait(3)
                     end
                 end
@@ -438,30 +344,11 @@ return function(Window, Utils)
         end
     end)
 
-    -- ==========================================
-    -- NÚT ĐIỀU KHIỂN THỦ CÔNG
-    -- ==========================================
     BossTab:CreateSection("--- ĐIỀU KHIỂN THỦ CÔNG ---")
-    
-    BossTab:CreateButton({
-        Name = "🌐 HOP SERVER TÌM BOSS",
-        Callback = function()
-            if #attackSettings.selectedWorlds == 0 then
-                game.StarterGui:SetCore("SendNotification", {
-                    Title = "⚠️ Lỗi", 
-                    Text = "Vui lòng chọn ít nhất 1 world có boss!",
-                    Duration = 3
-                })
-                return
-            end
-            HopToNewServer("Đang tìm server có boss...")
-        end
-    })
-
+    BossTab:CreateButton({ Name = "🌐 HOP SERVER TÌM BOSS", Callback = function() HopToNewServer("Đang tìm server có boss...") end })
     BossTab:CreateButton({
         Name = "🌍 DI CHUYỂN ĐẾN WORLD TIẾP THEO",
         Callback = function()
-            -- Chuyển đến world tiếp theo trong danh sách
             local currentIndex = _G.BossStatus.currentWorldIndex or 1
             local nextIndex = currentIndex % #attackSettings.selectedWorlds + 1
             _G.BossStatus.currentWorldIndex = nextIndex
@@ -469,26 +356,7 @@ return function(Window, Utils)
             Utils.TeleportToArea(_G.BossStatus.currentWorldId)
         end
     })
+    BossTab:CreateButton({ Name = "🏠 VỀ STARTER ISLAND", Callback = function() Utils.TeleportToStarterIsland() end })
 
-    BossTab:CreateButton({
-        Name = "🏠 VỀ STARTER ISLAND",
-        Callback = function()
-            Utils.TeleportToStarterIsland()
-        end
-    })
-
-    -- ==========================================
-    -- CẬP NHẬT TRẠNG THÁI WORLD
-    -- ==========================================
-    task.spawn(function()
-        while task.wait(2) do
-            if _G.BossStatus.currentWorldId then
-                local areaMap = Utils.GetAreaMap()
-                local worldName = areaMap and areaMap[_G.BossStatus.currentWorldId] or "Unknown"
-                WorldStatusLabel:Set("🌍 World hiện tại: " .. worldName)
-            end
-        end
-    end)
-
-    print("✅ Boss Hunt 4.1 loaded successfully!")
+    print("✅ Boss Hunt 4.2 (Smart RAM Scanner) loaded successfully!")
 end
