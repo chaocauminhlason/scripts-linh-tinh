@@ -51,7 +51,7 @@ local AreaMap = {
     [8] = "Dragon's Breath",
     [9] = "Blossom Haven",
     [10] = "Mobius Circus",
-    [11] = "Specter Shallows"
+    [11] = "Specter Shallows",
     [12] = "Nova Coast"
 }
 
