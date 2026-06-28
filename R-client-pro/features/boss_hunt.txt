@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: SĂN BOSS VIP (BẢN 4.3 - FINAL FIX & CHAT INTEGRATION)
+-- MODULE: SĂN BOSS VIP (BẢN 4.4 - TÁCH TOGGLE AUTO HOP & SĂN BOSS)
 -- DEV BY: SƠN | ĐỘC LẬP TÁC CHIẾN (RAM SCANNER + CHAT SCANNER)
 -- ====================================================================
 return function(Window, Utils)
@@ -15,6 +15,7 @@ return function(Window, Utils)
     -- ==========================================
     local attackSettings = {
         enabled = false,
+        autoHop = false, -- Thêm cờ auto hop server
         hitSpeed = 0.1,
         selectedWorlds = {},
         isTeleporting = false
@@ -114,9 +115,12 @@ return function(Window, Utils)
                 if writefile then writefile("RClient_BossGlobalTimer.json", HttpService:JSONEncode({EndTime = os.time() + 300})) end
             end)
             
-            game.StarterGui:SetCore("SendNotification", { Title = "⚔️ Boss Alert!", Text = "Phát hiện Boss trên chat! Đang nhảy server...", Duration = 5 })
+            game.StarterGui:SetCore("SendNotification", { Title = "⚔️ Boss Alert!", Text = "Phát hiện Boss trên chat!", Duration = 5 })
             
-            if Utils and Utils.HopServer then Utils.HopServer("Phát hiện Boss từ kênh Chat...") end
+            -- Chỉ tự động nhảy server nếu Toggle Auto Hop được bật
+            if attackSettings.autoHop and Utils and Utils.HopServer then 
+                Utils.HopServer("Phát hiện Boss từ kênh Chat...") 
+            end
         end
     end
 
@@ -183,7 +187,7 @@ return function(Window, Utils)
     end
 
     -- ==========================================
-    -- UI LAYER (ĐÃ SỬA LỖI CALLBACK)
+    -- UI LAYER 
     -- ==========================================
     local BossTab = Window:CreateTab("Săn Boss", 4483345998)
     BossTab:CreateSection("--- CHỌN WORLD CÓ BOSS ---")
@@ -196,14 +200,12 @@ return function(Window, Utils)
         defaultAreas = Utils.GetAreaNamesByIds(attackSettings.selectedWorlds),
         callback = function(selectedIds, selectedNames)
             if type(selectedIds) == "table" then
-                attackSettings.selectedWorlds = selectedIds -- Lưu trực tiếp vào biến nhớ
+                attackSettings.selectedWorlds = selectedIds
                 
-                -- Lưu xuống File JSON
                 if Utils and Utils.SaveSelectedAreas then
                     Utils.SaveSelectedAreas(selectedIds, "R_SelectedBossWorlds.json")
                 end
                 
-                -- Cập nhật Keywords cho ServerManager
                 local allKeywords = GetAllBossKeywords(selectedIds)
                 _G.BossStatus.targetBosses = allKeywords
                 pcall(function()
@@ -222,12 +224,12 @@ return function(Window, Utils)
     local BossStatusLabel = BossTab:CreateLabel("📊 Boss trên map: Chưa có")
     local WorldStatusLabel = BossTab:CreateLabel("🌍 World hiện tại: Chưa xác định")
 
-    BossTab:CreateSection("--- AUTO SĂN BOSS & HOP SERVER ---")
+    BossTab:CreateSection("--- AUTO SĂN BOSS ---")
     local StatusLabel = BossTab:CreateLabel("🔴 Trạng thái: Đang nghỉ")
 
-    -- NÚT BẬT TẮT ĐÃ TRỞ LẠI!
+    -- Nút 1: Bật Auto Săn Boss (Di chuyển qua các map tìm boss)
     BossTab:CreateToggle({
-        Name = "Bật Auto Săn Boss (Tự động quét & hop server)",
+        Name = "Bật Auto Săn Boss",
         CurrentValue = false,
         Flag = "BossAutoHunt",
         Callback = function(Value)
@@ -251,6 +253,16 @@ return function(Window, Utils)
                 _G.BossStatus.bossFound = false
                 _G.BossStatus.scanning = false
             end
+        end
+    })
+
+    -- Nút 2: Toggle Tự động nhảy server khi quét xong một vòng
+    BossTab:CreateToggle({
+        Name = "Tự Động Nhảy Server Khi Hết Boss",
+        CurrentValue = false,
+        Flag = "BossAutoHop",
+        Callback = function(Value)
+            attackSettings.autoHop = Value
         end
     })
 
@@ -299,7 +311,7 @@ return function(Window, Utils)
                     pcall(function() DataPullFunc:InvokeServer("MonsterAttackChannel", bossId) end)
                 else
                     if _G.BossStatus.bossFound then
-                        game.StarterGui:SetCore("SendNotification", { Title = "💀 Boss đã chết", Text = "Di chuyển đến world tiếp theo...", Duration = 3 })
+                        game.StarterGui:SetCore("SendNotification", { Title = "💀 Boss đã chết", Text = "Tiếp tục tìm kiếm...", Duration = 3 })
                     end
                     
                     _G.BossStatus.bossFound = false
@@ -316,15 +328,21 @@ return function(Window, Utils)
                     _G.BossStatus.currentWorldId = attackSettings.selectedWorlds[nextIndex]
                     
                     if nextIndex == 1 then
-                        StatusLabel:Set("🔄 Trạng thái: Đã quét hết world, hop server...")
-                        if Utils and Utils.HopServer then
-                            if Utils.HopServer("Không tìm thấy boss, đang tìm server mới...") then
-                                task.wait(5)
-                                local firstWorld = attackSettings.selectedWorlds[1]
-                                _G.BossStatus.currentWorldId = firstWorld
-                                _G.BossStatus.currentWorldIndex = 1
-                                Utils.TeleportToArea(firstWorld)
+                        if attackSettings.autoHop then
+                            StatusLabel:Set("🔄 Trạng thái: Đã quét hết world, đang hop server...")
+                            if Utils and Utils.HopServer then
+                                if Utils.HopServer("Không tìm thấy boss, đang tìm server mới...") then
+                                    task.wait(5)
+                                    local firstWorld = attackSettings.selectedWorlds[1]
+                                    _G.BossStatus.currentWorldId = firstWorld
+                                    _G.BossStatus.currentWorldIndex = 1
+                                    Utils.TeleportToArea(firstWorld)
+                                end
                             end
+                        else
+                            StatusLabel:Set("🔄 Trạng thái: Đã quét hết vòng, tiếp tục lặp lại...")
+                            Utils.TeleportToArea(_G.BossStatus.currentWorldId)
+                            task.wait(3)
                         end
                     else
                         StatusLabel:Set("🔄 Trạng thái: Di chuyển đến world tiếp theo...")
@@ -337,18 +355,7 @@ return function(Window, Utils)
     end)
 
     BossTab:CreateSection("--- ĐIỀU KHIỂN THỦ CÔNG ---")
-    BossTab:CreateButton({ Name = "🌐 HOP SERVER TÌM BOSS", Callback = function() if Utils and Utils.HopServer then Utils.HopServer("Đang tìm server có boss...") end end })
-    BossTab:CreateButton({
-        Name = "🌍 DI CHUYỂN ĐẾN WORLD TIẾP THEO",
-        Callback = function()
-            local currentIndex = _G.BossStatus.currentWorldIndex or 1
-            local nextIndex = currentIndex % #attackSettings.selectedWorlds + 1
-            _G.BossStatus.currentWorldIndex = nextIndex
-            _G.BossStatus.currentWorldId = attackSettings.selectedWorlds[nextIndex]
-            Utils.TeleportToArea(_G.BossStatus.currentWorldId)
-        end
-    })
     BossTab:CreateButton({ Name = "🏠 VỀ STARTER ISLAND", Callback = function() Utils.TeleportToStarterIsland() end })
 
-    print("✅ Boss Hunt 4.3 (Final Fix) loaded successfully!")
+    print("✅ Boss Hunt 4.4 (Tách Toggle Auto Hop) loaded successfully!")
 end
