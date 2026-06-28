@@ -52,6 +52,7 @@ local AreaMap = {
     [9] = "Blossom Haven",
     [10] = "Mobius Circus",
     [11] = "Specter Shallows"
+    [12] = "Nova Coast"
 }
 
 -- ==========================================
@@ -434,7 +435,8 @@ local AreaData = {
     {id = 8, name = "Dragon's Breath", category = "Săn Boss"},
     {id = 9, name = "Blossom Haven", category = "Săn Boss"},
     {id = 10, name = "Mobius Circus", category = "Săn Boss"},
-    {id = 11, name = "Specter Shallows", category = "Săn Boss"}
+    {id = 11, name = "Specter Shallows", category = "Săn Boss"},
+    {id = 12, name = "Nova Coast", category = "Săn Boss"}
 }
 
 -- ==========================================
