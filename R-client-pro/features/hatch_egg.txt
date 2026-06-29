@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: SMART AUTO HATCH V9 (MULTI-EGG SELECT)
+-- MODULE: SMART AUTO HATCH V9.1 (MULTI-EGG SELECT + FIX REFRESH)
 -- ====================================================================
 return function(Window, Utils)
     local EggTab = Window:CreateTab("Trứng & Ấp", 4483362458)
@@ -9,9 +9,9 @@ return function(Window, Utils)
         autoSkip = false,
         autoClaim = false,
         stopIfBagFull = true,
-        selectedEggIds = {},      -- Danh sách ID các loại trứng được chọn
+        selectedEggIds = {},      -- Mặc định rỗng
         maxSlots = 1,
-        currentEggIndex = 1       -- Dùng để luân phiên chọn trứng
+        currentEggIndex = 1
     }
 
     -- ==========================================
@@ -21,6 +21,8 @@ return function(Window, Utils)
     local eggIdMap = {}
 
     local function LoadEggData()
+        eggOptions = {}
+        eggIdMap = {}
         local env = getrenv()._G.PathTool
         if env and env.CfgEgg and env.CfgEgg.Tmpls then
             for id, info in pairs(env.CfgEgg.Tmpls) do
@@ -40,17 +42,14 @@ return function(Window, Utils)
         return false
     end
 
+    -- Load lần đầu, nếu không có dữ liệu thì thêm placeholder
     if not LoadEggData() or #eggOptions == 0 then
         table.insert(eggOptions, "⚠️ Bấm Refresh để tải danh sách!")
-        eggIdMap["⚠️ Bấm Refresh để tải danh sách!"] = 1
+        eggIdMap["⚠️ Bấm Refresh để tải danh sách!"] = 0
     end
 
-    -- Mặc định chọn tất cả
-    for _, opt in ipairs(eggOptions) do
-        if eggIdMap[opt] and eggIdMap[opt] ~= 1 then
-            table.insert(hatchSettings.selectedEggIds, eggIdMap[opt])
-        end
-    end
+    -- Mặc định không chọn trứng nào
+    hatchSettings.selectedEggIds = {}
 
     -- ==========================================
     -- GIAO DIỆN UI
@@ -73,8 +72,8 @@ return function(Window, Utils)
 
     EggTab:CreateSection("--- CHỌN TRỨNG (ĐA CHỌN) ---")
     
-    -- Lấy danh sách tên đã chọn mặc định
-    local function GetDefaultSelectedNames()
+    -- Hàm lấy danh sách tên đã chọn (dùng để hiển thị)
+    local function GetSelectedNames()
         local names = {}
         for _, id in ipairs(hatchSettings.selectedEggIds) do
             for displayStr, eid in pairs(eggIdMap) do
@@ -90,20 +89,18 @@ return function(Window, Utils)
     local EggDropdown = EggTab:CreateDropdown({
         Name = "Chọn Các Loại Trứng (Chọn nhiều)",
         Options = eggOptions,
-        CurrentOption = #hatchSettings.selectedEggIds > 0 and GetDefaultSelectedNames() or {eggOptions[1]},
+        CurrentOption = {},   -- Mặc định không chọn
         MultipleOptions = true,
         Flag = "EggSelectMultiDropdown",
         Callback = function(Options)
             -- Cập nhật danh sách ID được chọn
             local ids = {}
             for _, opt in ipairs(Options) do
-                if eggIdMap[opt] then
+                if eggIdMap[opt] and eggIdMap[opt] ~= 0 then
                     table.insert(ids, eggIdMap[opt])
                 end
             end
             hatchSettings.selectedEggIds = ids
-            
-            -- Reset index luân phiên
             hatchSettings.currentEggIndex = 1
         end,
     })
@@ -111,18 +108,27 @@ return function(Window, Utils)
     EggTab:CreateButton({
         Name = "🔄 Làm Mới Danh Sách Trứng",
         Callback = function()
+            -- Xóa dữ liệu cũ và load lại
             eggOptions = {}
             eggIdMap = {}
-            if LoadEggData() and #eggOptions > 0 then
-                EggDropdown:Refresh(eggOptions)
-                -- Reset selected
-                hatchSettings.selectedEggIds = {}
-                for _, opt in ipairs(eggOptions) do
-                    if eggIdMap[opt] and eggIdMap[opt] ~= 1 then
-                        table.insert(hatchSettings.selectedEggIds, eggIdMap[opt])
-                    end
-                end
-                EggDropdown:SetCurrentOption(GetDefaultSelectedNames())
+            local success = LoadEggData()
+            
+            -- Nếu không có dữ liệu, thêm placeholder
+            if not success or #eggOptions == 0 then
+                table.insert(eggOptions, "⚠️ Không tìm thấy trứng!")
+                eggIdMap["⚠️ Không tìm thấy trứng!"] = 0
+            end
+            
+            -- Cập nhật dropdown
+            EggDropdown:Refresh(eggOptions)
+            
+            -- Giữ nguyên lựa chọn cũ (nếu có)
+            local currentSelection = GetSelectedNames()
+            if #currentSelection > 0 then
+                EggDropdown:SetCurrentOption(currentSelection)
+            else
+                -- Nếu không có lựa chọn, để trống
+                EggDropdown:SetCurrentOption({})
             end
         end
     })
@@ -159,7 +165,7 @@ return function(Window, Utils)
     })
 
     -- ==========================================
-    -- LUỒNG 1: THEO DÕI TÚI PET (BAG MONITOR)
+    -- LUỒNG 1: THEO DÕI TÚI PET
     -- ==========================================
     task.spawn(function()
         while task.wait(1) do
@@ -189,7 +195,7 @@ return function(Window, Utils)
     end)
 
     -- ==========================================
-    -- LUỒNG 2: CORE LOGIC (START -> SKIP -> CLAIM)
+    -- LUỒNG 2: CORE LOGIC
     -- ==========================================
     task.spawn(function()
         while task.wait(0.5) do
@@ -204,7 +210,6 @@ return function(Window, Utils)
 
             -- Nếu không có loại trứng nào được chọn, bỏ qua
             if #hatchSettings.selectedEggIds == 0 then
-                -- Hiển thị cảnh báo trên UI (có thể thêm label)
                 continue
             end
 
@@ -217,12 +222,10 @@ return function(Window, Utils)
                     isSlotEmpty = true
                 end
 
-                -- TRƯỜNG HỢP 1: Lò trống -> Bỏ trứng vào (luân phiên các loại đã chọn)
+                -- TRƯỜNG HỢP 1: Lò trống -> Bỏ trứng vào (luân phiên)
                 if hatchSettings.autoStart and isSlotEmpty then
-                    -- Lấy eggId tiếp theo trong danh sách (luân phiên)
                     local eggId = hatchSettings.selectedEggIds[hatchSettings.currentEggIndex]
                     if not eggId then
-                        -- Nếu index vượt quá, quay lại đầu
                         hatchSettings.currentEggIndex = 1
                         eggId = hatchSettings.selectedEggIds[1]
                     end
@@ -231,7 +234,6 @@ return function(Window, Utils)
                         env.EggSystem.ClientHatchStart(slotNum, eggId)
                     end)
                     
-                    -- Chuyển sang loại trứng tiếp theo cho lần sau
                     hatchSettings.currentEggIndex = hatchSettings.currentEggIndex + 1
                     if hatchSettings.currentEggIndex > #hatchSettings.selectedEggIds then
                         hatchSettings.currentEggIndex = 1
