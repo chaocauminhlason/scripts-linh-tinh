@@ -44,8 +44,8 @@ return function(Window, Utils)
 
     -- Load lần đầu, nếu không có dữ liệu thì thêm placeholder
     if not LoadEggData() or #eggOptions == 0 then
-        table.insert(eggOptions, "⚠️ Bấm Refresh để tải danh sách!")
-        eggIdMap["⚠️ Bấm Refresh để tải danh sách!"] = 0
+        table.insert(eggOptions, "⚠️ Trống!")
+        eggIdMap["⚠️ Trống!"] = 0
     end
 
     -- Mặc định không chọn trứng nào
@@ -72,20 +72,6 @@ return function(Window, Utils)
 
     EggTab:CreateSection("--- CHỌN TRỨNG (ĐA CHỌN) ---")
     
-    -- Hàm lấy danh sách tên đã chọn (dùng để hiển thị)
-    local function GetSelectedNames()
-        local names = {}
-        for _, id in ipairs(hatchSettings.selectedEggIds) do
-            for displayStr, eid in pairs(eggIdMap) do
-                if eid == id then
-                    table.insert(names, displayStr)
-                    break
-                end
-            end
-        end
-        return names
-    end
-
     local EggDropdown = EggTab:CreateDropdown({
         Name = "Chọn Các Loại Trứng (Chọn nhiều)",
         Options = eggOptions,
@@ -103,34 +89,6 @@ return function(Window, Utils)
             hatchSettings.selectedEggIds = ids
             hatchSettings.currentEggIndex = 1
         end,
-    })
-
-    EggTab:CreateButton({
-        Name = "🔄 Làm Mới Danh Sách Trứng",
-        Callback = function()
-            -- Xóa dữ liệu cũ và load lại
-            eggOptions = {}
-            eggIdMap = {}
-            local success = LoadEggData()
-            
-            -- Nếu không có dữ liệu, thêm placeholder
-            if not success or #eggOptions == 0 then
-                table.insert(eggOptions, "⚠️ Không tìm thấy trứng!")
-                eggIdMap["⚠️ Không tìm thấy trứng!"] = 0
-            end
-            
-            -- Cập nhật dropdown
-            EggDropdown:Refresh(eggOptions)
-            
-            -- Giữ nguyên lựa chọn cũ (nếu có)
-            local currentSelection = GetSelectedNames()
-            if #currentSelection > 0 then
-                EggDropdown:SetCurrentOption(currentSelection)
-            else
-                -- Nếu không có lựa chọn, để trống
-                EggDropdown:SetCurrentOption({})
-            end
-        end
     })
 
     EggTab:CreateSection("--- TỰ ĐỘNG HÓA (3 CÔNG TẮC CHÍNH) ---")
