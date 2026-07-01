@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: QUẢN LÝ SERVER & AUTO HOP (V4.0 - PERSISTENT STATE)
+-- MODULE: QUẢN LÝ SERVER & AUTO HOP (V4.1 - CLEAN UI)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -19,7 +19,6 @@ return function(Window, Utils)
         selectedNames = {"🔴 Huyết Nguyệt (Blood Moon)"} 
     }
 
-    -- Hàm Load State từ thư mục Workspace của Executor
     pcall(function()
         if isfile and isfile(configFileName) then
             local rawData = readfile(configFileName)
@@ -32,7 +31,6 @@ return function(Window, Utils)
         end
     end)
 
-    -- Hàm Save State
     local function SaveState()
         pcall(function()
             if writefile then
@@ -51,13 +49,12 @@ return function(Window, Utils)
     }
 
     -- ==========================================
-    -- GIAO DIỆN UI (THÔNG TIN & THỜI TIẾT)
+    -- GIAO DIỆN UI
     -- ==========================================
     local ServerTab = Window:CreateTab("Quản Lý Server", 4483362458)
 
     ServerTab:CreateSection("--- THÔNG TIN SESSION ---")
     local SessionLabel = ServerTab:CreateLabel("Thời gian treo máy: 00:00:00")
-    local WeatherStatus = ServerTab:CreateLabel("Thời tiết hiện tại: Đang tải...")
 
     task.spawn(function()
         while task.wait(1) do
@@ -86,7 +83,7 @@ return function(Window, Utils)
             "🔴 Huyết Nguyệt (Blood Moon)", "🐉 Hoàng Hôn Rồng (Draconic Twilight)", 
             "🌟 Hào Quang Rồng (Dragon-Glow)", "🧚 Màn Sương Ảo Mộng (Dreamveil)"
         },
-        CurrentOption = weatherHopSettings.selectedNames, -- Restore từ Cache
+        CurrentOption = weatherHopSettings.selectedNames,
         MultipleOptions = true,
         Callback = function(Options)
             weatherHopSettings.selectedNames = Options
@@ -96,21 +93,21 @@ return function(Window, Utils)
                     table.insert(weatherHopSettings.targetIds, WeatherMap[selectedOption]) 
                 end
             end
-            SaveState() -- Lưu khi có thay đổi
+            SaveState()
         end,
     })
 
     ServerTab:CreateToggle({
         Name = "Tự Động Nhảy Server Săn Thời Tiết",
-        CurrentValue = weatherHopSettings.enabled, -- Restore từ Cache
+        CurrentValue = weatherHopSettings.enabled,
         Callback = function(Value) 
             weatherHopSettings.enabled = Value 
-            SaveState() -- Lưu khi gạt công tắc
+            SaveState()
         end
     })
 
     -- ==========================================
-    -- HÀM MANUAL HOP (DÙNG RIÊNG CHO NÚT BẤM)
+    -- HÀM MANUAL HOP
     -- ==========================================
     local isManualTeleporting = false
     local function ManualHop(mode)
@@ -254,18 +251,20 @@ return function(Window, Utils)
         while task.wait(2) do
             if _G.SystemController and _G.SystemController.shouldStop then continue end
 
+            -- Luôn cập nhật biến nội bộ dù hiển thị hay không
+            local currentName = "Bình Thường"
+            local currentId = 0
+            if Utils and type(Utils.GetCurrentWeather) == "function" then
+                currentName, currentId = Utils.GetCurrentWeather(WeatherMap)
+                _G.ServerManager.currentWeather = currentName or "Unknown"
+            end
+
             if weatherHopSettings.enabled then
-                -- [1] KIỂM TRA MODULE UTILS
                 if not Utils or type(Utils.GetCurrentWeather) ~= "function" then
                     warn("[-] LỖI: Không tìm thấy hàm Utils.GetCurrentWeather!")
                     task.wait(5)
                     continue
                 end
-
-                local currentName, currentId = Utils.GetCurrentWeather(WeatherMap)
-                _G.ServerManager.currentWeather = currentName or "Unknown"
-                
-                WeatherStatus:Set("Thời tiết hiện tại: " .. tostring(currentName) .. " (ID: " .. tostring(currentId) .. ")")
 
                 local isTarget = false
                 for _, tid in ipairs(weatherHopSettings.targetIds) do
@@ -285,14 +284,10 @@ return function(Window, Utils)
                         currentlyInTargetWeather = false
                     end
                     
-                    -- [2] KIỂM TRA & THỰC THI HÀM HOP
                     print("[-] Thời tiết không khớp. Yêu cầu đổi Server...")
                     if Utils and type(Utils.HopServer) == "function" then
                         print("[*] Đang gửi lệnh Utils.HopServer...")
                         Utils.HopServer("Đang tìm thời tiết VIP...")
-                        
-                        -- Cooldown dài để tránh bị Roblox block request
-                        print("[!] Đang chờ TeleportService xử lý (10s Cooldown)...")
                         task.wait(10) 
                     else
                         warn("[-] LỖI CRITICAL: Không tìm thấy hàm Utils.HopServer! Tính năng Auto Hop bị liệt.")
@@ -301,13 +296,9 @@ return function(Window, Utils)
                 end
             else
                 _G.ServerManager.pauseFarm = false
-                if Utils and type(Utils.GetCurrentWeather) == "function" then
-                    local currentName = Utils.GetCurrentWeather(WeatherMap)
-                    WeatherStatus:Set("Thời tiết hiện tại: " .. tostring(currentName))
-                end
             end
         end
     end)
     
-    print("✅ Server Manager 4.0 (Persistent State) loaded!")
+    print("✅ Server Manager 4.1 (Clean UI) loaded!")
 end
