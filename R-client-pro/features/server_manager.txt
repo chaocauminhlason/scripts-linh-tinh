@@ -247,7 +247,7 @@ return function(Window, Utils)
     end)
 
 -- ==========================================
-    -- MASTER LOOP: ĐIỀU PHỐI THỜI TIẾT (DEBUG MODE)
+    -- MASTER LOOP: ĐIỀU PHỐI THỜI TIẾT (FIXED NIL ERROR)
     -- ==========================================
     task.spawn(function()
         local currentlyInTargetWeather = false
@@ -255,9 +255,17 @@ return function(Window, Utils)
         local HOP_COOLDOWN = 5
 
         while task.wait(2) do
-            if _G.SystemController and _G.SystemController.IsPaused then continue end
+            -- [1. SỬA LỖI NIL] Lấy reference an toàn. Nếu nil thì bỏ qua check IsPaused.
+            local controller = _G.SystemController
+            if controller and controller.IsPaused then continue end
 
             if weatherHopSettings.enabled then
+                if not Utils or type(Utils.GetCurrentWeather) ~= "function" then
+                    warn("[-] LỖI: Utils.GetCurrentWeather không tồn tại!")
+                    task.wait(5)
+                    continue
+                end
+
                 local _, currentId = Utils.GetCurrentWeather(WeatherMap)
                 
                 local isTarget = false
@@ -268,33 +276,38 @@ return function(Window, Utils)
                 if isTarget then
                     _G.ServerManager.pauseFarm = false
                     _G.BlacklistedServers = {}
-                    currentlyInTargetWeather = true
+                    
+                    if not currentlyInTargetWeather then
+                        print("[Weather] ✅ Đã tìm thấy thời tiết VIP!")
+                        currentlyInTargetWeather = true
+                    end
                 else
                     _G.ServerManager.pauseFarm = true
                     currentlyInTargetWeather = false
                     
-                    -- DEBUG LOGS
-                    local timePassed = (os.time() - lastHopTime)
-                    local isTaskRunning = (_G.SystemController.ActiveTask ~= nil)
-                    
-                    if timePassed < HOP_COOLDOWN then
-                        -- Không log liên tục để tránh spam console
-                    else
-                        if isTaskRunning then
-                            print("[Debug] WeatherHop muốn chạy nhưng bị chặn bởi: " .. tostring(_G.SystemController.ActiveTask))
-                        else
-                            print("[Weather] 📥 Đang đẩy lệnh vào Queue...")
-                            table.insert(_G.SystemController.TaskQueue, {
-                                Name = "WeatherHop",
-                                Func = function()
-                                    if _G.SystemController.RequestLock("WeatherHop") then
-                                        lastHopTime = os.time()
-                                        Utils.HopServer("Săn Thời Tiết VIP")
-                                        _G.SystemController.ReleaseLock("WeatherHop")
+                    if (os.time() - lastHopTime) >= HOP_COOLDOWN then
+                        -- [2. SỬA LỖI NIL] Kiểm tra controller có tồn tại mới nhét vào Queue
+                        if controller then
+                            if not controller.ActiveTask then
+                                print("[Weather] 📥 Đẩy lệnh ServerHop vào hàng đợi...")
+                                
+                                table.insert(controller.TaskQueue, {
+                                    Name = "WeatherHop",
+                                    Func = function()
+                                        if controller.RequestLock("WeatherHop") then
+                                            lastHopTime = os.time()
+                                            Utils.HopServer("Săn Thời Tiết VIP")
+                                            controller.ReleaseLock("WeatherHop")
+                                        end
                                     end
-                                end
-                            })
-                            lastHopTime = os.time() -- Reset timer sau khi đẩy vào queue
+                                })
+                                lastHopTime = os.time() -- Reset timer ngay lập tức
+                            end
+                        else
+                            -- [TÍNH NĂNG MỚI] Fallback: Nếu quên load Core, vẫn nhảy bình thường
+                            warn("[Weather] ⚠️ SystemController chưa nạp! Chạy Hop độc lập...")
+                            lastHopTime = os.time()
+                            Utils.HopServer("Săn Thời Tiết VIP (Độc lập)")
                         end
                     end
                 end
