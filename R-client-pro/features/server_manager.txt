@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: QUẢN LÝ SERVER & AUTO HOP (V3.3 - THUẦN TÚY WEATHER & ANTI-KICK)
+-- MODULE: QUẢN LÝ SERVER & AUTO HOP (V3.3 - DIAGNOSTIC MODE)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -100,14 +100,13 @@ return function(Window, Utils)
                 end
                 
                 if #validServers > 0 then
-                    -- Luôn sort số người chơi từ thấp lên cao
                     table.sort(validServers, function(a, b) return a.playing < b.playing end)
                     
                     local targetId
                     if mode == "least" then
-                        targetId = validServers[1].id -- Lấy thằng đầu tiên (ít người nhất)
+                        targetId = validServers[1].id
                     else
-                        targetId = validServers[math.random(1, #validServers)].id -- Bốc random 1 server bất kỳ
+                        targetId = validServers[math.random(1, #validServers)].id
                     end
                     
                     if targetId then
@@ -211,7 +210,7 @@ return function(Window, Utils)
     end)
 
     -- ==========================================
-    -- MASTER LOOP: ĐIỀU PHỐI THỜI TIẾT
+    -- MASTER LOOP: ĐIỀU PHỐI THỜI TIẾT (DIAGNOSTIC MODE)
     -- ==========================================
     task.spawn(function()
         local currentlyInTargetWeather = false
@@ -219,11 +218,18 @@ return function(Window, Utils)
         while task.wait(2) do
             if _G.SystemController and _G.SystemController.shouldStop then continue end
 
-            -- Logic Thời tiết
             if weatherHopSettings.enabled then
+                -- [1] KIỂM TRA MODULE UTILS
+                if not Utils or type(Utils.GetCurrentWeather) ~= "function" then
+                    warn("[-] LỖI: Không tìm thấy hàm Utils.GetCurrentWeather!")
+                    task.wait(5)
+                    continue
+                end
+
                 local currentName, currentId = Utils.GetCurrentWeather(WeatherMap)
-                _G.ServerManager.currentWeather = currentName
-                WeatherStatus:Set("Thời tiết hiện tại: " .. currentName)
+                _G.ServerManager.currentWeather = currentName or "Unknown"
+                
+                WeatherStatus:Set("Thời tiết hiện tại: " .. tostring(currentName) .. " (ID: " .. tostring(currentId) .. ")")
 
                 local isTarget = false
                 for _, tid in ipairs(weatherHopSettings.targetIds) do
@@ -232,24 +238,40 @@ return function(Window, Utils)
 
                 if isTarget then
                     _G.ServerManager.pauseFarm = false
-                    currentlyInTargetWeather = true
+                    if not currentlyInTargetWeather then
+                        print("[+] Đang ở thời tiết VIP: " .. tostring(currentName) .. " -> TẠM DỪNG HOP")
+                        currentlyInTargetWeather = true
+                    end
                 else
                     _G.ServerManager.pauseFarm = true
                     if currentlyInTargetWeather then
-                        game.StarterGui:SetCore("SendNotification", {Title = "Thời tiết đã hết!", Text = "Đang hop server...", Duration = 5})
+                        game.StarterGui:SetCore("SendNotification", {Title = "Thời tiết đã hết!", Text = "Đang tìm server mới...", Duration = 5})
                         currentlyInTargetWeather = false
                     end
-                    if Utils and Utils.HopServer then Utils.HopServer("Đang tìm thời tiết VIP...") end
+                    
+                    -- [2] KIỂM TRA & THỰC THI HÀM HOP
+                    print("[-] Thời tiết không khớp. Yêu cầu đổi Server...")
+                    if Utils and type(Utils.HopServer) == "function" then
+                        print("[*] Đang gửi lệnh Utils.HopServer...")
+                        Utils.HopServer("Đang tìm thời tiết VIP...")
+                        
+                        -- Cooldown dài để tránh bị Roblox block request
+                        print("[!] Đang chờ TeleportService xử lý (10s Cooldown)...")
+                        task.wait(10) 
+                    else
+                        warn("[-] LỖI CRITICAL: Không tìm thấy hàm Utils.HopServer! Tính năng Auto Hop bị liệt.")
+                        task.wait(5) 
+                    end
                 end
             else
                 _G.ServerManager.pauseFarm = false
-                
-                -- Chỉ hiển thị thời tiết để theo dõi nếu không bật Auto Hop
-                local currentName = Utils.GetCurrentWeather(WeatherMap)
-                WeatherStatus:Set("Thời tiết hiện tại: " .. currentName)
+                if Utils and type(Utils.GetCurrentWeather) == "function" then
+                    local currentName = Utils.GetCurrentWeather(WeatherMap)
+                    WeatherStatus:Set("Thời tiết hiện tại: " .. tostring(currentName))
+                end
             end
         end
     end)
     
-    print("✅ Server Manager 3.3 (Clean Weather & Manual Hop) loaded!")
+    print("✅ Server Manager 3.3 (Diagnostic Mode) loaded!")
 end
