@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: SMART AUTO HATCH V8 (FIX GHOST DATA & EMPTY TABLES)
+-- MODULE: SMART AUTO HATCH V8 (FINAL - NATIVE SYNC & MULTI-POTION)
 -- ====================================================================
 return function(Window, Utils)
     local EggTab = Window:CreateTab("Trứng & Ấp", 4483362458)
@@ -12,6 +12,10 @@ return function(Window, Utils)
         eggIdToHatch = 1,
         maxSlots = 1 
     }
+
+    -- Cố gắng lấy các hàm can thiệp quyền hạn của Executor
+    local get_thread_id = getthreadcontext or getthreadidentity or getidentity or (syn and syn.get_thread_identity)
+    local set_thread_id = setthreadcontext or setthreadidentity or setidentity or (syn and syn.set_thread_identity)
 
     -- ==========================================
     -- QUÉT DỮ LIỆU TỰ ĐỘNG
@@ -151,12 +155,14 @@ return function(Window, Utils)
     end)
 
     -- ==========================================
-    -- LUỒNG 2: CORE LOGIC (START -> SKIP -> CLAIM)
+    -- LUỒNG 2: CORE LOGIC & NATIVE UI SYNC
     -- ==========================================
     task.spawn(function()
-        while task.wait(0.5) do
+        while task.wait(0.8) do -- Delay 0.8s để tránh spam request lên Server
+            if not get_thread_id or not set_thread_id then continue end
+            
             local env = getrenv()._G.PathTool
-            if not env or not env.EggSystem then continue end
+            if not env or not env.EggSystem or not env.ViewUtil or not env.EventSystem then continue end
             
             local clientEgg = env.BossRoomSystemClient and env.BossRoomSystemClient.gamePlayer.egg
             if not clientEgg then continue end
@@ -168,40 +174,60 @@ return function(Window, Utils)
                 local slotStr = tostring(slotNum)
                 local slotData = H[slotStr]
 
-                -- [ĐIỂM MẤU CHỐT]: Kiểm tra slot rỗng bằng hàm next() để chống lỗi Table Rỗng
-                local isSlotEmpty = false
-                if not slotData or next(slotData) == nil then
-                    isSlotEmpty = true
-                end
-
                 -- TRƯỜNG HỢP 1: Lò trống -> Bỏ trứng vào
-                if hatchSettings.autoStart and isSlotEmpty then
+                if hatchSettings.autoStart and not slotData then
                     pcall(function()
-                        env.EggSystem.ClientHatchStart(slotNum, hatchSettings.eggIdToHatch)
+                        local oldId = get_thread_id()
+                        set_thread_id(2) -- Ép quyền xuống Client
+                        
+                        local success = env.ViewUtil.DoRequest(env.EggSystem.ClientHatchStart, slotNum, hatchSettings.eggIdToHatch)
+                        if success then
+                            env.EventSystem.Execute("EggHatchChange")
+                        end
+                        
+                        set_thread_id(oldId) -- Trả quyền lại cho Executor
                     end)
-                    task.wait(0.2)
+                    task.wait(0.3)
                     continue 
                 end
 
-                -- TRƯỜNG HỢP CÓ TRỨNG
-                if not isSlotEmpty then
+                if slotData then
                     local T = slotData.T or 0
 
                     -- TRƯỜNG HỢP 2: Trứng đã chín -> Thu hoạch
                     if hatchSettings.autoClaim and (T == 0 or currentTime >= T) then
                         pcall(function()
-                            env.EggSystem.ClientHatchTaken(slotNum)
+                            local oldId = get_thread_id()
+                            set_thread_id(2)
+                            
+                            local success = env.ViewUtil.DoRequest(env.EggSystem.ClientHatchTaken, slotNum)
+                            if success then
+                                env.EventSystem.Execute("EggHatchChange")
+                            end
+                            
+                            set_thread_id(oldId)
                         end)
-                        task.wait(0.2)
+                        task.wait(0.3)
                         continue
                     end
 
-                    -- TRƯỜNG HỢP 3: Trứng đang ấp -> Cắn vé
+                    -- TRƯỜNG HỢP 3: Trứng đang ấp -> Cắn vé (Hỗ trợ cắn nhiều lọ liên tiếp)
                     if hatchSettings.autoSkip and T > 0 and currentTime < T then
                         pcall(function()
-                            env.EggSystem.ClientHatchSkip(slotNum, true)
+                            local oldId = get_thread_id()
+                            set_thread_id(2)
+                            
+                            -- Không cần truyền tham số true nữa, game đã update chỉ nhận slotNum
+                            local success = env.ViewUtil.DoRequest(env.EggSystem.ClientHatchSkip, slotNum)
+                            if success then
+                                env.EventSystem.Execute("EggHatchChange")
+                            end
+                            
+                            set_thread_id(oldId)
                         end)
-                        task.wait(0.5) 
+                        -- Delay nhỉnh hơn một chút để Server trừ thời gian. 
+                        -- Lần quét sau nếu vẫn chưa chín, vòng lặp tự động nã tiếp vé nữa.
+                        task.wait(0.8) 
                         continue
                     end
                 end
