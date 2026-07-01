@@ -69,42 +69,8 @@ return function(Window, Utils)
     -- ==========================================
     -- LOOPS (VÒNG LẶP ĐÁNH & BẮT)
     -- ==========================================
-    task.spawn(function()
-        while task.wait(0.2) do
-            -- Kiểm tra dừng từ SystemController
-            if _G.SystemController and _G.SystemController.IsPaused then continue end
-            if not camSettings.autoAttack or camSettings.isHealing then continue end
-            if camSettings.yieldForBoss and _G.BossStatus and _G.BossStatus.bossFound then continue end
-            
-            local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if not hrp then continue end
-            
-            local centerPos = savedFarmPosition and savedFarmPosition.Position or hrp.Position
-            local monstersFolder = Workspace:FindFirstChild("Monsters")
-            if not monstersFolder then continue end
-            
-            for _, monster in pairs(monstersFolder:GetChildren()) do
-                if monster:IsA("Model") then
-                    local root = monster.PrimaryPart or monster:FindFirstChild("HumanoidRootPart")
-                    if root and root:IsA("BasePart") and root.Transparency < 1 and monster:GetAttribute("CatchEndTick") == nil then
-                        local distance = (root.Position - centerPos).Magnitude
-                        if distance <= camSettings.attackRadius and IsMonsterInFilter(monster) then
-                            local id = tonumber(monster.Name:match("Monster_(%d+)"))
-                            if id and MonsterSystem then 
-                                pcall(function() MonsterSystem:ClientAttackMonster(id) end)
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end)
-    
-    -- ==========================================
 
-    -- LOOPS (CÓ KIỂM TRA KHOẢNG CÁCH)
 
-    -- ==========================================
 
     -- 1. VÒNG LẶP ĐÁNH QUÁI
 
