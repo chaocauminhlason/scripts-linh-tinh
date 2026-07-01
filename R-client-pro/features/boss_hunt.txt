@@ -1,12 +1,11 @@
 -- ====================================================================
--- MODULE: SĂN BOSS VIP (BẢN 4.5 - TỐI ƯU VÒNG QUÉT & LÀN SÓNG)
+-- MODULE: SĂN BOSS VIP (BẢN 4.6 - QUẢN LÝ KHOẢNG CÁCH & ĐỒNG BỘ CORE)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local HttpService = game:GetService("HttpService")
     local Workspace = game:GetService("Workspace")
-    local TextChatService = game:GetService("TextChatService")
     local LocalPlayer = Players.LocalPlayer
 
     -- ==========================================
@@ -27,10 +26,12 @@ return function(Window, Utils)
             _G.BossStatus.bossFound = false
             _G.BossStatus.scanning = false
             _G.BossStatus.roundCompleted = false
+            -- Giải phóng Lock phòng hờ khi người dùng tắt tool giữa chừng
+            if _G.SystemController then _G.SystemController.ReleaseLock("BossHunt") end
         end
     end
     
-    if _G.SystemController then
+    if _G.SystemController and type(_G.SystemController.registerModule) == "function" then
         _G.SystemController:registerModule("boss", BossToggle)
     end
 
@@ -56,7 +57,7 @@ return function(Window, Utils)
         scanning = false,
         lastScanTime = 0,
         currentWorldIndex = 1,
-        roundCompleted = false -- CỜ ĐÁNH DẤU HOÀN THÀNH VÒNG QUÉT
+        roundCompleted = false
     }
 
     local function GetAllBossKeywords(worldIds)
@@ -73,9 +74,7 @@ return function(Window, Utils)
         return keywords
     end
 
-    -- ==========================================
-    -- KHỞI TẠO DỮ LIỆU WORLD
-    -- ==========================================
+    -- Khôi phục cấu hình World đã lưu
     local defaultWorlds = {2,3,4,5,6,7,8,9,10,11,12}
     local savedWorlds = nil
     pcall(function()
@@ -91,7 +90,7 @@ return function(Window, Utils)
     end
 
     -- ==========================================
-    -- HỆ THỐNG LẮNG NGHE UI THÔNG BÁO BOSS (GLOBAL STATE)
+    -- HỆ THỐNG LẮNG NGHE SÓNG BOSS (QUEUE INTEGRATED)
     -- ==========================================
     local lastBossAlertTime = 0
     local BOSS_GLOBAL_LIFESPAN = 300
@@ -115,7 +114,6 @@ return function(Window, Utils)
             
             game.StarterGui:SetCore("SendNotification", { Title = "⚔️ Global Boss Alert!", Text = "Sóng Boss xuất hiện! Bắt đầu quét...", Duration = 5 })
             
-            -- RESET LẠI TRẠNG THÁI QUÉT KHI CÓ SÓNG MỚI
             _G.BossStatus.roundCompleted = false
             _G.BossStatus.currentWorldIndex = 1
             if #attackSettings.selectedWorlds > 0 then
@@ -123,8 +121,18 @@ return function(Window, Utils)
                 if Utils and Utils.TeleportToArea then Utils.TeleportToArea(_G.BossStatus.currentWorldId) end
             end
             
-            if attackSettings.autoHop and Utils and Utils.HopServer then 
-                Utils.HopServer("Đang tìm server bắt sóng Boss...") 
+            -- Đẩy lệnh nhảy server bắt sóng vào hàng đợi an toàn thay vì gọi trực tiếp
+            local controller = _G.SystemController
+            if attackSettings.autoHop and controller then 
+                table.insert(controller.TaskQueue, {
+                    Name = "BossWaveHop",
+                    Func = function()
+                        if controller.RequestLock("BossHunt") then
+                            Utils.HopServer("Tìm Server bắt sóng Boss")
+                            controller.ReleaseLock("BossHunt")
+                        end
+                    end
+                })
             end
         end
     end
@@ -211,7 +219,7 @@ return function(Window, Utils)
     BossTab:CreateSection("--- CHỌN WORLD CÓ BOSS ---")
     local TargetLabel = BossTab:CreateLabel("🎯 Đã chọn " .. #attackSettings.selectedWorlds .. " world có boss")
     
-    local worldDropdown = Utils.CreateAreaMultiSelect(BossTab, {
+    Utils.CreateAreaMultiSelect(BossTab, {
         name = "Chọn World Có Boss", flag = "BossWorldSelect",
         defaultAreas = Utils.GetAreaNamesByIds(attackSettings.selectedWorlds),
         callback = function(selectedIds, selectedNames)
@@ -236,13 +244,11 @@ return function(Window, Utils)
     BossTab:CreateToggle({
         Name = "Bật Auto Săn Boss", CurrentValue = false, Flag = "BossAutoHunt",
         Callback = function(Value)
-            attackSettings.enabled = Value
-            _G.BossStatus.isActive = Value
+            BossToggle(Value)
             if Value then
                 if #attackSettings.selectedWorlds == 0 then
                     game.StarterGui:SetCore("SendNotification", { Title = "⚠️ Lỗi", Text = "Vui lòng chọn ít nhất 1 world có boss!", Duration = 3 })
-                    attackSettings.enabled = false
-                    _G.BossStatus.isActive = false
+                    BossToggle(false)
                     return
                 end
                 _G.BossStatus.roundCompleted = false
@@ -252,8 +258,6 @@ return function(Window, Utils)
                 StatusLabel:Set("🟢 Trạng thái: Đang quét boss...")
             else
                 StatusLabel:Set("🔴 Trạng thái: Đã tắt")
-                _G.BossStatus.bossFound = false
-                _G.BossStatus.scanning = false
             end
         end
     })
@@ -273,22 +277,30 @@ return function(Window, Utils)
         local bossCheckCooldown = 0
 
         while task.wait(0.2) do
-            if _G.SystemController and _G.SystemController.shouldStop then StatusLabel:Set("⏸️ ĐÃ DỪNG (Main Controller)") task.wait(0.5) continue end
+            local controller = _G.SystemController
+            if controller and controller.IsPaused then 
+                StatusLabel:Set("⏸️ ĐÃ DỪNG (Main Controller)") 
+                task.wait(0.5) 
+                continue 
+            end
+            
             if not attackSettings.enabled or #attackSettings.selectedWorlds == 0 then task.wait(1) continue end
 
             -- NẾU ĐÃ HOÀN THÀNH 1 VÒNG SERVER NÀY
             if _G.BossStatus.roundCompleted then
-                if attackSettings.autoHop then
-                    StatusLabel:Set("🔄 Đã xong 1 vòng. Đang nhảy server...")
-                    if Utils and Utils.HopServer then
-                        if Utils.HopServer("Hoàn tất 1 vòng quét, sang server mới...") then
-                            task.wait(5)
-                            _G.BossStatus.roundCompleted = false
-                            _G.BossStatus.currentWorldIndex = 1
-                            _G.BossStatus.currentWorldId = attackSettings.selectedWorlds[1]
-                            Utils.TeleportToArea(_G.BossStatus.currentWorldId)
+                if attackSettings.autoHop and controller then
+                    StatusLabel:Set("🔄 Đã xong 1 vòng. Đang xếp hàng nhảy server...")
+                    
+                    table.insert(controller.TaskQueue, {
+                        Name = "BossRoundHop",
+                        Func = function()
+                            if controller.RequestLock("BossHunt") then
+                                Utils.HopServer("Hoàn tất 1 vòng quét Boss")
+                                controller.ReleaseLock("BossHunt")
+                            end
                         end
-                    end
+                    })
+                    task.wait(5)
                 else
                     StatusLabel:Set("💤 Đã xong 1 vòng. Đang ngủ đông chờ sóng mới...")
                 end
@@ -311,6 +323,9 @@ return function(Window, Utils)
                 _G.BossStatus.scanning = false
 
                 if bossId and DataPullFunc then
+                    -- [MUTEX LOCK]: Chiếm quyền hệ thống, khóa cứng luồng WeatherHop
+                    if controller then controller.RequestLock("BossHunt") end
+
                     _G.BossStatus.bossFound = true
                     _G.BossStatus.bossId = bossId
                     _G.BossStatus.bossName = bossName
@@ -322,12 +337,21 @@ return function(Window, Utils)
 
                     if bossPos then
                         local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                        if hrp then hrp.CFrame = CFrame.new(bossPos + Vector3.new(0, 8, 0)) end
+                        if hrp then 
+                            -- [FIX LỖI TELE LIÊN TỤC]: Đo khoảng cách hình học giữa người chơi và mục tiêu
+                            local distance = (hrp.Position - bossPos).Magnitude
+                            if distance > 20 then -- Chỉ ép tọa độ nếu đứng xa hơn 20 studs
+                                hrp.CFrame = CFrame.new(bossPos + Vector3.new(0, 8, 0))
+                                print("[Boss] 🚀 Dịch chuyển tiếp cận (Khoảng cách hiện tại: " .. math.floor(distance) .. " studs)")
+                            end
+                        end
                     end
                     pcall(function() DataPullFunc:InvokeServer("MonsterAttackChannel", bossId) end)
                 else
                     if _G.BossStatus.bossFound then
                         game.StarterGui:SetCore("SendNotification", { Title = "💀 Boss đã chết", Text = "Tiếp tục tìm kiếm...", Duration = 3 })
+                        -- [MUTEX RELEASE]: Trả Lock lại cho hệ thống khi Boss chết
+                        if controller then controller.ReleaseLock("BossHunt") end
                     end
                     
                     _G.BossStatus.bossFound = false
@@ -346,7 +370,7 @@ return function(Window, Utils)
                         _G.BossStatus.currentWorldId = attackSettings.selectedWorlds[nextIndex]
                         StatusLabel:Set("🔄 Trạng thái: Di chuyển đến world tiếp theo...")
                         Utils.TeleportToArea(_G.BossStatus.currentWorldId)
-                        task.wait(3) -- Delay 3 giây để đảm bảo UI map load kịp, tránh bỏ sót sóng boss nhảy cách nhau
+                        task.wait(3)
                     end
                 end
             end
@@ -356,5 +380,5 @@ return function(Window, Utils)
     BossTab:CreateSection("--- ĐIỀU KHIỂN THỦ CÔNG ---")
     BossTab:CreateButton({ Name = "🏠 VỀ STARTER ISLAND", Callback = function() Utils.TeleportToStarterIsland() end })
 
-    print("✅ Boss Hunt 4.5 (Optimized Wave Scanner) loaded successfully!")
+    print("✅ Boss Hunt 4.6 (Distance Check & Mutex Sync Ready) loaded successfully!")
 end
