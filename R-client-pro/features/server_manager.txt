@@ -8,7 +8,6 @@ return function(Window, Utils)
     local CoreGui = game:GetService("CoreGui")
     local VirtualInputManager = game:GetService("VirtualInputManager")
     local LocalPlayer = Players.LocalPlayer
-    weatherHopSettings.BlacklistedServers = {}
 
     -- ==========================================
     -- HỆ THỐNG CACHE TRẠNG THÁI (STATE PERSISTENCE)
@@ -19,6 +18,7 @@ return function(Window, Utils)
         targetIds = {60001},
         selectedNames = {"🔴 Huyết Nguyệt (Blood Moon)"} 
     }
+    weatherHopSettings.BlacklistedServers = {}
 
     pcall(function()
         if isfile and isfile(configFileName) then
