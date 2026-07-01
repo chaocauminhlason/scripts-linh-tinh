@@ -77,8 +77,8 @@ if Utils then
     local r = SafeLoad('features/farm.txt')
     if r then r(Window, Utils) end
     
-    local b = SafeLoad('features/boss_hunt.txt')
-    if b then b(Window, Utils) end
+    --local b = SafeLoad('features/boss_hunt.txt')
+    --if b then b(Window, Utils) end
     
     local sm = SafeLoad('features/server_manager.txt')
     if sm then sm(Window, Utils) end
