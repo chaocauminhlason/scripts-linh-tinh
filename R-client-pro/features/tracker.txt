@@ -86,10 +86,15 @@ return function(Window, Utils)
 
     local function SetupChat(p) 
         p.Chatted:Connect(function(msg) 
+            -- CHỈ KHI NÀO ĐANG BẬT TOGGLE THÌ CHAT MỚI ĐỔI MỤC TIÊU
             if chatListenerEnabled and msg == "!f" then 
                 targetPlayer = p 
+                
+                -- Chỉ tự động bật follow nếu Toggle đang ở chế độ chờ
+                -- Nếu bạn muốn dù đang tắt toggle, chat !f vẫn tự bật thì giữ như cũ
                 following = true 
-                FollowToggle:Set(true)
+                FollowToggle:Set(true) 
+                
                 StatusLabel:Set("Trạng thái: Đang theo dõi " .. p.Name) 
             end 
         end) 
