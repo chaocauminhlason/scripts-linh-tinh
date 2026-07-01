@@ -67,7 +67,7 @@ end
 
 -- 1. Kéo các file Core
 local Utils = SafeLoad('core/utilities.txt')
-local Utils = SafeLoad('core/system_controller.txt')
+local Controller = SafeLoad('core/system_controller.txt')
 local WebhookModule = SafeLoad('core/webhook.txt')
 
 -- 2. Kéo các Features
