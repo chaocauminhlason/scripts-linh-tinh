@@ -9,7 +9,13 @@ local SystemController = {
     TaskQueue = {},   -- Hàng đợi chức năng
     SavedState = {}   -- Lưu trạng thái để Resume
 }
+-- Thêm vào bảng SystemController
+SystemController.Modules = {} -- Danh sách các module đã đăng ký
 
+-- Hàm để các module "đăng ký" vào danh sách theo dõi
+function SystemController:registerModule(name, pauseFunc)
+    self.Modules[name] = pauseFunc
+end
 -- [QUAN TRỌNG NHẤT]: Ép ngay nó vào _G để các file khác gọi không bị lỗi nil
 _G.SystemController = SystemController 
 
@@ -17,11 +23,13 @@ _G.SystemController = SystemController
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     
-    -- Dùng phím F4 để Stop/Resume
-    if input.KeyCode == Enum.KeyCode.F4 then
+    if input.KeyCode == Enum.KeyCode.P then -- Đổi sang phím P
         SystemController.IsPaused = not SystemController.IsPaused
         
-        -- Đảm bảo _G.Config tồn tại để không văng lỗi khi spam F4 sớm
+        for name, pauseFunc in pairs(SystemController.Modules) do
+            pcall(function() pauseFunc(SystemController.IsPaused) end)
+        end
+        -- Đảm bảo _G.Config tồn tại để không văng lỗi khi spam P sớm
         _G.Config = _G.Config or {}
         
         if SystemController.IsPaused then
@@ -35,7 +43,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
             _G.Config.BossHunt = false
             
             pcall(function()
-                game.StarterGui:SetCore("SendNotification", {Title = "Hệ Thống", Text = "⏸️ Đã DỪNG mọi hoạt động (F4)", Duration = 3})
+                game.StarterGui:SetCore("SendNotification", {Title = "Hệ Thống", Text = "⏸️ Đã DỪNG mọi hoạt động (P)", Duration = 3})
             end)
         else
             -- BƯỚC RESUME: Nạp lại trạng thái cũ
@@ -44,7 +52,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
             _G.Config.BossHunt = SystemController.SavedState.BossHunt
             
             pcall(function()
-                game.StarterGui:SetCore("SendNotification", {Title = "Hệ Thống", Text = "▶️ Tiếp tục hoạt động (F4)", Duration = 3})
+                game.StarterGui:SetCore("SendNotification", {Title = "Hệ Thống", Text = "▶️ Tiếp tục hoạt động (P)", Duration = 3})
             end)
         end
     end
