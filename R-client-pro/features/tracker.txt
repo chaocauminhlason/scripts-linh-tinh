@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: THEO DÕI NGƯỜI CHƠI & LIVE GPS
+-- MODULE: THEO DÕI NGƯỜI CHƠI & LIVE GPS (V2.0 - ĐIỀU KHIỂN THÔNG MINH)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -10,10 +10,8 @@ return function(Window, Utils)
     local following = false
     local targetPlayer = nil
     local missingTime = 0
+    local chatListenerEnabled = false -- Biến kiểm soát lắng nghe chat
 
-    -- ==========================================
-    -- GIAO DIỆN THEO DÕI
-    -- ==========================================
     local MainTab = Window:CreateTab("Theo Dõi", 4483362458)
     local StatusLabel = MainTab:CreateLabel("Trạng thái: Đang nghỉ")
 
@@ -30,36 +28,52 @@ return function(Window, Utils)
         Options = GetPlayerNames(), 
         CurrentOption = "", 
         MultipleOptions = false, 
-        Flag = "PlayerDropdown", 
         Callback = function(Option)
             targetPlayer = Players:FindFirstChild(Option[1])
             if targetPlayer then 
-                following = true
-                StatusLabel:Set("Trạng thái: Đang theo dõi " .. targetPlayer.Name) 
-            end
+                StatusLabel:Set("Trạng thái: Đã chọn " .. targetPlayer.Name) 
+            end 
         end 
     })
 
     MainTab:CreateButton({ Name = "Làm mới danh sách", Callback = function() PlayerDropdown:Refresh(GetPlayerNames()) end })
-    MainTab:CreateToggle({ 
+    
+    local FollowToggle = MainTab:CreateToggle({ 
         Name = "Bật/Tắt Theo Dõi", 
         CurrentValue = false, 
-        Flag = "FollowToggle", 
         Callback = function(Value) 
             following = Value 
             if not Value then StatusLabel:Set("Trạng thái: Đã dừng") end 
         end 
     })
-    MainTab:CreateSection("Chat '!f' để kích hoạt follow từ xa.")
 
-    -- ==========================================
-    -- LOGIC FOLLOW & LỆNH CHAT
-    -- ==========================================
+    MainTab:CreateButton({ 
+        Name = "🚀 Dịch chuyển đến người được chọn", 
+        Callback = function()
+            if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if hrp then hrp.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame end
+            else
+                game.StarterGui:SetCore("SendNotification", {Title = "Lỗi", Text = "Không tìm thấy người chơi mục tiêu!", Duration = 3})
+            end
+        end 
+    })
+
+    -- [GATED CHAT LISTENER]: Chỉ lắng nghe khi toggle này được bật
+    MainTab:CreateToggle({
+        Name = "Lắng nghe chat '!f' để theo dõi",
+        CurrentValue = false,
+        Callback = function(Value)
+            chatListenerEnabled = Value
+        end
+    })
+
     local function SetupChat(p) 
         p.Chatted:Connect(function(msg) 
-            if msg == "!f" then 
+            if chatListenerEnabled and msg == "!f" then 
                 targetPlayer = p 
                 following = true 
+                FollowToggle:Set(true) -- Cập nhật UI Toggle
                 StatusLabel:Set("Trạng thái: Đang theo dõi " .. p.Name) 
             end 
         end) 
@@ -67,6 +81,7 @@ return function(Window, Utils)
     for _, p in ipairs(Players:GetPlayers()) do if p ~= LocalPlayer then SetupChat(p) end end
     Players.PlayerAdded:Connect(SetupChat)
 
+    -- [LOGIC FOLLOW]
     task.spawn(function()
         while task.wait(0.5) do
             if following and targetPlayer then
@@ -89,22 +104,15 @@ return function(Window, Utils)
     end)
 
     -- ==========================================
-    -- LỚP PHỦ TỌA ĐỘ LIVE (GPS) KÉO THẢ ĐƯỢC
+    -- LỚP PHỦ TỌA ĐỘ LIVE (GPS)
     -- ==========================================
     local coordGui = Instance.new("ScreenGui", game.CoreGui)
     coordGui.Name = "CoordLiveGUI"
-
     local coordText = Instance.new("TextLabel", coordGui)
-    coordText.Size = UDim2.new(0, 160, 0, 26)
-    coordText.Position = UDim2.new(0.78, 0, 0.05, 0)
-    coordText.BackgroundTransparency = 1
-    coordText.TextColor3 = Color3.fromRGB(0, 255, 0)
-    coordText.Font = Enum.Font.Code
-    coordText.TextSize = 16
-    coordText.TextXAlignment = Enum.TextXAlignment.Left
-    coordText.TextYAlignment = Enum.TextYAlignment.Top
-    coordText.Text = "0 / 0 / 0"
-    coordText.Active = true
+    coordText.Size = UDim2.new(0, 160, 0, 26); coordText.Position = UDim2.new(0.78, 0, 0.05, 0)
+    coordText.BackgroundTransparency = 1; coordText.TextColor3 = Color3.fromRGB(0, 255, 0)
+    coordText.Font = Enum.Font.Code; coordText.TextSize = 16; coordText.TextXAlignment = Enum.TextXAlignment.Left
+    coordText.Text = "0 / 0 / 0"; coordText.Active = true
 
     RunService.RenderStepped:Connect(function()
         local char = LocalPlayer.Character
@@ -114,9 +122,8 @@ return function(Window, Utils)
         end
     end)
 
-    local dragging = false
-    local dragStart, startPos
-
+    -- [DRAGGING LOGIC]
+    local dragging, dragStart, startPos
     coordText.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true; dragStart = input.Position; startPos = coordText.Position
