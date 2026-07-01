@@ -20,7 +20,8 @@ return function(Window, Utils)
         targetMonsterNames = {},
         yieldForBoss = true,
         autoReturnToFarm = false,
-        healThreshold = 1
+        healThreshold = 1,
+        attackRadius = 200 -- [MỚI THÊM] Bán kính farm mặc định
     }
 
     local savedFarmPosition = nil
@@ -238,6 +239,17 @@ return function(Window, Utils)
         Flag = "FarmAutoAttack", 
         Callback = function(V) pcall(function() camSettings.autoAttack = V end) end 
     })
+    CamTab:CreateSlider({
+        Name = "Khoảng cách Attack (Bán kính Farm)",
+        Range = {10, 2000},
+        Increment = 10,
+        Suffix = " studs",
+        CurrentValue = 200,
+        Flag = "FarmRadiusSlider",
+        Callback = function(Value) 
+            pcall(function() camSettings.attackRadius = Value end) 
+        end,
+    })
     CamTab:CreateToggle({ 
         Name = "Tự Động Bắt Quái", 
         CurrentValue = false, 
@@ -327,12 +339,19 @@ return function(Window, Utils)
     })
 
     -- ==========================================
-    -- LOOPS
+    -- LOOPS (CÓ KIỂM TRA KHOẢNG CÁCH)
     -- ==========================================
+    -- 1. VÒNG LẶP ĐÁNH QUÁI
     task.spawn(function()
         while task.wait(0.2) do
             if not camSettings.autoAttack or camSettings.isHealing then continue end
             if camSettings.yieldForBoss and _G.BossStatus and _G.BossStatus.bossFound then continue end
+            
+            local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if not hrp then continue end
+            
+            -- Lấy tâm Farm: Ưu tiên điểm đã lưu, nếu không có thì lấy vị trí đang đứng
+            local centerPos = savedFarmPosition and savedFarmPosition.Position or hrp.Position
             
             local monstersFolder = Workspace:FindFirstChild("Monsters")
             if not monstersFolder then continue end
@@ -341,18 +360,25 @@ return function(Window, Utils)
                 if monster:IsA("Model") then
                     local root = monster.PrimaryPart or monster:FindFirstChild("HumanoidRootPart")
                     if root and root:IsA("BasePart") and root.Transparency < 1 and monster:GetAttribute("CatchEndTick") == nil then
-                        if IsMonsterInFilter(monster) then
-                            local id = tonumber(monster.Name:match("Monster_(%d+)"))
-                            if id and MonsterSystem then 
-                                pcall(function() MonsterSystem:ClientAttackMonster(id) end)
+                        
+                        -- KIỂM TRA KHOẢNG CÁCH
+                        local distance = (root.Position - centerPos).Magnitude
+                        if distance <= camSettings.attackRadius then
+                            if IsMonsterInFilter(monster) then
+                                local id = tonumber(monster.Name:match("Monster_(%d+)"))
+                                if id and MonsterSystem then 
+                                    pcall(function() MonsterSystem:ClientAttackMonster(id) end)
+                                end
                             end
                         end
+                        
                     end
                 end
             end
         end
     end)
 
+    -- 2. VÒNG LẶP BẮT QUÁI
     task.spawn(function()
         while task.wait(0.5) do
             if not camSettings.autoCatch or camSettings.isHealing then continue end
@@ -361,6 +387,7 @@ return function(Window, Utils)
             local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
             if not hrp then continue end
 
+            local centerPos = savedFarmPosition and savedFarmPosition.Position or hrp.Position
             local playerId = LocalPlayer.UserId
             local monstersFolder = Workspace:FindFirstChild("Monsters")
             if not monstersFolder then continue end
@@ -374,11 +401,17 @@ return function(Window, Utils)
                         if catchTaken and catchTaken == playerId then
                             local root = monster.PrimaryPart or monster:FindFirstChild("HumanoidRootPart")
                             if root and root:IsA("BasePart") then
-                                local dist = (hrp.Position - root.Position).Magnitude
-                                if dist < closestDist then 
-                                    closestDist = dist
-                                    targetCatch = monster 
+                                
+                                -- KIỂM TRA KHOẢNG CÁCH TRƯỚC KHI TÍNH CON GẦN NHẤT
+                                local distFromCenter = (root.Position - centerPos).Magnitude
+                                if distFromCenter <= camSettings.attackRadius then
+                                    local distFromPlayer = (hrp.Position - root.Position).Magnitude
+                                    if distFromPlayer < closestDist then 
+                                        closestDist = distFromPlayer
+                                        targetCatch = monster 
+                                    end
                                 end
+                                
                             end
                         end
                     end
@@ -405,6 +438,8 @@ return function(Window, Utils)
             end
         end
     end)
+
+
 
     -- Heal
     local function CheckDeadPetsFromUI()
