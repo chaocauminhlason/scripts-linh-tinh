@@ -12,6 +12,42 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
+-- Biến hàng đợi toàn cục
+_G.HopQueue = {
+    Requests = {}, -- Danh sách yêu cầu {Priority = 1, Sender = "Boss"}
+    IsProcessing = false
+}
+
+function Utils.RequestHop(senderName, priority)
+    table.insert(_G.HopQueue.Requests, {Sender = senderName, Priority = priority or 1})
+    print("[Dispatcher] 📥 Đã nhận yêu cầu hop từ: " .. senderName)
+    
+    if not _G.HopQueue.IsProcessing then
+        Utils.ProcessQueue()
+    end
+end
+
+function Utils.ProcessQueue()
+    if #_G.HopQueue.Requests == 0 then return end
+    
+    _G.HopQueue.IsProcessing = true
+    -- Sắp xếp theo ưu tiên (Số càng cao càng ưu tiên)
+    table.sort(_G.HopQueue.Requests, function(a, b) return a.Priority > b.Priority end)
+    
+    local topRequest = table.remove(_G.HopQueue.Requests, 1)
+    print("[Dispatcher] 🚀 Đang xử lý hop cho: " .. topRequest.Sender)
+    
+    -- Gọi hàm Hop cũ
+    Utils.HopServer("Đang chuyển server theo yêu cầu của: " .. topRequest.Sender)
+    
+    task.wait(15) -- Cooldown cứng để đảm bảo server mới load xong
+    _G.HopQueue.IsProcessing = false
+    
+    -- Xử lý tiếp nếu còn hàng đợi
+    if #_G.HopQueue.Requests > 0 then
+        Utils.ProcessQueue()
+    end
+end
 -- ==========================================
 -- CACHE REMOTE
 -- ==========================================
@@ -839,6 +875,70 @@ function Utils.HopServer(notificationMsg)
                 -- Nếu danh sách đen khiến không tìm được server nào -> Reset danh sách đen
                 warn("[Utils] ⚠️ Tất cả server đã được quét! Reset Blacklist...")
                 _G.BlacklistedServers = {} 
+            end
+        end
+    end)
+end-- ====================================================================
+-- HÀM SERVER HOP (VERSION 3.0 - DÀNH CHO HỆ THỐNG QUEUE)
+-- ====================================================================
+function Utils.HopServer(reason)
+    local HttpService = game:GetService("HttpService")
+    local TeleportService = game:GetService("TeleportService")
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+    local PlaceId = game.PlaceId
+
+    print("[Hop] 🔄 Bắt đầu tiến trình Hop. Lý do: " .. tostring(reason))
+
+    -- Khởi tạo hoặc lấy Blacklist từ Global
+    _G.BlacklistedServers = _G.BlacklistedServers or {}
+
+    pcall(function()
+        local api = "https://games.roblox.com/v1/games/"..PlaceId.."/servers/Public?sortOrder=Asc&limit=100"
+        local data = game:HttpGet(api)
+        local json = HttpService:JSONDecode(data)
+        
+        if json and json.data then
+            local validServers = {}
+            for _, v in pairs(json.data) do
+                -- Kiểm tra Blacklist
+                local isBlacklisted = false
+                for _, blackId in ipairs(_G.BlacklistedServers) do
+                    if v.id == blackId then isBlacklisted = true break end
+                end
+
+                -- Điều kiện lọc: Không phải server hiện tại, không trong blacklist, server chưa đầy
+                if v.id and v.id ~= game.JobId and not isBlacklisted then
+                    local playing = v.playing or 0
+                    local maxPlayers = v.maxPlayers or 0
+                    if playing < maxPlayers then
+                        table.insert(validServers, {id = v.id, playing = playing})
+                    end
+                end
+            end
+            
+            if #validServers > 0 then
+                -- Ưu tiên server vắng nhất
+                table.sort(validServers, function(a, b) return a.playing < b.playing end)
+                
+                local targetId = validServers[1].id
+                
+                -- Thêm vào Blacklist
+                table.insert(_G.BlacklistedServers, targetId)
+                
+                print("[Hop] ✅ Chọn được server: " .. tostring(targetId) .. ". Đang Teleport...")
+                
+                -- Thông báo cho người dùng
+                game.StarterGui:SetCore("SendNotification", {
+                    Title = "🚀 Server Hop", 
+                    Text = "Đang chuyển: " .. reason,
+                    Duration = 3
+                })
+                
+                TeleportService:TeleportToPlaceInstance(PlaceId, targetId, LocalPlayer)
+            else
+                warn("[Hop] ⚠️ Không tìm thấy server hợp lệ! Reset Blacklist.")
+                _G.BlacklistedServers = {} -- Tự phục hồi
             end
         end
     end)
