@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: THEO DÕI NGƯỜI CHƠI & LIVE GPS (V2.1 - TÍCH HỢP HỆ THỐNG ĐIỀU KHIỂN CHUNG)
+-- MODULE: THEO DÕI NGƯỜI CHƠI & LIVE GPS (V2.2 - TÍCH HỢP ĐIỀU KHIỂN TỔNG)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -12,30 +12,21 @@ return function(Window, Utils)
     local missingTime = 0
     local chatListenerEnabled = false
 
-    -- [HÀM ĐIỀU KHIỂN CHUNG]
-    local function ToggleTracker(paused)
-        -- Nếu hệ thống Pause, lưu trạng thái hiện tại và tắt
-        if paused then
-            -- Tạm thời vô hiệu hóa việc follow nhưng giữ targetPlayer để Resume
-            following = false 
-        else
-            -- Resume lại nếu trước đó đang follow
-            -- (Bạn có thể thêm logic kiểm tra xem trước đó có đang bật không ở đây nếu muốn hoàn hảo hơn)
-        end
-    end
-
-    -- Đăng ký module với SystemController
+    -- [ĐĂNG KÝ VỚI SYSTEM CONTROLLER]
+    -- Khi nhận lệnh Pause/Resume từ nút STOP/RESUME (hoặc phím P), nó tự cập nhật biến following
     if _G.SystemController and type(_G.SystemController.registerModule) == "function" then
-        _G.SystemController:registerModule("tracker", ToggleTracker)
+        _G.SystemController:registerModule("tracker", function(paused)
+            if paused then
+                following = false -- Dừng ép buộc
+            else
+                -- Có thể thêm logic khôi phục ở đây nếu muốn
+            end
+        end)
     end
 
-    -- ==========================================
-    -- GIAO DIỆN THEO DÕI
-    -- ==========================================
     local MainTab = Window:CreateTab("Theo Dõi", 4483362458)
     local StatusLabel = MainTab:CreateLabel("Trạng thái: Đang nghỉ")
 
-    -- ... [Phần GetPlayerNames và Dropdown giữ nguyên như cũ] ...
     local function GetPlayerNames()
         local names = {}
         for _, p in ipairs(Players:GetPlayers()) do 
@@ -47,7 +38,7 @@ return function(Window, Utils)
     local PlayerDropdown = MainTab:CreateDropdown({ 
         Name = "Chọn người đi theo", 
         Options = GetPlayerNames(), 
-        CurrentOption = "", 
+        CurrentOption = {}, 
         MultipleOptions = false, 
         Callback = function(Option)
             targetPlayer = Players:FindFirstChild(Option[1])
@@ -86,15 +77,11 @@ return function(Window, Utils)
 
     local function SetupChat(p) 
         p.Chatted:Connect(function(msg) 
-            -- CHỈ KHI NÀO ĐANG BẬT TOGGLE THÌ CHAT MỚI ĐỔI MỤC TIÊU
+            -- CHỈ KHI NÀO ĐANG BẬT TOGGLE HOẶC ĐANG BẬT LISTEN THÌ MỚI ĐỔI MỤC TIÊU
             if chatListenerEnabled and msg == "!f" then 
                 targetPlayer = p 
-                
-                -- Chỉ tự động bật follow nếu Toggle đang ở chế độ chờ
-                -- Nếu bạn muốn dù đang tắt toggle, chat !f vẫn tự bật thì giữ như cũ
                 following = true 
-                FollowToggle:Set(true) 
-                
+                FollowToggle:Set(true)
                 StatusLabel:Set("Trạng thái: Đang theo dõi " .. p.Name) 
             end 
         end) 
@@ -105,7 +92,7 @@ return function(Window, Utils)
     -- [LOGIC FOLLOW]
     task.spawn(function()
         while task.wait(0.5) do
-            -- [BỔ SUNG]: Check dừng toàn cục từ SystemController
+            -- Kiểm tra xem hệ thống có đang bị Pause toàn cục không
             if _G.SystemController and _G.SystemController.IsPaused then continue end
             
             if following and targetPlayer then
@@ -127,7 +114,7 @@ return function(Window, Utils)
         end
     end)
 
-    -- ... [Phần GPS và Draggable giữ nguyên] ...
+    -- [GPS LIVE]
     local coordGui = Instance.new("ScreenGui", game.CoreGui)
     coordGui.Name = "CoordLiveGUI"
     local coordText = Instance.new("TextLabel", coordGui)
