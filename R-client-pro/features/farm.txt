@@ -153,6 +153,30 @@ return function(Window, Utils)
     -- ==========================================
     local CamTab = Window:CreateTab("Main", 4483345998)
 
+CamTab:CreateButton({
+    Name = "🛑 STOP TẤT CẢ",
+    Callback = function()
+        if _G.SystemController then
+            _G.SystemController.IsPaused = true
+            for name, pauseFunc in pairs(_G.SystemController.Modules) do
+                pcall(function() pauseFunc(true) end) -- Truyền true để module dừng
+            end
+            Rayfield:Notify({Title = "Hệ thống", Content = "Đã dừng toàn bộ!", Duration = 3})
+        end
+    end
+})
+CamTab:CreateButton({
+    Name = "▶️ RESUME TẤT CẢ",
+    Callback = function()
+        if _G.SystemController then
+            _G.SystemController.IsPaused = false
+            for name, pauseFunc in pairs(_G.SystemController.Modules) do
+                pcall(function() pauseFunc(false) end) -- Truyền false để module chạy lại
+            end
+            Rayfield:Notify({Title = "Hệ thống", Content = "Đã tiếp tục!", Duration = 3})
+        end
+    end
+})
     CamTab:CreateSection("--- QUẢN LÝ QUÁI FARM ---")
 
     local function UpdateMonsterLabel()
@@ -162,19 +186,7 @@ return function(Window, Utils)
             MonsterListLabel:Set("🐾 Đang farm: Tất cả quái")
         end
     end
-    ControlTab:CreateToggle({
-    Name = "TẠM DỪNG TOÀN BỘ HỆ THỐNG (P)",
-    CurrentValue = false,
-    Callback = function(Value)
-        -- Gọi trực tiếp logic của phím P
-        if _G.SystemController then
-            _G.SystemController.IsPaused = Value
-            for name, pauseFunc in pairs(_G.SystemController.Modules) do
-                pcall(function() pauseFunc(Value) end)
-            end
-        end
-    end
-})
+    
 
     local MonsterListLabel = CamTab:CreateLabel("🐾 Đang farm: " .. (#camSettings.targetMonsterNames > 0 and table.concat(camSettings.targetMonsterNames, ", ") or "Tất cả quái"))
 
