@@ -8,7 +8,7 @@ return function(Window, Utils)
     local CoreGui = game:GetService("CoreGui")
     local VirtualInputManager = game:GetService("VirtualInputManager")
     local LocalPlayer = Players.LocalPlayer
-
+    
     -- ==========================================
     -- HỆ THỐNG CACHE TRẠNG THÁI (STATE PERSISTENCE)
     -- ==========================================
@@ -18,7 +18,7 @@ return function(Window, Utils)
         targetIds = {60001},
         selectedNames = {"🔴 Huyết Nguyệt (Blood Moon)"} 
     }
-    weatherHopSettings.BlacklistedServers = {}
+    
 
     pcall(function()
         if isfile and isfile(configFileName) then
@@ -243,56 +243,55 @@ return function(Window, Utils)
         end
     end)
 
-    -- ==========================================
-    -- MASTER LOOP: ĐIỀU PHỐI THỜI TIẾT
+-- ==========================================
+    -- MASTER LOOP: ĐIỀU PHỐI THỜI TIẾT (QUEUE READY)
     -- ==========================================
     task.spawn(function()
         local currentlyInTargetWeather = false
 
         while task.wait(2) do
-            if _G.SystemController and _G.SystemController.shouldStop then continue end
-
-            -- Luôn cập nhật biến nội bộ dù hiển thị hay không
-            local currentName = "Bình Thường"
-            local currentId = 0
-            if Utils and type(Utils.GetCurrentWeather) == "function" then
-                currentName, currentId = Utils.GetCurrentWeather(WeatherMap)
-                _G.ServerManager.currentWeather = currentName or "Unknown"
-            end
+            -- Kiểm tra xem hệ thống có đang Pause toàn cục không
+            if _G.SystemController and _G.SystemController.IsPaused then continue end
 
             if weatherHopSettings.enabled then
+                -- Kiểm tra Utils
                 if not Utils or type(Utils.GetCurrentWeather) ~= "function" then
-                    warn("[-] LỖI: Không tìm thấy hàm Utils.GetCurrentWeather!")
+                    warn("[-] LỖI: Utils.GetCurrentWeather không tồn tại!")
                     task.wait(5)
                     continue
                 end
 
+                local _, currentId = Utils.GetCurrentWeather(WeatherMap)
+                
                 local isTarget = false
                 for _, tid in ipairs(weatherHopSettings.targetIds) do
                     if currentId == tid then isTarget = true break end
                 end
 
                 if isTarget then
-                    _G.ServerManager.pauseFarm = false
-                    if not currentlyInTargetWeather then
-                        print("[+] Đang ở thời tiết VIP: " .. tostring(currentName) .. " -> TẠM DỪNG HOP")
-                        currentlyInTargetWeather = true
-                    end
-                else
+    _G.ServerManager.pauseFarm = false
+    _G.BlacklistedServers = {} -- Reset Blacklist cực nhanh bằng lệnh này
+    currentlyInTargetWeather = true
+end
                     _G.ServerManager.pauseFarm = true
-                    if currentlyInTargetWeather then
-                        game.StarterGui:SetCore("SendNotification", {Title = "Thời tiết đã hết!", Text = "Đang tìm server mới...", Duration = 5})
-                        currentlyInTargetWeather = false
-                    end
                     
-                    print("[-] Thời tiết không khớp. Yêu cầu đổi Server...")
-                    if Utils and type(Utils.HopServer) == "function" then
-                        print("[*] Đang gửi lệnh Utils.HopServer...")
-                        Utils.HopServer("Đang tìm thời tiết VIP...")
-                        task.wait(10) 
-                    else
-                        warn("[-] LỖI CRITICAL: Không tìm thấy hàm Utils.HopServer! Tính năng Auto Hop bị liệt.")
-                        task.wait(5) 
+                    -- [CƠ CHẾ MỚI]: Đẩy lệnh Hop vào Queue thay vì gọi trực tiếp
+                    if not _G.SystemController.ActiveTask then -- Chỉ đẩy khi hệ thống rảnh
+                        print("[Weather] 📥 Đẩy lệnh ServerHop vào hàng đợi...")
+                        
+                        table.insert(_G.SystemController.TaskQueue, {
+                            Name = "WeatherHop",
+                            Func = function()
+                                -- Trước khi Hop, xin Lock để đảm bảo không tranh chấp
+                                if _G.SystemController.RequestLock("WeatherHop") then
+                                    Utils.HopServer("Săn Thời Tiết VIP")
+                                    _G.SystemController.ReleaseLock("WeatherHop")
+                                end
+                            end
+                        })
+                        
+                        -- Delay nhẹ để không spam hàng đợi
+                        task.wait(15) 
                     end
                 end
             else
