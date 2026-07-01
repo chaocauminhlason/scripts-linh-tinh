@@ -202,26 +202,26 @@ task.spawn(function()
 end
 
                     -- TRƯỜNG HỢP 3: Trứng đang ấp -> Cắn vé (Hỗ trợ cắn nhiều lọ liên tiếp)
-                    if hatchSettings.autoSkip and T > 0 and currentTime < T then
-                        pcall(function()
-                            local oldId = get_thread_id()
-                            set_thread_id(2)
-                            
-                            -- Không cần truyền tham số true nữa, game đã update chỉ nhận slotNum
-                            local success = env.ViewUtil.DoRequest(env.EggSystem.ClientHatchSkip, slotNum)
-                            if success then
-                                env.EventSystem.Execute("EggHatchChange")
-                            end
-                            
-                            set_thread_id(oldId)
-                        end)
-                        -- Delay nhỉnh hơn một chút để Server trừ thời gian. 
-                        -- Lần quét sau nếu vẫn chưa chín, vòng lặp tự động nã tiếp vé nữa.
-                        task.wait(0.8) 
-                        continue
-                    end
-                end
-            end
-        end
-    end)
-end
+--                    if hatchSettings.autoSkip and T > 0 and currentTime < T then
+ --                       pcall(function()
+ --                           local oldId = get_thread_id()
+--                            set_thread_id(2)
+  --                          
+ --                           -- Không cần truyền tham số true nữa, game đã update chỉ nhận slotNum
+  --                          local success = env.ViewUtil.DoRequest(env.EggSystem.ClientHatchSkip, slotNum)
+  --                          if success then
+  --                              env.EventSystem.Execute("EggHatchChange")
+  --                          end
+  --                          
+  --                          set_thread_id(oldId)
+   --                     end)
+  --                      -- Delay nhỉnh hơn một chút để Server trừ thời gian. 
+  --                      -- Lần quét sau nếu vẫn chưa chín, vòng lặp tự động nã tiếp vé nữa.
+  --                      task.wait(0.8) 
+ --                      continue
+  --                  end
+  --              end
+ --           end
+--        end
+--    end)
+--end
