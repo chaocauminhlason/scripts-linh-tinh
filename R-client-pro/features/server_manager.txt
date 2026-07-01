@@ -8,6 +8,7 @@ return function(Window, Utils)
     local CoreGui = game:GetService("CoreGui")
     local VirtualInputManager = game:GetService("VirtualInputManager")
     local LocalPlayer = Players.LocalPlayer
+    weatherHopSettings.BlacklistedServers = {}
 
     -- ==========================================
     -- HỆ THỐNG CACHE TRẠNG THÁI (STATE PERSISTENCE)
