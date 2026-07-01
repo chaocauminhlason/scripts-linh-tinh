@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: QUẢN LÝ SERVER & AUTO HOP (V3.3 - DIAGNOSTIC MODE)
+-- MODULE: QUẢN LÝ SERVER & AUTO HOP (V4.0 - PERSISTENT STATE)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -9,8 +9,39 @@ return function(Window, Utils)
     local VirtualInputManager = game:GetService("VirtualInputManager")
     local LocalPlayer = Players.LocalPlayer
 
-    -- Biến cấu hình nội bộ
-    local weatherHopSettings = { enabled = false, targetIds = {60001} }
+    -- ==========================================
+    -- HỆ THỐNG CACHE TRẠNG THÁI (STATE PERSISTENCE)
+    -- ==========================================
+    local configFileName = "WeatherAutoHop_State.json"
+    local weatherHopSettings = { 
+        enabled = false, 
+        targetIds = {60001},
+        selectedNames = {"🔴 Huyết Nguyệt (Blood Moon)"} 
+    }
+
+    -- Hàm Load State từ thư mục Workspace của Executor
+    pcall(function()
+        if isfile and isfile(configFileName) then
+            local rawData = readfile(configFileName)
+            local parsedData = HttpService:JSONDecode(rawData)
+            if parsedData then
+                weatherHopSettings.enabled = parsedData.enabled or false
+                weatherHopSettings.targetIds = parsedData.targetIds or {60001}
+                weatherHopSettings.selectedNames = parsedData.selectedNames or {"🔴 Huyết Nguyệt (Blood Moon)"}
+            end
+        end
+    end)
+
+    -- Hàm Save State
+    local function SaveState()
+        pcall(function()
+            if writefile then
+                local jsonData = HttpService:JSONEncode(weatherHopSettings)
+                writefile(configFileName, jsonData)
+            end
+        end)
+    end
+
     local autoRejoinEnabled = false
     local sessionStartTime = os.time()
 
@@ -55,22 +86,27 @@ return function(Window, Utils)
             "🔴 Huyết Nguyệt (Blood Moon)", "🐉 Hoàng Hôn Rồng (Draconic Twilight)", 
             "🌟 Hào Quang Rồng (Dragon-Glow)", "🧚 Màn Sương Ảo Mộng (Dreamveil)"
         },
-        CurrentOption = {"🔴 Huyết Nguyệt (Blood Moon)"},
+        CurrentOption = weatherHopSettings.selectedNames, -- Restore từ Cache
         MultipleOptions = true,
         Callback = function(Options)
+            weatherHopSettings.selectedNames = Options
             weatherHopSettings.targetIds = {}
             for _, selectedOption in ipairs(Options) do
                 if WeatherMap[selectedOption] then 
                     table.insert(weatherHopSettings.targetIds, WeatherMap[selectedOption]) 
                 end
             end
+            SaveState() -- Lưu khi có thay đổi
         end,
     })
 
     ServerTab:CreateToggle({
         Name = "Tự Động Nhảy Server Săn Thời Tiết",
-        CurrentValue = false,
-        Callback = function(Value) weatherHopSettings.enabled = Value end
+        CurrentValue = weatherHopSettings.enabled, -- Restore từ Cache
+        Callback = function(Value) 
+            weatherHopSettings.enabled = Value 
+            SaveState() -- Lưu khi gạt công tắc
+        end
     })
 
     -- ==========================================
@@ -210,7 +246,7 @@ return function(Window, Utils)
     end)
 
     -- ==========================================
-    -- MASTER LOOP: ĐIỀU PHỐI THỜI TIẾT (DIAGNOSTIC MODE)
+    -- MASTER LOOP: ĐIỀU PHỐI THỜI TIẾT
     -- ==========================================
     task.spawn(function()
         local currentlyInTargetWeather = false
@@ -273,5 +309,5 @@ return function(Window, Utils)
         end
     end)
     
-    print("✅ Server Manager 3.3 (Diagnostic Mode) loaded!")
+    print("✅ Server Manager 4.0 (Persistent State) loaded!")
 end
