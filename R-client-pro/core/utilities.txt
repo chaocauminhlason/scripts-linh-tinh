@@ -777,6 +777,58 @@ function Utils.GetCurrentWeather(weatherMap)
     return "Bình Thường", 0
 end
 
+-- ==========================================
+-- HÀM SERVER HOP (CHUYỂN SERVER TỰ ĐỘNG)
+-- ==========================================
+function Utils.HopServer(notificationMsg)
+    local HttpService = game:GetService("HttpService")
+    local TeleportService = game:GetService("TeleportService")
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+    local PlaceId = game.PlaceId
+
+    if notificationMsg then
+        pcall(function()
+            game.StarterGui:SetCore("SendNotification", {
+                Title = "🚀 Auto Server Hop", 
+                Text = notificationMsg,
+                Duration = 5
+            })
+        end)
+    end
+
+    pcall(function()
+        -- Quét API Roblox để lấy danh sách Server
+        local api = "https://games.roblox.com/v1/games/"..PlaceId.."/servers/Public?sortOrder=Asc&limit=100"
+        local data = game:HttpGet(api)
+        local json = HttpService:JSONDecode(data)
+        
+        if json and json.data then
+            local validServers = {}
+            for _, v in pairs(json.data) do
+                if v.id and v.id ~= game.JobId then
+                    local playing = v.playing or 0
+                    local maxPlayers = v.maxPlayers or 0
+                    -- Chỉ lấy các server chưa đầy
+                    if playing < maxPlayers then
+                        table.insert(validServers, {id = v.id, playing = playing})
+                    end
+                end
+            end
+            
+            if #validServers > 0 then
+                -- Sắp xếp để ưu tiên chui vào server ít người nhất (load cho nhanh)
+                table.sort(validServers, function(a, b) return a.playing < b.playing end)
+                
+                local targetId = validServers[1].id
+                print("[Utils] 🔄 Đang thực hiện Teleport sang Server ID: " .. tostring(targetId))
+                TeleportService:TeleportToPlaceInstance(PlaceId, targetId, LocalPlayer)
+            else
+                warn("[Utils] ❌ Không tìm thấy server nào khả dụng để hop!")
+            end
+        end
+    end)
+end
 
 
 -- Trả về bảng Utils
