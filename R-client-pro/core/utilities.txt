@@ -778,7 +778,7 @@ function Utils.GetCurrentWeather(weatherMap)
 end
 
 -- ==========================================
--- HÀM SERVER HOP (CHUYỂN SERVER TỰ ĐỘNG)
+-- HÀM SERVER HOP (CÓ DANH SÁCH ĐEN - BLACKLIST)
 -- ==========================================
 function Utils.HopServer(notificationMsg)
     local HttpService = game:GetService("HttpService")
@@ -786,6 +786,10 @@ function Utils.HopServer(notificationMsg)
     local Players = game:GetService("Players")
     local LocalPlayer = Players.LocalPlayer
     local PlaceId = game.PlaceId
+
+    -- Lấy danh sách Blacklist từ biến global hoặc file cache nếu có
+    -- Giả sử ta lưu trong _G.BlacklistedServers để dễ truy xuất
+    _G.BlacklistedServers = _G.BlacklistedServers or {}
 
     if notificationMsg then
         pcall(function()
@@ -798,7 +802,6 @@ function Utils.HopServer(notificationMsg)
     end
 
     pcall(function()
-        -- Quét API Roblox để lấy danh sách Server
         local api = "https://games.roblox.com/v1/games/"..PlaceId.."/servers/Public?sortOrder=Asc&limit=100"
         local data = game:HttpGet(api)
         local json = HttpService:JSONDecode(data)
@@ -806,10 +809,15 @@ function Utils.HopServer(notificationMsg)
         if json and json.data then
             local validServers = {}
             for _, v in pairs(json.data) do
-                if v.id and v.id ~= game.JobId then
+                -- Lọc: Không phải server hiện tại VÀ không nằm trong danh sách đen
+                local isBlacklisted = false
+                for _, blackId in ipairs(_G.BlacklistedServers) do
+                    if v.id == blackId then isBlacklisted = true break end
+                end
+
+                if v.id and v.id ~= game.JobId and not isBlacklisted then
                     local playing = v.playing or 0
                     local maxPlayers = v.maxPlayers or 0
-                    -- Chỉ lấy các server chưa đầy
                     if playing < maxPlayers then
                         table.insert(validServers, {id = v.id, playing = playing})
                     end
@@ -817,14 +825,20 @@ function Utils.HopServer(notificationMsg)
             end
             
             if #validServers > 0 then
-                -- Sắp xếp để ưu tiên chui vào server ít người nhất (load cho nhanh)
+                -- Sắp xếp: Ưu tiên server vắng nhất
                 table.sort(validServers, function(a, b) return a.playing < b.playing end)
                 
                 local targetId = validServers[1].id
-                print("[Utils] 🔄 Đang thực hiện Teleport sang Server ID: " .. tostring(targetId))
+                
+                -- Thêm vào danh sách đen trước khi nhảy
+                table.insert(_G.BlacklistedServers, targetId)
+                
+                print("[Utils] 🔄 Đang nhảy sang Server: " .. tostring(targetId) .. " (Đã thêm vào Blacklist)")
                 TeleportService:TeleportToPlaceInstance(PlaceId, targetId, LocalPlayer)
             else
-                warn("[Utils] ❌ Không tìm thấy server nào khả dụng để hop!")
+                -- Nếu danh sách đen khiến không tìm được server nào -> Reset danh sách đen
+                warn("[Utils] ⚠️ Tất cả server đã được quét! Reset Blacklist...")
+                _G.BlacklistedServers = {} 
             end
         end
     end)
