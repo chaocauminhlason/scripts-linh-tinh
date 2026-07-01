@@ -69,7 +69,6 @@ end
 local Utils = SafeLoad('core/utilities.txt')
 local Utils = SafeLoad('core/system_controller.txt')
 local WebhookModule = SafeLoad('core/webhook.txt')
-    local sm = SafeLoad('features/server_manager.txt')
 
 -- 2. Kéo các Features
 if Utils then
@@ -81,6 +80,7 @@ if Utils then
     local b = SafeLoad('features/boss_hunt.txt')
     if b then b(Window, Utils) end
     
+    local sm = SafeLoad('features/server_manager.txt')
     if sm then sm(Window, Utils) end
     
     local sg = SafeLoad('features/shops_and_guis.txt')
