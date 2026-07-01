@@ -67,7 +67,7 @@ end
 
 -- 1. Kéo các file Core
 local Utils = SafeLoad('core/utilities.txt')
-SafeLoad('core/system_controller.txt')
+local Controller = SafeLoad('core/system_controller.txt')
 local WebhookModule = SafeLoad('core/webhook.txt')
 
 -- 2. Kéo các Features
@@ -75,7 +75,7 @@ if Utils then
 
 
     local r = SafeLoad('features/farm.txt')
-    if r then r(Window, Utils) end
+    if r then r(Window, Utils, Controller) end
     
     local b = SafeLoad('features/boss_hunt.txt')
     if b then b(Window, Utils) end
