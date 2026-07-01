@@ -151,7 +151,7 @@ return function(Window, Utils)
     -- ==========================================
     -- UI
     -- ==========================================
-    local CamTab = Window:CreateTab("Auto farm", 4483345998)
+    local CamTab = Window:CreateTab("Main", 4483345998)
 
     CamTab:CreateSection("--- QUẢN LÝ QUÁI FARM ---")
 
@@ -162,11 +162,24 @@ return function(Window, Utils)
             MonsterListLabel:Set("🐾 Đang farm: Tất cả quái")
         end
     end
+    ControlTab:CreateToggle({
+    Name = "TẠM DỪNG TOÀN BỘ HỆ THỐNG (P)",
+    CurrentValue = false,
+    Callback = function(Value)
+        -- Gọi trực tiếp logic của phím P
+        if _G.SystemController then
+            _G.SystemController.IsPaused = Value
+            for name, pauseFunc in pairs(_G.SystemController.Modules) do
+                pcall(function() pauseFunc(Value) end)
+            end
+        end
+    end
+})
 
     local MonsterListLabel = CamTab:CreateLabel("🐾 Đang farm: " .. (#camSettings.targetMonsterNames > 0 and table.concat(camSettings.targetMonsterNames, ", ") or "Tất cả quái"))
 
     local MonsterDropdown = CamTab:CreateDropdown({
-        Name = "Chọn quái cần farm",
+        Name = "Chọn quái farm",
         Options = {"Tất cả quái"},
         CurrentOption = #camSettings.targetMonsterNames > 0 and camSettings.targetMonsterNames or {"Tất cả quái"},
         MultipleOptions = true,
