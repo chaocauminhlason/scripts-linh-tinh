@@ -30,44 +30,62 @@ return function(Window, Utils)
     local MonsterSystem = nil
     pcall(function() MonsterSystem = require(ReplicatedStorage.CommonLogic.Monster.MonsterSystem) end)
 
-    -- ==========================================
-    -- HELPER
+-- ==========================================
+    -- HELPER (ĐÃ ĐỒNG BỘ VỚI CORE CỦA BOSS HUNT)
     -- ==========================================
     local MonsterNameCache = {}
+    
     local function GetCachedMonsterName(monster)
-        if not monster then return "" end
+        if not monster then return "Unknown" end
+        
+        -- 1. Thử lấy ID từ Attribute, nếu không có thì bóc tách từ tên (VD: "Monster_123" -> 123)
         local tmplId = monster:GetAttribute("TmplId")
+        if not tmplId then
+            local parsedId = string.match(monster.Name, "Monster_(%d+)")
+            if parsedId then tmplId = tonumber(parsedId) end
+        end
+        
         if not tmplId then return monster.Name or "Unknown" end
+        
+        -- 2. Kiểm tra Cache để tránh giật lag khi quét liên tục
         if MonsterNameCache[tmplId] then return MonsterNameCache[tmplId] end
-        local MonsterConfigFolder = ReplicatedStorage:FindFirstChild("CommonConfig") and ReplicatedStorage.CommonConfig:FindFirstChild("Monster")
-        if MonsterConfigFolder then
-            local configFile = MonsterConfigFolder:FindFirstChild("Monster" .. tostring(tmplId))
-            if configFile then
-                local success, configData = pcall(require, configFile)
-                if success and type(configData) == "table" then
-                    local realName = configData.Name or monster.Name or "Unknown"
-                    MonsterNameCache[tmplId] = realName
-                    return realName
-                end
+        
+        -- 3. Đọc thẳng dữ liệu từ RAM của game (Giống logic Săn Boss)
+        local env = getrenv and getrenv()._G and getrenv()._G.PathTool
+        if env and env.CfgMonster and env.CfgMonster.Tmpls then
+            local cfgData = env.CfgMonster.Tmpls[tostring(tmplId)] or env.CfgMonster.Tmpls[tonumber(tmplId)]
+            if cfgData then
+                local realName = cfgData.Name or cfgData.name or monster.Name
+                MonsterNameCache[tmplId] = realName
+                return realName
             end
         end
+        
         return monster.Name or "Unknown"
     end
 
     local function GetAllMonsterNames()
         local monsterNames = {}
         local nameDict = {}
-        local monstersFolder = Workspace:FindFirstChild("Monsters")
-        if not monstersFolder then return monsterNames end
-        for _, monster in pairs(monstersFolder:GetChildren()) do
-            if monster:IsA("Model") then
-                local realName = GetCachedMonsterName(monster)
-                if realName and realName ~= "" and realName ~= "Unknown" and not nameDict[realName] then
-                    nameDict[realName] = true
-                    table.insert(monsterNames, realName)
+        
+        -- Quét cả 2 thư mục để không bỏ sót bất kỳ loại quái nào trên map
+        local foldersToScan = {"Monsters", "ClientMonsters"}
+        
+        for _, folderName in ipairs(foldersToScan) do
+            local folder = Workspace:FindFirstChild(folderName)
+            if folder then
+                for _, monster in pairs(folder:GetChildren()) do
+                    if monster:IsA("Model") then
+                        local realName = GetCachedMonsterName(monster)
+                        if realName and realName ~= "" and realName ~= "Unknown" and not nameDict[realName] then
+                            nameDict[realName] = true
+                            table.insert(monsterNames, realName)
+                        end
+                    end
                 end
             end
         end
+        
         table.sort(monsterNames)
         return monsterNames
     end
