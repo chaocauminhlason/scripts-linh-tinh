@@ -8,7 +8,10 @@ return function(Window, Utils)
     local CoreGui = game:GetService("CoreGui")
     local VirtualInputManager = game:GetService("VirtualInputManager")
     local LocalPlayer = Players.LocalPlayer
-    
+
+    local lastHopTime = 0 
+    local HOP_COOLDOWN = 5
+
     -- ==========================================
     -- HỆ THỐNG CACHE TRẠNG THÁI (STATE PERSISTENCE)
     -- ==========================================
@@ -244,13 +247,15 @@ return function(Window, Utils)
     end)
 
 -- ==========================================
-    -- MASTER LOOP: ĐIỀU PHỐI THỜI TIẾT (QUEUE READY)
+    -- MASTER LOOP: ĐIỀU PHỐI THỜI TIẾT (TỐI ƯU HÓA)
     -- ==========================================
     task.spawn(function()
         local currentlyInTargetWeather = false
+        local lastHopTime = 0 
+        local HOP_COOLDOWN = 5 -- Cooldown 5s đủ an toàn và nhanh
 
         while task.wait(2) do
-            -- Kiểm tra xem hệ thống có đang Pause toàn cục không
+            -- Kiểm tra dừng toàn cục
             if _G.SystemController and _G.SystemController.IsPaused then continue end
 
             if weatherHopSettings.enabled then
@@ -263,38 +268,47 @@ return function(Window, Utils)
 
                 local _, currentId = Utils.GetCurrentWeather(WeatherMap)
                 
+                -- Xác định xem server hiện tại có khớp thời tiết cần tìm không
                 local isTarget = false
                 for _, tid in ipairs(weatherHopSettings.targetIds) do
                     if currentId == tid then isTarget = true break end
                 end
 
                 if isTarget then
-    _G.ServerManager.pauseFarm = false
-    _G.BlacklistedServers = {} -- Reset Blacklist cực nhanh bằng lệnh này
-    currentlyInTargetWeather = true
-end
-                    _G.ServerManager.pauseFarm = true
+                    -- ĐANG TRÚNG VIP: Dừng Hop, mở Farm
+                    _G.ServerManager.pauseFarm = false
+                    _G.BlacklistedServers = {} -- Reset Blacklist để làm sạch bộ nhớ
                     
-                    -- [CƠ CHẾ MỚI]: Đẩy lệnh Hop vào Queue thay vì gọi trực tiếp
-                    if not _G.SystemController.ActiveTask then -- Chỉ đẩy khi hệ thống rảnh
-                        print("[Weather] 📥 Đẩy lệnh ServerHop vào hàng đợi...")
-                        
-                        table.insert(_G.SystemController.TaskQueue, {
-                            Name = "WeatherHop",
-                            Func = function()
-                                -- Trước khi Hop, xin Lock để đảm bảo không tranh chấp
-                                if _G.SystemController.RequestLock("WeatherHop") then
-                                    Utils.HopServer("Săn Thời Tiết VIP")
-                                    _G.SystemController.ReleaseLock("WeatherHop")
+                    if not currentlyInTargetWeather then
+                        print("[Weather] ✅ Đã tìm thấy thời tiết VIP!")
+                        currentlyInTargetWeather = true
+                    end
+                else
+                    -- CHƯA TRÚNG VIP: Tạm dừng Farm, chuẩn bị Hop
+                    _G.ServerManager.pauseFarm = true
+                    currentlyInTargetWeather = false
+                    
+                    -- Chỉ đẩy lệnh vào Queue nếu đủ thời gian Cooldown (5s)
+                    if (os.time() - lastHopTime) >= HOP_COOLDOWN then
+                        if not _G.SystemController.ActiveTask then
+                            print("[Weather] 📥 Đẩy lệnh ServerHop vào hàng đợi...")
+                            
+                            table.insert(_G.SystemController.TaskQueue, {
+                                Name = "WeatherHop",
+                                Func = function()
+                                    -- Xin quyền Lock từ SystemController
+                                    if _G.SystemController.RequestLock("WeatherHop") then
+                                        lastHopTime = os.time() -- Cập nhật mốc nhảy
+                                        Utils.HopServer("Săn Thời Tiết VIP")
+                                        _G.SystemController.ReleaseLock("WeatherHop")
+                                    end
                                 end
-                            end
-                        })
-                        
-                        -- Delay nhẹ để không spam hàng đợi
-                        task.wait(15) 
+                            })
+                        end
                     end
                 end
             else
+                -- Tắt Auto Hop: Mở lại Farm
                 _G.ServerManager.pauseFarm = false
             end
         end
