@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: QUẢN LÝ SERVER & AUTO HOP (V4.1 - CLEAN UI)
+-- MODULE: QUẢN LÝ SERVER & AUTO HOP (V4.2 - FULL PERSISTENT STATE)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -8,10 +8,7 @@ return function(Window, Utils)
     local CoreGui = game:GetService("CoreGui")
     local VirtualInputManager = game:GetService("VirtualInputManager")
     local LocalPlayer = Players.LocalPlayer
-
-    local lastHopTime = 0 
-    local HOP_COOLDOWN = 5
-
+    
     -- ==========================================
     -- HỆ THỐNG CACHE TRẠNG THÁI (STATE PERSISTENCE)
     -- ==========================================
@@ -21,8 +18,10 @@ return function(Window, Utils)
         targetIds = {60001},
         selectedNames = {"🔴 Huyết Nguyệt (Blood Moon)"} 
     }
-    
+    local autoRejoinEnabled = false -- Biến cấu hình nút Rejoin
+    local sessionStartTime = os.time()
 
+    -- Khôi phục trạng thái từ file JSON cục bộ
     pcall(function()
         if isfile and isfile(configFileName) then
             local rawData = readfile(configFileName)
@@ -31,21 +30,26 @@ return function(Window, Utils)
                 weatherHopSettings.enabled = parsedData.enabled or false
                 weatherHopSettings.targetIds = parsedData.targetIds or {60001}
                 weatherHopSettings.selectedNames = parsedData.selectedNames or {"🔴 Huyết Nguyệt (Blood Moon)"}
+                autoRejoinEnabled = parsedData.autoRejoinEnabled or false -- Khôi phục cấu hình Rejoin
             end
         end
     end)
 
+    -- Hàm lưu trạng thái tổng hợp
     local function SaveState()
         pcall(function()
             if writefile then
-                local jsonData = HttpService:JSONEncode(weatherHopSettings)
+                local dataToSave = {
+                    enabled = weatherHopSettings.enabled,
+                    targetIds = weatherHopSettings.targetIds,
+                    selectedNames = weatherHopSettings.selectedNames,
+                    autoRejoinEnabled = autoRejoinEnabled -- Đóng gói cấu hình Rejoin vào JSON
+                }
+                local jsonData = HttpService:JSONEncode(dataToSave)
                 writefile(configFileName, jsonData)
             end
         end)
     end
-
-    local autoRejoinEnabled = false
-    local sessionStartTime = os.time()
 
     _G.ServerManager = {
         pauseFarm = false,
@@ -184,8 +188,11 @@ return function(Window, Utils)
     ServerTab:CreateSection("--- ANTI-KICK ---")
     ServerTab:CreateToggle({
         Name = "Auto Rejoin khi bị Kick",
-        CurrentValue = false,
-        Callback = function(Value) autoRejoinEnabled = Value end,
+        CurrentValue = autoRejoinEnabled, -- Đồng bộ từ Cache cứu vớt khi chuyển server
+        Callback = function(Value) 
+            autoRejoinEnabled = Value 
+            SaveState() -- Ghi nhớ trạng thái ngay lập tức
+        end,
     })
 
     -- LUỒNG QUÉT POPUP ERROR 279
@@ -263,13 +270,11 @@ return function(Window, Utils)
                 local isTarget = false
                 local activeTargetName = ""
 
-                -- [CẢI TIẾN CỐT LÕI]: Quét trực tiếp danh sách ID cần tìm để check trạng thái Active
                 if env and env.WeatherSystem and type(env.WeatherSystem.IsWeatherActive) == "function" then
                     for _, tid in ipairs(weatherHopSettings.targetIds) do
                         local ok, isActive = pcall(function() return env.WeatherSystem.IsWeatherActive(tid) end)
                         if ok and isActive then
                             isTarget = true
-                            -- Lấy tên hiển thị tương ứng phục vụ việc lưu trạng thái và in log
                             for name, id in pairs(WeatherMap) do
                                 if id == tid then
                                     activeTargetName = name
@@ -282,17 +287,15 @@ return function(Window, Utils)
                 end
 
                 if isTarget then
-                    -- ĐANG TRÚNG VIP: Khóa luồng Hop, mở Farm
                     _G.ServerManager.pauseFarm = false
                     _G.ServerManager.currentWeather = activeTargetName
-                    _G.BlacklistedServers = {} -- Làm sạch danh sách đen khi đạt mục tiêu
+                    _G.BlacklistedServers = {}
                     
                     if not currentlyInTargetWeather then
                         print("[Weather] ✅ Xác nhận đang ở thời tiết mục tiêu: " .. tostring(activeTargetName))
                         currentlyInTargetWeather = true
                     end
                 else
-                    -- CHƯA TRÚNG VIP: Dừng hoạt động cày, chuẩn bị đổi vùng
                     _G.ServerManager.pauseFarm = true
                     currentlyInTargetWeather = false
                     
@@ -311,7 +314,7 @@ return function(Window, Utils)
                                         end
                                     end
                                 })
-                                lastHopTime = os.time() -- Khóa mốc thời gian ngay lập tức để chặn trùng lặp
+                                lastHopTime = os.time()
                             end
                         else
                             warn("[Weather] ⚠️ SystemController chưa nạp! Chạy Hop độc lập...")
@@ -326,5 +329,5 @@ return function(Window, Utils)
         end
     end)
     
-    print("✅ Server Manager 4.1 (Clean UI) loaded!")
+    print("✅ Server Manager 4.2 (Full Persistence Loaded!)")
 end
