@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: SYSTEM CONTROLLER (QUẢN LÝ TRẠNG THÁI & HÀNG ĐỢI)
+-- MODULE: SYSTEM CONTROLLER (QUẢN LÝ TRẠNG THÁI & HÀNG ĐỢI - CHUẨN)
 -- ====================================================================
 local UserInputService = game:GetService("UserInputService")
 
@@ -10,6 +10,9 @@ local SystemController = {
     SavedState = {}   -- Lưu trạng thái để Resume
 }
 
+-- [QUAN TRỌNG NHẤT]: Ép ngay nó vào _G để các file khác gọi không bị lỗi nil
+_G.SystemController = SystemController 
+
 -- [1] HỆ THỐNG HOTKEY (PAUSE/RESUME)
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
@@ -18,25 +21,31 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if input.KeyCode == Enum.KeyCode.F4 then
         SystemController.IsPaused = not SystemController.IsPaused
         
+        -- Đảm bảo _G.Config tồn tại để không văng lỗi khi spam F4 sớm
+        _G.Config = _G.Config or {}
+        
         if SystemController.IsPaused then
             -- BƯỚC PAUSE: Lưu trạng thái & Cắt luồng
             print("[System] ⏸️ PAUSED - Đang lưu trạng thái...")
-            -- Giả sử bạn có biến _G lưu trạng thái các Toggle
-            SystemController.SavedState.AutoFarm = _G.Config.AutoFarm
-            SystemController.SavedState.BossHunt = _G.Config.BossHunt
+            SystemController.SavedState.AutoFarm = _G.Config.AutoFarm or false
+            SystemController.SavedState.BossHunt = _G.Config.BossHunt or false
             
             -- Tắt toàn bộ
             _G.Config.AutoFarm = false
             _G.Config.BossHunt = false
             
-            game.StarterGui:SetCore("SendNotification", {Title = "Hệ Thống", Text = "⏸️ Đã DỪNG mọi hoạt động (F4)", Duration = 3})
+            pcall(function()
+                game.StarterGui:SetCore("SendNotification", {Title = "Hệ Thống", Text = "⏸️ Đã DỪNG mọi hoạt động (F4)", Duration = 3})
+            end)
         else
             -- BƯỚC RESUME: Nạp lại trạng thái cũ
             print("[System] ▶️ RESUMED - Đang nạp lại trạng thái...")
             _G.Config.AutoFarm = SystemController.SavedState.AutoFarm
             _G.Config.BossHunt = SystemController.SavedState.BossHunt
             
-            game.StarterGui:SetCore("SendNotification", {Title = "Hệ Thống", Text = "▶️ Tiếp tục hoạt động (F4)", Duration = 3})
+            pcall(function()
+                game.StarterGui:SetCore("SendNotification", {Title = "Hệ Thống", Text = "▶️ Tiếp tục hoạt động (F4)", Duration = 3})
+            end)
         end
     end
 end)
@@ -73,10 +82,15 @@ task.spawn(function()
             
             -- Chạy chức năng (bọc trong pcall để không chết luồng)
             task.spawn(function()
-                pcall(nextTask.Func)
-                -- Chạy xong tự động trả lại Lock
+                local success, err = pcall(nextTask.Func)
+                
+                if not success then
+                    warn("[Queue] ❌ Lỗi khi chạy " .. nextTask.Name .. ": " .. tostring(err))
+                end
+                
+                -- BẤT KỂ LỖI HAY KHÔNG, VẪN PHẢI TRẢ LẠI LOCK CHO HỆ THỐNG
                 SystemController.ReleaseLock(nextTask.Name)
-                print("[Queue] ✅ Hoàn thành: " .. nextTask.Name)
+                print("[Queue] ✅ Đã giải phóng Lock cho: " .. nextTask.Name)
             end)
         end
     end
