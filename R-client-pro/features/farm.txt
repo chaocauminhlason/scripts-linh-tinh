@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: R-GAME (AUTO BẮT, ĐÁNH, HỒI MÁU) - BẢN ỔN ĐỊNH V9.2
+-- MODULE: R-GAME (AUTO BẮT, ĐÁNH, HỒI MÁU - BẢN FULL INTEGRATED V9.5)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -9,14 +9,22 @@ return function(Window, Utils)
     local LocalPlayer = Players.LocalPlayer
 
     -- ==========================================
-    -- STATE & SYSTEM REGISTER
+    -- HOÀN THIỆN CẤU HÌNH STATE & ĐĂNG KÝ HỆ THỐNG
     -- ==========================================
     local camSettings = {
-        autoAttack = false, autoCatch = false, autoHeal = false, isHealing = false,
-        savedPosition = nil, targetMonsterNames = {}, yieldForBoss = true,
-        autoReturnToFarm = false, healThreshold = 1, attackRadius = 200
+        autoAttack = false,
+        autoCatch = false,
+        autoHeal = false,
+        isHealing = false,
+        savedPosition = nil,
+        targetMonsterNames = {},
+        yieldForBoss = true,
+        autoReturnToFarm = false,
+        healThreshold = 1,
+        attackRadius = 200 -- Bán kính farm mặc định
     }
 
+    -- Đăng ký nhận lệnh đóng/mở luồng từ SystemController (Phím P hoặc nút bấm tổng)
     if _G.SystemController and type(_G.SystemController.registerModule) == "function" then
         _G.SystemController:registerModule("AutoFarm", function(paused)
             camSettings.autoAttack = not paused
@@ -27,497 +35,509 @@ return function(Window, Utils)
     local savedFarmPosition = nil
     local posFileName = "R_ClientPro_FarmPos.json"
     local monsterFilterFile = "R_ClientPro_MonsterFilter.json"
+
     local MonsterSystem = nil
     pcall(function() MonsterSystem = require(ReplicatedStorage.CommonLogic.Monster.MonsterSystem) end)
 
-    -- ... (Giữ nguyên các hàm Helper: GetCachedMonsterName, GetAllMonsterNames, IsMonsterInFilter, SafeTeleport, LoadSavedPosition, LoadMonsterFilter) ...
+    -- ==========================================
+    -- HÀM BỔ TRỢ (ĐỌC DỮ LIỆU TỪ RAM GAME CHUẨN BOSS HUNT)
+    -- ==========================================
+    local MonsterNameCache = {}
+    
+    local function GetCachedMonsterName(monster)
+        if not monster then return "Unknown" end
+        
+        local tmplId = monster:GetAttribute("TmplId")
+        if not tmplId then
+            local parsedId = string.match(monster.Name, "Monster_(%d+)")
+            if parsedId then tmplId = tonumber(parsedId) end
+        end
+        
+        if not tmplId then return monster.Name or "Unknown" end
+        if MonsterNameCache[tmplId] then return MonsterNameCache[tmplId] end
+        
+        local env = getrenv and getrenv()._G and getrenv()._G.PathTool
+        if env and env.CfgMonster and env.CfgMonster.Tmpls then
+            local cfgData = env.CfgMonster.Tmpls[tostring(tmplId)] or env.CfgMonster.Tmpls[tonumber(tmplId)]
+            if cfgData then
+                local realName = cfgData.Name or cfgData.name or monster.Name
+                MonsterNameCache[tmplId] = realName
+                return realName
+            end
+        end
+        
+        return monster.Name or "Unknown"
+    end
+
+    local function GetAllMonsterNames()
+        local monsterNames = {}
+        local nameDict = {}
+        local foldersToScan = {"Monsters", "ClientMonsters"}
+        
+        for _, folderName in ipairs(foldersToScan) do
+            local folder = Workspace:FindFirstChild(folderName)
+            if folder then
+                for _, monster in pairs(folder:GetChildren()) do
+                    if monster:IsA("Model") then
+                        local realName = GetCachedMonsterName(monster)
+                        if realName and realName ~= "" and realName ~= "Unknown" and not nameDict[realName] then
+                            nameDict[realName] = true
+                            table.insert(monsterNames, realName)
+                        end
+                    end
+                end
+            end
+        end
+        
+        table.sort(monsterNames)
+        return monsterNames
+    end
+
+    local function IsMonsterInFilter(monster)
+        if not camSettings.targetMonsterNames or #camSettings.targetMonsterNames == 0 then return true end
+        local realName = GetCachedMonsterName(monster)
+        for _, targetName in ipairs(camSettings.targetMonsterNames) do
+            if string.find(string.lower(realName), string.lower(targetName)) then
+                return true
+            end
+        end
+        return false
+    end
+
+    local function SafeTeleport(targetCFrame, offsetY)
+        offsetY = offsetY or 5
+        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not hrp then return false end
+        local targetPos = targetCFrame.Position + Vector3.new(0, offsetY, 0)
+        local rayOrigin = targetPos + Vector3.new(0, 10, 0)
+        local rayDirection = Vector3.new(0, -20, 0)
+        local raycastParams = RaycastParams.new()
+        raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+        raycastParams.FilterDescendantsInstances = {LocalPlayer.Character}
+        local rayResult = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+        if rayResult then
+            local groundY = rayResult.Position.Y
+            targetPos = Vector3.new(targetPos.X, groundY + 3, targetPos.Z)
+        end
+        hrp.CFrame = CFrame.new(targetPos)
+        return true
+    end
+
+    local function LoadSavedPosition()
+        if isfile and isfile(posFileName) and readfile then
+            local success, data = pcall(function() return HttpService:JSONDecode(readfile(posFileName)) end)
+            if success and data and data.X and data.Y and data.Z then
+                return CFrame.new(data.X, data.Y, data.Z)
+            end
+        end
+        return nil
+    end
+
+    local function LoadMonsterFilter()
+        if isfile and isfile(monsterFilterFile) and readfile then
+            local success, data = pcall(function() return HttpService:JSONDecode(readfile(monsterFilterFile)) end)
+            if success and type(data) == "table" then return data end
+        end
+        return {}
+    end
+
+    savedFarmPosition = LoadSavedPosition()
+    camSettings.targetMonsterNames = LoadMonsterFilter()
 
     -- ==========================================
-    -- UI
+    -- THIẾT KẾ GIAO DIỆN UI (RAYFIELD)
     -- ==========================================
     local CamTab = Window:CreateTab("Auto farm", 4483345998)
 
-    -- NÚT ĐIỀU KHIỂN TỔNG (Nhét vào Farm)
+    -- [MỚI NHẤT] KHU VỰC ĐIỀU KHIỂN TỔNG HỆ THỐNG TRÊN UI
     CamTab:CreateSection("--- ĐIỀU KHIỂN TỔNG ---")
     CamTab:CreateButton({
-        Name = "🛑 STOP TẤT CẢ",
+        Name = "🛑 STOP TẤT CẢ HỆ THỐNG",
         Callback = function()
             if _G.SystemController then
                 _G.SystemController.IsPaused = true
                 for name, pauseFunc in pairs(_G.SystemController.Modules) do
                     pcall(function() pauseFunc(true) end)
                 end
+                game.StarterGui:SetCore("SendNotification", { Title = "Hệ thống", Text = "🛑 Đã DỪNG toàn bộ hoạt động!", Duration = 3 })
             end
         end
     })
     CamTab:CreateButton({
-        Name = "▶️ RESUME TẤT CẢ",
+        Name = "▶️ RESUME TẤT CẢ HỆ THỐNG",
         Callback = function()
             if _G.SystemController then
                 _G.SystemController.IsPaused = false
                 for name, pauseFunc in pairs(_G.SystemController.Modules) do
                     pcall(function() pauseFunc(false) end)
                 end
+                game.StarterGui:SetCore("SendNotification", { Title = "Hệ thống", Text = "▶️ Tiếp tục vận hành công việc!", Duration = 3 })
             end
         end
     })
 
-    -- [UI CÁC PHẦN CÒN LẠI GIỮ NGUYÊN]
     CamTab:CreateSection("--- QUẢN LÝ QUÁI FARM ---")
-    -- ... (Chèn các đoạn UI của bạn từ file trước vào đây) ...
-
-    -- ==========================================
-    -- LOOPS (VÒNG LẶP ĐÁNH & BẮT)
-    -- ==========================================
-
-
-
-    -- 1. VÒNG LẶP ĐÁNH QUÁI
-
-    task.spawn(function()
-
-        while task.wait(0.2) do
-
-            if not camSettings.autoAttack or camSettings.isHealing then continue end
-
-            if camSettings.yieldForBoss and _G.BossStatus and _G.BossStatus.bossFound then continue end
-
-            
-
-            local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-
-            if not hrp then continue end
-
-            
-
-            -- Lấy tâm Farm: Ưu tiên điểm đã lưu, nếu không có thì lấy vị trí đang đứng
-
-            local centerPos = savedFarmPosition and savedFarmPosition.Position or hrp.Position
-
-            
-
-            local monstersFolder = Workspace:FindFirstChild("Monsters")
-
-            if not monstersFolder then continue end
-
-            
-
-            for _, monster in pairs(monstersFolder:GetChildren()) do
-
-                if monster:IsA("Model") then
-
-                    local root = monster.PrimaryPart or monster:FindFirstChild("HumanoidRootPart")
-
-                    if root and root:IsA("BasePart") and root.Transparency < 1 and monster:GetAttribute("CatchEndTick") == nil then
-
-                        
-
-                        -- KIỂM TRA KHOẢNG CÁCH
-
-                        local distance = (root.Position - centerPos).Magnitude
-
-                        if distance <= camSettings.attackRadius then
-
-                            if IsMonsterInFilter(monster) then
-
-                                local id = tonumber(monster.Name:match("Monster_(%d+)"))
-
-                                if id and MonsterSystem then 
-
-                                    pcall(function() MonsterSystem:ClientAttackMonster(id) end)
-
-                                end
-
-                            end
-
-                        end
-
-                        
-
-                    end
-
-                end
-
-            end
-
+    
+    local MonsterListLabel = CamTab:CreateLabel("🐾 Đang farm: Tất cả quái")
+    
+    local function UpdateMonsterLabel()
+        if #camSettings.targetMonsterNames > 0 then
+            MonsterListLabel:Set("🐾 Đang farm: " .. table.concat(camSettings.targetMonsterNames, ", "))
+        else
+            MonsterListLabel:Set("🐾 Đang farm: Tất cả quái")
         end
+    end
+    UpdateMonsterLabel()
 
+    local MonsterDropdown = CamTab:CreateDropdown({
+        Name = "Chọn quái farm",
+        Options = {"Tất cả quái"},
+        CurrentOption = #camSettings.targetMonsterNames > 0 and camSettings.targetMonsterNames or {"Tất cả quái"},
+        MultipleOptions = true,
+        Flag = "MonsterSelectFarm",
+        Callback = function(Options)
+            pcall(function()
+                if table.find(Options, "Tất cả quái") then
+                    camSettings.targetMonsterNames = {}
+                    if writefile then
+                        pcall(function() writefile(monsterFilterFile, HttpService:JSONEncode(camSettings.targetMonsterNames)) end)
+                    end
+                    UpdateMonsterLabel()
+                    return
+                end
+                local filteredOptions = {}
+                for _, opt in ipairs(Options) do
+                    if opt ~= "Tất cả quái" then table.insert(filteredOptions, opt) end
+                end
+                camSettings.targetMonsterNames = filteredOptions
+                if writefile then
+                    pcall(function() writefile(monsterFilterFile, HttpService:JSONEncode(camSettings.targetMonsterNames)) end)
+                end
+                UpdateMonsterLabel()
+            end)
+        end
+    })
+
+    CamTab:CreateButton({
+        Name = "🔍 Quét danh sách quái trên Map",
+        Callback = function()
+            pcall(function()
+                local monsterNames = GetAllMonsterNames()
+                local options = {"Tất cả quái"}
+                for _, name in ipairs(monsterNames) do
+                    if name and name ~= "" then table.insert(options, name) end
+                end
+                if MonsterDropdown and MonsterDropdown.SetOptions then
+                    MonsterDropdown:SetOptions(options)
+                end
+                local currentSelection = {}
+                if #camSettings.targetMonsterNames > 0 then
+                    for _, name in ipairs(camSettings.targetMonsterNames) do
+                        if table.find(options, name) then table.insert(currentSelection, name) end
+                    end
+                else
+                    table.insert(currentSelection, "Tất cả quái")
+                end
+                if #currentSelection > 0 and MonsterDropdown and MonsterDropdown.SetCurrentOption then
+                    MonsterDropdown:SetCurrentOption(currentSelection)
+                end
+                game.StarterGui:SetCore("SendNotification", { Title = "✅ Quét Hoàn Tất", Text = "Đã tìm thấy " .. #monsterNames .. " loại quái", Duration = 3 })
+            end)
+        end
+    })
+
+    CamTab:CreateSection("--- CÀI ĐẶT FARM ---")
+    CamTab:CreateToggle({ 
+        Name = "Tự Động Đánh Quái (Auto Attack)", CurrentValue = false, Flag = "FarmAutoAttack", 
+        Callback = function(V) pcall(function() camSettings.autoAttack = V end) end 
+    })
+    CamTab:CreateSlider({
+        Name = "Khoảng cách Attack (Bán kính Farm)", Range = {10, 2000}, Increment = 10, Suffix = " studs", CurrentValue = 200, Flag = "FarmRadiusSlider",
+        Callback = function(Value) pcall(function() camSettings.attackRadius = Value end) end,
+    })
+    CamTab:CreateToggle({ 
+        Name = "Tự Động Bắt Quái (Auto Catch)", CurrentValue = false, Flag = "FarmAutoCatch", 
+        Callback = function(V) pcall(function() camSettings.autoCatch = V end) end 
+    })
+    CamTab:CreateToggle({ 
+        Name = "Tạm dừng khi có Boss xuất hiện", CurrentValue = true, Flag = "FarmYieldForBoss", 
+        Callback = function(V) pcall(function() camSettings.yieldForBoss = V end) end 
+    })
+
+    CamTab:CreateSection("--- TỰ ĐỘNG VỀ FARM ---")
+    CamTab:CreateToggle({
+        Name = "Tự động về vị trí farm khi vào game", CurrentValue = false, Flag = "AutoReturnToFarm",
+        Callback = function(Value)
+            pcall(function()
+                camSettings.autoReturnToFarm = Value
+                if Value and savedFarmPosition then
+                    task.spawn(function()
+                        task.wait(1)
+                        SafeTeleport(savedFarmPosition, 5)
+                    end)
+                end
+            end)
+        end
+    })
+
+    CamTab:CreateSection("--- CÀI ĐẶT HỒI MÁU ---")
+    CamTab:CreateToggle({ 
+        Name = "Tự Động Hồi Máu Pet", CurrentValue = false, Flag = "FarmAutoHeal", 
+        Callback = function(V) pcall(function() camSettings.autoHeal = V end) end 
+    })
+    CamTab:CreateSlider({
+        Name = "Ngưỡng số lượng Pet chết để đi hồi máu", Range = {1, 5}, Increment = 1, Suffix = " Pet", CurrentValue = 1, Flag = "HealThresholdSlider",
+        Callback = function(Value) pcall(function() camSettings.healThreshold = Value end) end,
+    })
+
+    CamTab:CreateSection("--- TRẠNG THÁI ---")
+    local statusLabel = CamTab:CreateLabel("Trạng thái: 🔄 Đang chờ...")
+
+    CamTab:CreateSection("--- TỌA ĐỘ FARM ---")
+    local initText = savedFarmPosition and string.format("📍 %d, %d, %d", math.floor(savedFarmPosition.Position.X), math.floor(savedFarmPosition.Position.Y), math.floor(savedFarmPosition.Position.Z)) or "📍 Chưa cấu hình"
+    local FarmPosLabel = CamTab:CreateLabel("Tọa độ farm hiện tại: " .. initText)
+
+    CamTab:CreateButton({
+        Name = "💾 Lưu vị trí đang đứng làm tâm điểm Farm",
+        Callback = function()
+            pcall(function()
+                local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    savedFarmPosition = hrp.CFrame
+                    local pos = savedFarmPosition.Position
+                    if writefile then
+                        pcall(function() writefile(posFileName, HttpService:JSONEncode({X = pos.X, Y = pos.Y, Z = pos.Z})) end)
+                    end
+                    FarmPosLabel:Set(string.format("Tọa độ farm hiện tại: %d, %d, %d", math.floor(pos.X), math.floor(pos.Y), math.floor(pos.Z)))
+                    game.StarterGui:SetCore("SendNotification", { Title = "💾 Lưu Thành Công", Text = "Vị trí bãi farm đã được ghi nhớ!", Duration = 3 })
+                end
+            end)
+        end,
+    })
+    CamTab:CreateButton({
+        Name = "🚀 Dịch chuyển nhanh về tọa độ Farm đã lưu",
+        Callback = function()
+            pcall(function()
+                local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if hrp and savedFarmPosition then
+                    SafeTeleport(savedFarmPosition, 5)
+                    game.StarterGui:SetCore("SendNotification", { Title = "🚀 Teleport", Text = "Đã đưa bạn quay trở về tâm bãi farm", Duration = 3 })
+                end
+            end)
+        end,
+    })
+
+    -- ==========================================
+    -- HỆ THỐNG CÁC VÒNG LẶP LIÊN TỤC (LOOPS RUNTIME)
+    -- ==========================================
+    
+    -- 1. LUỒNG TỰ ĐỘNG ĐÁNH QUÁI (RADIUS BASED & CORE CHECK)
+    task.spawn(function()
+        while task.wait(0.2) do
+            if _G.SystemController and _G.SystemController.IsPaused then continue end
+            if not camSettings.autoAttack or camSettings.isHealing then continue end
+            if camSettings.yieldForBoss and _G.BossStatus and _G.BossStatus.bossFound then continue end
+            
+            local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if not hrp then continue end
+            
+            local centerPos = savedFarmPosition and savedFarmPosition.Position or hrp.Position
+            local monstersFolder = Workspace:FindFirstChild("Monsters")
+            if not monstersFolder then continue end
+            
+            for _, monster in pairs(monstersFolder:GetChildren()) do
+                if monster:IsA("Model") then
+                    local root = monster.PrimaryPart or monster:FindFirstChild("HumanoidRootPart")
+                    if root and root:IsA("BasePart") and root.Transparency < 1 and monster:GetAttribute("CatchEndTick") == nil then
+                        -- Kiểm tra khoảng cách hình học thực tế với tâm farm
+                        local distance = (root.Position - centerPos).Magnitude
+                        if distance <= camSettings.attackRadius and IsMonsterInFilter(monster) then
+                            local id = tonumber(monster.Name:match("Monster_(%d+)"))
+                            if id and MonsterSystem then 
+                                pcall(function() MonsterSystem:ClientAttackMonster(id) end)
+                            end
+                        end
+                    end
+                end
+            end
+        end
     end)
 
-
-
-    -- 2. VÒNG LẶP BẮT QUÁI
-
+    -- 2. LUỒNG TỰ ĐỘNG BẮT QUÁI (THEO DÕI ATTRIBUTE SỞ HỮU CỦA PLAYER)
     task.spawn(function()
-
         while task.wait(0.5) do
-
+            if _G.SystemController and _G.SystemController.IsPaused then continue end
             if not camSettings.autoCatch or camSettings.isHealing then continue end
-
             if camSettings.yieldForBoss and _G.BossStatus and _G.BossStatus.bossFound then continue end
-
             
-
             local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-
             if not hrp then continue end
 
-
-
             local centerPos = savedFarmPosition and savedFarmPosition.Position or hrp.Position
-
             local playerId = LocalPlayer.UserId
-
             local monstersFolder = Workspace:FindFirstChild("Monsters")
-
             if not monstersFolder then continue end
-
-
 
             local targetCatch, closestDist = nil, math.huge
-
             for _, monster in pairs(monstersFolder:GetChildren()) do
-
                 if monster:IsA("Model") and IsMonsterInFilter(monster) then
-
                     local id = tonumber(monster.Name:match("Monster_(%d+)"))
-
                     if id then
-
                         local catchTaken = monster:GetAttribute("CatchTakenPlayerId")
-
                         if catchTaken and catchTaken == playerId then
-
                             local root = monster.PrimaryPart or monster:FindFirstChild("HumanoidRootPart")
-
                             if root and root:IsA("BasePart") then
-
-                                
-
-                                -- KIỂM TRA KHOẢNG CÁCH TRƯỚC KHI TÍNH CON GẦN NHẤT
-
                                 local distFromCenter = (root.Position - centerPos).Magnitude
-
                                 if distFromCenter <= camSettings.attackRadius then
-
                                     local distFromPlayer = (hrp.Position - root.Position).Magnitude
-
                                     if distFromPlayer < closestDist then 
-
                                         closestDist = distFromPlayer
-
                                         targetCatch = monster 
-
                                     end
-
                                 end
-
-                                
-
                             end
-
                         end
-
                     end
-
                 end
-
             end
-
-
 
             if targetCatch and MonsterSystem then
-
                 local targetId = tonumber(targetCatch.Name:match("Monster_(%d+)"))
-
                 local root = targetCatch.PrimaryPart or targetCatch:FindFirstChild("HumanoidRootPart")
-
                 if root and root:IsA("BasePart") then
-
                     SafeTeleport(CFrame.new(root.Position), 5)
-
                 end
-
                 task.spawn(function()
-
                     local success, isStarted = pcall(function() return MonsterSystem:ClientCatchMonsterStart(targetId) end)
-
                     if success then
-
                         if isStarted == false then 
-
                             task.wait(5) 
-
                         else
-
                             task.wait(1.5)
-
                             pcall(function() MonsterSystem:ClientCatchMonsterComplete(targetId) end)
-
                         end
-
                     end
-
                 end)
-
             end
-
         end
-
     end)
 
-
-
-
-
-
-
-    -- Heal
-
+    -- 3. LUỒNG KIỂM TRA HỒI MÁU PET (TELEPORT SUỐI KHI PHÁT HIỆN ĐỦ SỐ PET CHẾT)
     local function CheckDeadPetsFromUI()
-
         local deadCount = 0
-
         local totalPets = 0
-
         pcall(function()
-
             local petListUI = LocalPlayer:FindFirstChild("PlayerGui") 
-
                 and LocalPlayer.PlayerGui:FindFirstChild("MainGui") 
-
                 and LocalPlayer.PlayerGui.MainGui:FindFirstChild("ScreenGui") 
-
                 and LocalPlayer.PlayerGui.MainGui.ScreenGui:FindFirstChild("MainLeftView") 
-
                 and LocalPlayer.PlayerGui.MainGui.ScreenGui.MainLeftView:FindFirstChild("PetList")
-
             if not petListUI then return end
-
             for _, cell in pairs(petListUI:GetChildren()) do
-
                 if cell.Name == "ItemCell" then
-
                     local labName = cell:FindFirstChild("LabName", true)
-
                     if labName and labName.Text ~= "Label" and labName.Text ~= "" then
-
                         totalPets = totalPets + 1
-
                         local hp0 = cell:FindFirstChild("hp0", true)
-
                         if hp0 then
-
                             local bgColor = hp0.BackgroundColor3
-
                             if bgColor and (bgColor.R > 0.8 and bgColor.G < 0.3 and bgColor.B < 0.3) then
-
                                 deadCount = deadCount + 1
-
                             end
-
                         else
-
                             deadCount = deadCount + 1
-
                         end
-
                     end
-
                 end
-
             end
-
         end)
-
         return deadCount, totalPets
-
     end
-
-
-
-    local function ShouldTriggerHeal()
-
-        if camSettings.isHealing then return false end
-
-        local deadCount, totalPets = CheckDeadPetsFromUI()
-
-        if totalPets == 0 then return false end
-
-        return deadCount >= camSettings.healThreshold
-
-    end
-
-
 
     local function FindRecoverPosition()
-
         local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-
         if not hrp then return nil end
-
         local bestPos, minDist = nil, math.huge
-
         local areaFolder = Workspace:FindFirstChild("Area")
-
         if areaFolder then
-
             for _, mapFolder in ipairs(areaFolder:GetChildren()) do
-
                 local recFolder = mapFolder:FindFirstChild("ServerZone") and mapFolder.ServerZone:FindFirstChild("Recover")
-
                 if recFolder then
-
                     for _, recPart in ipairs(recFolder:GetDescendants()) do
-
                         if recPart:IsA("BasePart") then
-
                             local dist = (hrp.Position - recPart.Position).Magnitude
-
                             if dist < minDist then 
-
                                 minDist = dist
-
                                 bestPos = recPart.Position 
-
                             end
-
                         end
-
                     end
-
                 end
-
             end
-
         end
-
         return bestPos
-
     end
 
-
-
     task.spawn(function()
-
         while task.wait(1) do
-
+            if _G.SystemController and _G.SystemController.IsPaused then continue end
             if not camSettings.autoHeal or camSettings.isHealing then continue end
-
-            local isRiding = LocalPlayer:GetAttribute("RidePetId") ~= nil
-
-            if isRiding then continue end
-
-            if not ShouldTriggerHeal() then continue end
-
+            if LocalPlayer:GetAttribute("RidePetId") ~= nil then continue end
             
-
-            camSettings.isHealing = true
-
-            local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-
-            if hrp then
-
-                camSettings.savedPosition = savedFarmPosition or hrp.CFrame
-
-                local recoverPos = FindRecoverPosition()
-
-                if recoverPos then
-
-                    game.StarterGui:SetCore("SendNotification", { Title = "🔄 Đang hồi máu", Text = "Pet đã chết, đang dịch chuyển đến suối hồi máu...", Duration = 3 })
-
-                    local plat = Instance.new("Part")
-
-                    plat.Size = Vector3.new(20, 1, 20)
-
-                    plat.Position = recoverPos - Vector3.new(0, 3, 0)
-
-                    plat.Anchored = true
-
-                    plat.Transparency = 1
-
-                    plat.CanCollide = true
-
-                    plat.Parent = Workspace
-
-                    SafeTeleport(CFrame.new(recoverPos), 5)
-
-                    task.wait(10)
-
-                    plat:Destroy()
-
-                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-
-                        SafeTeleport(camSettings.savedPosition, 5)
-
+            local deadCount, totalPets = CheckDeadPetsFromUI()
+            if totalPets > 0 and deadCount >= camSettings.healThreshold then
+                camSettings.isHealing = true
+                local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    camSettings.savedPosition = savedFarmPosition or hrp.CFrame
+                    local recoverPos = FindRecoverPosition()
+                    if recoverPos then
+                        game.StarterGui:SetCore("SendNotification", { Title = "🔄 Auto Heal", Text = "Pet đã kiệt sức. Tiến hành Teleport suối hồi máu...", Duration = 3 })
+                        local plat = Instance.new("Part")
+                        plat.Size = Vector3.new(20, 1, 20); plat.Position = recoverPos - Vector3.new(0, 3, 0)
+                        plat.Anchored = true; plat.Transparency = 1; plat.CanCollide = true; plat.Parent = Workspace
+                        
+                        SafeTeleport(CFrame.new(recoverPos), 5)
+                        task.wait(10) -- Chờ hồ nước sạc đầy máu
+                        plat:Destroy()
+                        
+                        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                            SafeTeleport(camSettings.savedPosition, 5)
+                        end
+                        game.StarterGui:SetCore("SendNotification", { Title = "✅ Hoàn Tất", Text = "Đã khôi phục sinh lực Pet và về bãi farm!", Duration = 3 })
                     end
-
-                    game.StarterGui:SetCore("SendNotification", { Title = "✅ Hồi máu hoàn tất", Text = "Đã quay lại vị trí farm", Duration = 2 })
-
                 end
-
+                camSettings.isHealing = false
+                camSettings.savedPosition = nil
             end
-
-            camSettings.isHealing = false
-
-            camSettings.savedPosition = nil
-
         end
-
     end)
 
-
-
-    -- Auto return
-
+    -- 4. TỰ ĐỘNG QUAY LẠI BÃI FARM KHI VỪA VÀO GAME (INITIAL TELEPORT)
     task.spawn(function()
-
         task.wait(3)
-
         if camSettings.autoReturnToFarm and savedFarmPosition then
-
             SafeTeleport(savedFarmPosition, 5)
-
-            game.StarterGui:SetCore("SendNotification", { Title = "🏠 Về farm", Text = "Đã tự động về vị trí farm", Duration = 3 })
-
+            game.StarterGui:SetCore("SendNotification", { Title = "🏠 Welcome Back", Text = "Đã đưa bạn về tọa độ farm thiết lập.", Duration = 3 })
         end
-
     end)
 
-
-
-    -- Status
-
+    -- 5. CẬP NHẬT TRẠNG THÁI HIỂN THỊ (STATUS LABEL LOOP)
     task.spawn(function()
-
-        while task.wait(2) do
-
-            local status = "🟢 Đang chạy"
-
-            if camSettings.isHealing then 
-
-                status = "🔄 Đang hồi máu..."
-
+        while task.wait(1.5) do
+            local status = "🟢 Hệ thống đang hoạt động"
+            if _G.SystemController and _G.SystemController.IsPaused then
+                status = "🛑 TOÀN BỘ HỆ THỐNG ĐANG DỪNG"
+            elseif camSettings.isHealing then 
+                status = "🔄 Đang di chuyển đi trị thương cho Pet..."
             elseif _G.BossStatus and _G.BossStatus.bossFound and camSettings.yieldForBoss then 
-
-                status = "⏸️ Tạm dừng (có Boss)"
-
+                status = "⏸️ Nhường quyền (Tạm dừng nhường Luồng Săn Boss)"
             elseif not camSettings.autoAttack and not camSettings.autoCatch then 
-
-                status = "⏸️ Đã tắt Auto Farm"
-
+                status = "⏸️ Đang nghỉ (Chưa bật tính năng Farm)"
             end
-
-            statusLabel:Set("Trạng thái: " .. status)
-
+            statusLabel:Set("Trạng thái hiện tại: " .. status)
         end
-
     end)
 
-
-
-    print("✅ Farm Module loaded successfully!")
-
-end 
-
-
+    print("✅ Module Farm V9.5 (Full Features & Optimized Core Loaded Successfully!)")
+end
