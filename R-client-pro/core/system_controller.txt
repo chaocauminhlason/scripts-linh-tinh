@@ -1,0 +1,85 @@
+-- ====================================================================
+-- MODULE: SYSTEM CONTROLLER (QUẢN LÝ TRẠNG THÁI & HÀNG ĐỢI)
+-- ====================================================================
+local UserInputService = game:GetService("UserInputService")
+
+local SystemController = {
+    IsPaused = false,
+    ActiveTask = nil, -- Mutex Lock: "None", "AutoFarm", "Dungeon", v.v.
+    TaskQueue = {},   -- Hàng đợi chức năng
+    SavedState = {}   -- Lưu trạng thái để Resume
+}
+
+-- [1] HỆ THỐNG HOTKEY (PAUSE/RESUME)
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    
+    -- Dùng phím F4 để Stop/Resume
+    if input.KeyCode == Enum.KeyCode.F4 then
+        SystemController.IsPaused = not SystemController.IsPaused
+        
+        if SystemController.IsPaused then
+            -- BƯỚC PAUSE: Lưu trạng thái & Cắt luồng
+            print("[System] ⏸️ PAUSED - Đang lưu trạng thái...")
+            -- Giả sử bạn có biến _G lưu trạng thái các Toggle
+            SystemController.SavedState.AutoFarm = _G.Config.AutoFarm
+            SystemController.SavedState.BossHunt = _G.Config.BossHunt
+            
+            -- Tắt toàn bộ
+            _G.Config.AutoFarm = false
+            _G.Config.BossHunt = false
+            
+            game.StarterGui:SetCore("SendNotification", {Title = "Hệ Thống", Text = "⏸️ Đã DỪNG mọi hoạt động (F4)", Duration = 3})
+        else
+            -- BƯỚC RESUME: Nạp lại trạng thái cũ
+            print("[System] ▶️ RESUMED - Đang nạp lại trạng thái...")
+            _G.Config.AutoFarm = SystemController.SavedState.AutoFarm
+            _G.Config.BossHunt = SystemController.SavedState.BossHunt
+            
+            game.StarterGui:SetCore("SendNotification", {Title = "Hệ Thống", Text = "▶️ Tiếp tục hoạt động (F4)", Duration = 3})
+        end
+    end
+end)
+
+-- [2] HỆ THỐNG MUTEX LOCK (CẤP PHÉP CHẠY)
+function SystemController.RequestLock(taskName)
+    if SystemController.IsPaused then return false end
+    
+    if SystemController.ActiveTask == nil or SystemController.ActiveTask == taskName then
+        SystemController.ActiveTask = taskName
+        return true
+    end
+    return false -- Đang có Task khác chạy, bị từ chối
+end
+
+function SystemController.ReleaseLock(taskName)
+    if SystemController.ActiveTask == taskName then
+        SystemController.ActiveTask = nil
+    end
+end
+
+-- [3] EVENT LOOP XỬ LÝ HÀNG ĐỢI (FIFO)
+task.spawn(function()
+    while task.wait(0.1) do
+        if SystemController.IsPaused then continue end
+        
+        -- Nếu hệ thống đang rảnh và có Job trong hàng đợi
+        if SystemController.ActiveTask == nil and #SystemController.TaskQueue > 0 then
+            -- Rút Job đầu tiên ra (Dequeue)
+            local nextTask = table.remove(SystemController.TaskQueue, 1)
+            
+            print("[Queue] 🚀 Đang thực thi: " .. nextTask.Name)
+            SystemController.ActiveTask = nextTask.Name
+            
+            -- Chạy chức năng (bọc trong pcall để không chết luồng)
+            task.spawn(function()
+                pcall(nextTask.Func)
+                -- Chạy xong tự động trả lại Lock
+                SystemController.ReleaseLock(nextTask.Name)
+                print("[Queue] ✅ Hoàn thành: " .. nextTask.Name)
+            end)
+        end
+    end
+end)
+
+return SystemController
