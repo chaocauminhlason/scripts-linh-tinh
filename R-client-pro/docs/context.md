@@ -78,3 +78,11 @@ Dự án được thiết kế theo dạng Modular, nạp động qua `loadstrin
 2. **Key Data luôn là String:** Khi truy xuất dữ liệu từ các mảng được Game lưu trữ (như `saveData.H`), phải ép kiểu `tostring()`.
 3. **Hooking thay vì Remote:** Ưu tiên dùng `getrenv()._G.PathTool` để giao tiếp với Client Logic. Chỉ dùng RemoteEvent khi Client Logic không hỗ trợ.
 4. **Viết Test Độc lập:** Khi phát triển tính năng mới có tính rủi ro (đọc/ghi UI, chọc vào hàm cốt lõi), luôn cung cấp một Script Test nhỏ (có hàm lưu log vào Clipboard tiếng Anh) để người dùng chạy thử nghiệm trước khi tích hợp vào vòng lặp Rayfield UI chính.
+-- ====================================================================
+-- ở MODULE: SMART AUTO HATCH V9 (FINAL FIXED)
+-- PATCH NOTE: 
+-- * Đã bypass Anti-Cheat mới của game (Lỗi Context Identity Mismatch).
+-- * Bắt buộc phải bọc lệnh DoRequest/StartHatch trong set_thread_id(2) 
+--   để hạ quyền Executor xuống mức LocalScript thông thường.
+-- * Đã bỏ _G.PathTool.ViewManager vì Dev ẩn object, thay bằng EventSystem.
+-- ====================================================================
