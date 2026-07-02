@@ -50,8 +50,7 @@ return function(Window, Utils)
         local reqFunc = request or http_request or (syn and syn.request)
         if not reqFunc then return false, "Executor của bạn không hỗ trợ hàm HTTP Request!" end
 
-        -- Dùng chuẩn 1.5-flash miễn phí
-        local API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" .. savedKey
+    local API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" .. savedKey
 
         local systemInstruction = "You are a Roblox Lua exploit developer for 'R-client-pro'. Only respond with raw, executable Lua code. Do not include markdown blocks, do not include ```lua tags, no explanations. Just clean code."
         
