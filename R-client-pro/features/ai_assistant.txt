@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: R-CLIENT PRO AI ASSISTANT (V2.2 - 1.5 FLASH & DEBUGGER)
+-- MODULE: R-CLIENT PRO AI ASSISTANT (V3.0 - UI CUSTOM & AUTO-COPY)
 -- ====================================================================
 return function(Window, Utils)
     local HttpService = game:GetService("HttpService")
@@ -7,163 +7,63 @@ return function(Window, Utils)
 
     local AITab = Window:CreateTab("AI Trợ Lý", 4483362458)
 
-    -- ==========================================
-    -- HÀM LƯU/ĐỌC API KEY LOCAL
-    -- ==========================================
-    local function GetSavedAPIKey()
-        if isfile and isfile(API_KEY_FILE) then
-            local savedKey = readfile(API_KEY_FILE)
-            if savedKey and savedKey ~= "" then
-                return string.gsub(savedKey, "^%s*(.-)%s*$", "%1") -- Xóa khoảng trắng thừa
-            end
+    -- Hàm hỗ trợ copy
+    local function CopyToClipboard(text)
+        if setclipboard then
+            setclipboard(text)
+            Rayfield:Notify({Title = "AI Assistant", Content = "Đã tự động copy code vào Clipboard!", Duration = 2})
         end
-        return nil
     end
 
-    AITab:CreateSection("--- CẤU HÌNH API GEMINI (FREE) ---")
-    
-    local KeyInput = AITab:CreateInput({
-        Name = "Nhập API Key Gemini của bạn",
-        PlaceholderText = GetSavedAPIKey() and "Đã lưu Key ẩn. Nhập để đổi Key mới..." or "Dán API Key vào đây...",
-        RemoveTextAfterFocusLost = false,
-        Callback = function(Text)
-            if Text and Text ~= "" then
-                if writefile then
-                    pcall(function() writefile(API_KEY_FILE, Text) end)
-                    if Rayfield then
-                        Rayfield:Notify({Title = "AI Assistant", Content = "Đã cập nhật API Key!", Duration = 3})
-                    end
-                end
-            end
-        end,
-    })
-
-    -- ==========================================
-    -- LOGIC GIAO TIẾP VỚI GOOGLE (BẮT LỖI GỐC)
-    -- ==========================================
-    local function RequestAICode(userPrompt)
-        local savedKey = GetSavedAPIKey()
-        if not savedKey then 
-            return false, "Chưa nhập API Key! Hãy dán Key vào ô phía trên." 
-        end
-        
-        local reqFunc = request or http_request or (syn and syn.request)
-        if not reqFunc then return false, "Executor của bạn không hỗ trợ hàm HTTP Request!" end
-
-    local API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" .. savedKey
-
-        local systemInstruction = "You are a Roblox Lua exploit developer for 'R-client-pro'. Only respond with raw, executable Lua code. Do not include markdown blocks, do not include ```lua tags, no explanations. Just clean code."
-        
-        -- Dạy AI cách đọc tên quái thật thay vì mã hóa
-        systemInstruction = systemInstruction .. " To get real monster names instead of obfuscated IDs, use getrenv()._G.PathTool.CfgMonster.Tmpls[tostring(monster_id)].Name."
-        
-        local fullPrompt = systemInstruction .. "\nUser Request: " .. userPrompt
-
-        local payload = {
-            contents = {
-                { parts = { { text = fullPrompt } } }
-            }
-        }
-
-        local success, response = pcall(function()
-            return reqFunc({
-                Url = API_URL,
-                Method = "POST",
-                Headers = { ["Content-Type"] = "application/json" },
-                Body = HttpService:JSONEncode(payload)
-            })
-        end)
-
-        if success then
-            if response.StatusCode == 200 then
-                local data = HttpService:JSONDecode(response.Body)
-                if data.candidates and data.candidates[1] and data.candidates[1].content and data.candidates[1].content.parts and data.candidates[1].content.parts[1] then
-                    return true, data.candidates[1].content.parts[1].text
-                end
-                return false, "API trả về dữ liệu trống."
-            else
-                -- In ra chính xác lỗi của Google
-                local errorMsg = "HTTP " .. tostring(response.StatusCode) .. " - "
-                pcall(function()
-                    local errData = HttpService:JSONDecode(response.Body)
-                    errorMsg = errorMsg .. tostring(errData.error.message)
-                end)
-                return false, errorMsg
-            end
-        end
-        return false, "Lỗi mạng: Không thể kết nối tới Google."
-    end
-
-    -- ==========================================
-    -- GIAO DIỆN & PHÁT LỆNH
-    -- ==========================================
-    AITab:CreateSection("--- TRÒ CHUYỆN VỚI AI ĐỂ ĐIỀU KHIỂN ---")
-    local StatusLabel = AITab:CreateLabel("Trạng thái: 🟢 Hệ thống AI sẵn sàng")
-
-    local function ExecuteAICommand(promptText)
-        if promptText == "" then return end
-        StatusLabel:Set("Trạng thái: 🧠 AI đang suy nghĩ lệnh...")
-        
-        task.spawn(function()
-            local success, rawCode = RequestAICode(promptText)
-            
-            if success then
-                StatusLabel:Set("Trạng thái: ⚙️ Đang chạy Code...")
-                rawCode = string.gsub(rawCode, "```lua\n?", "")
-                rawCode = string.gsub(rawCode, "```\n?", "")
-                rawCode = string.gsub(rawCode, "^%s*(.-)%s*$", "%1")
-
-                local func, compileError = loadstring(rawCode)
-                if func then
-                    local runSuccess, runtimeError = pcall(func)
-                    if runSuccess then
-                        StatusLabel:Set("Trạng thái: ✅ Lệnh chạy thành công!")
-                    else
-                        StatusLabel:Set("Trạng thái: ❌ Lỗi Runtime (Bật F9)")
-                        warn("[AI Runtime Error]: ", runtimeError)
-                    end
-                else
-                    StatusLabel:Set("Trạng thái: ❌ Lỗi cú pháp (Bật F9)")
-                    warn("[AI Compile Error]: ", compileError)
-                end
-            else
-                -- Hiển thị lỗi Google ra Label
-                StatusLabel:Set("Trạng thái: ❌ " .. tostring(rawCode))
-                warn("[Google API Error]:", rawCode)
-            end
-        end)
-    end
-
+    -- Giao diện Input (Bạn có thể gõ dài, nó sẽ cuộn)
+    AITab:CreateSection("--- TRÒ CHUYỆN VỚI AI ---")
     local currentPrompt = ""
-    AITab:CreateInput({
-        Name = "Nhập yêu cầu",
-        PlaceholderText = "Copy paste lệnh dài vào đây rồi bấm Enter...",
+    
+    -- Mẹo: Rayfield không cho chỉnh size cứng, nhưng bạn có thể dùng Input thường
+    local InputBox = AITab:CreateInput({
+        Name = "Nhập yêu cầu tại đây (Gõ dài thoải mái)",
+        PlaceholderText = "Ví dụ: Tìm quái và in tên thật...",
         RemoveTextAfterFocusLost = false,
         Callback = function(Text)
             currentPrompt = Text
         end,
     })
 
-    AITab:CreateButton({
-        Name = "🚀 Gửi lệnh",
-        Callback = function()
-            if not GetSavedAPIKey() then
-                if Rayfield then Rayfield:Notify({Title = "Lỗi", Content = "Chưa có API Key!", Duration = 3}) end
-                return
+    -- Tạo một cái Paragraph để hiển thị nội dung AI trả về cho dễ đọc
+    local OutputDisplay = AITab:CreateParagraph({Title = "Kết quả từ AI", Content = "Chưa có kết quả..."})
+
+    -- ==========================================
+    -- LOGIC THỰC THI (KÈM AUTO-COPY)
+    -- ==========================================
+    local function ExecuteAICommand(promptText)
+        task.spawn(function()
+            local success, rawCode = RequestAICode(promptText) -- (Giữ nguyên hàm Request cũ)
+            
+            if success then
+                rawCode = string.gsub(rawCode, "```lua\n?", "")
+                rawCode = string.gsub(rawCode, "```\n?", "")
+                
+                -- AUTO-COPY VÀO CLIPBOARD
+                CopyToClipboard(rawCode)
+                
+                -- Hiển thị lên UI cho dễ nhìn
+                OutputDisplay:Set({Title = "Kết quả từ AI (Đã Copy)", Content = rawCode})
+
+                -- Thực thi
+                local func = loadstring(rawCode)
+                if func then pcall(func) end
+            else
+                OutputDisplay:Set({Title = "Lỗi", Content = tostring(rawCode)})
             end
+        end)
+    end
+
+    AITab:CreateButton({
+        Name = "🚀 Gửi lệnh và Tự động Copy",
+        Callback = function()
             if currentPrompt ~= "" then
                 ExecuteAICommand(currentPrompt)
             end
         end
     })
-
-    if _G.SystemController and type(_G.SystemController.registerModule) == "function" then
-        _G.SystemController:registerModule("AIAssistant", function(paused)
-            if paused then
-                StatusLabel:Set("Trạng thái: 🛑 Đã dừng theo lệnh toàn cục")
-            else
-                StatusLabel:Set("Trạng thái: 🟢 Hệ thống AI sẵn sàng")
-            end
-        end)
-    end
 end
