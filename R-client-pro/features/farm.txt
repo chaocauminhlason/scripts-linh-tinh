@@ -218,31 +218,32 @@ return function(Window, Utils)
         end
     })
 
-    CamTab:CreateButton({
+CamTab:CreateButton({
         Name = "🔍 Quét danh sách quái trên Map",
         Callback = function()
+            local monsterNames = GetAllMonsterNames()
+            
+            if #monsterNames == 0 then
+                game.StarterGui:SetCore("SendNotification", { Title = "⚠️ Cảnh báo", Text = "Không tìm thấy quái nào xung quanh!", Duration = 3 })
+                return
+            end
+
+            -- Tạo danh sách options chuẩn
+            local options = {"Tất cả quái"}
+            for _, name in ipairs(monsterNames) do
+                table.insert(options, name)
+            end
+
+            -- Update Dropdown
             pcall(function()
-                local monsterNames = GetAllMonsterNames()
-                local options = {"Tất cả quái"}
-                for _, name in ipairs(monsterNames) do
-                    if name and name ~= "" then table.insert(options, name) end
-                end
-                if MonsterDropdown and MonsterDropdown.SetOptions then
-                    MonsterDropdown:SetOptions(options)
-                end
-                local currentSelection = {}
-                if #camSettings.targetMonsterNames > 0 then
-                    for _, name in ipairs(camSettings.targetMonsterNames) do
-                        if table.find(options, name) then table.insert(currentSelection, name) end
-                    end
-                else
-                    table.insert(currentSelection, "Tất cả quái")
-                end
-                if #currentSelection > 0 and MonsterDropdown and MonsterDropdown.SetCurrentOption then
-                    MonsterDropdown:SetCurrentOption(currentSelection)
-                end
-                game.StarterGui:SetCore("SendNotification", { Title = "✅ Quét Hoàn Tất", Text = "Đã tìm thấy " .. #monsterNames .. " loại quái", Duration = 3 })
+                MonsterDropdown:SetOptions(options)
+                -- Reset về "Tất cả quái" sau khi quét để tránh lỗi logic
+                MonsterDropdown:SetCurrentOption({"Tất cả quái"})
+                camSettings.targetMonsterNames = {}
+                UpdateMonsterLabel()
             end)
+            
+            game.StarterGui:SetCore("SendNotification", { Title = "✅ Quét Hoàn Tất", Text = "Đã tìm thấy " .. #monsterNames .. " loại quái", Duration = 3 })
         end
     })
 
