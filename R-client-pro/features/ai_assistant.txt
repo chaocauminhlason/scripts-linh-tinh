@@ -1,11 +1,13 @@
 -- ====================================================================
--- MODULE: R-CLIENT PRO AI ASSISTANT (V1.1 - SECURE API KEY)
+-- MODULE: R-CLIENT PRO AI ASSISTANT (V2.0 - GEMINI 3.1 PRO / INTERACTIONS API)
 -- ====================================================================
 return function(Window, Utils)
     local HttpService = game:GetService("HttpService")
     local API_KEY_FILE = "R_ClientPro_AI_Key.txt"
 
-    -- Tạo Tab mới trên Rayfield UI
+    -- URL API chuẩn của năm 2026 (v1beta Interactions API)
+    local BASE_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
+
     local AITab = Window:CreateTab("AI Trợ Lý", 4483362458)
 
     -- ==========================================
@@ -24,7 +26,7 @@ return function(Window, Utils)
     -- ==========================================
     -- GIAO DIỆN CẤU HÌNH API (BẢO MẬT)
     -- ==========================================
-    AITab:CreateSection("--- CẤU HÌNH API (Bảo mật) ---")
+    AITab:CreateSection("--- CẤU HÌNH API GEMINI 3.1 PRO ---")
     
     local KeyInput = AITab:CreateInput({
         Name = "Nhập API Key Gemini của bạn",
@@ -45,43 +47,57 @@ return function(Window, Utils)
     })
 
     -- ==========================================
-    -- LOGIC GIAO TIẾP API TRỰC TIẾP TỚI GOOGLE
+    -- LOGIC GIAO TIẾP GEMINI 3.1 PRO INTERACTIONS API
     -- ==========================================
     local function RequestAICode(userPrompt)
         local savedKey = GetSavedAPIKey()
         if not savedKey then 
             return false, "Chưa nhập API Key! Hãy dán Key vào ô phía trên." 
         end
-
-        local API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro:generateContent?key=" .. savedKey
         
         local reqFunc = request or http_request or (syn and syn.request)
         if not reqFunc then return false, "Executor của bạn không hỗ trợ hàm HTTP Request!" end
 
         -- System prompt ép AI chỉ trả về code Lua thuần
         local systemInstruction = "You are a Roblox Lua exploit developer for 'R-client-pro'. Only respond with raw, executable Lua code. Do not include markdown blocks, do not include ```lua tags, no explanations. Just clean code."
-        local fullPrompt = systemInstruction .. "\nUser Request: " .. userPrompt
+        
+        -- Cấu trúc Payload chuẩn Interactions API 2026
+        local payload = {
+            model = "gemini-3.1-pro-preview",
+            input = userPrompt,
+            system_instruction = systemInstruction,
+            generation_config = {
+                thinking_level = "low" -- Tiết kiệm token, giảm độ trễ cho task code đơn giản
+            }
+        }
 
         local success, response = pcall(function()
             return reqFunc({
-                Url = API_URL,
+                Url = BASE_URL,
                 Method = "POST",
-                Headers = { ["Content-Type"] = "application/json" },
-                Body = HttpService:JSONEncode({
-                    contents = {{ parts = {{ text = fullPrompt }} }}
-                })
+                Headers = { 
+                    ["Content-Type"] = "application/json",
+                    ["x-goog-api-key"] = savedKey
+                },
+                Body = HttpService:JSONEncode(payload)
             })
         end)
 
         if success then
             if response.StatusCode == 200 then
                 local data = HttpService:JSONDecode(response.Body)
-                if data.candidates and data.candidates[1] and data.candidates[1].content then
-                    return true, data.candidates[1].content.parts[1].text
+                
+                -- Bóc tách JSON trả về từ Interactions API (Duyệt qua steps để tìm model_output)
+                if data.steps then
+                    for _, step in ipairs(data.steps) do
+                        if step.type == "model_output" and step.content and step.content[1] and step.content[1].text then
+                             return true, step.content[1].text
+                        end
+                    end
                 end
-                return false, "API trả về dữ liệu không hợp lệ."
+                return false, "API trả về dữ liệu không có model_output."
             else
-                return false, "Lỗi API (" .. tostring(response.StatusCode) .. "): API Key có thể sai hoặc quá hạn mức."
+                return false, "Lỗi API (" .. tostring(response.StatusCode) .. "): API Key có thể sai hoặc quá hạn mức.\nResponse: " .. tostring(response.Body)
             end
         end
         return false, "Lỗi kết nối tới máy chủ Google."
@@ -126,6 +142,7 @@ return function(Window, Utils)
                 end
             else
                 StatusLabel:Set("Trạng thái: ❌ " .. tostring(rawCode))
+                warn("[AI Request Failed]: ", rawCode)
             end
         end)
     end
@@ -170,5 +187,5 @@ return function(Window, Utils)
         end)
     end
 
-    print("✅ AI Assistant Module (Secure Local Key Version) Loaded Successfully!")
+    print("✅ AI Assistant Module (Gemini 3.1 Pro / Interactions API) Loaded Successfully!")
 end
