@@ -100,6 +100,9 @@ if Utils then
     
     local o = SafeLoad('features/optimization.txt')
     if o then o(Window, Utils) end
+
+    local a = SafeLoad('features/ai_assistant.txt')
+    if a then a(Window, Utils) end
 end
 
 if WebhookModule and WebhookModule.InitTab then
