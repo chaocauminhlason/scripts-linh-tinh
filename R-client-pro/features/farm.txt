@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: R-GAME (AUTO BẮT, ĐÁNH, HỒI MÁU - BẢN FULL INTEGRATED V9.5)
+-- MODULE: R-GAME (AUTO BẮT, ĐÁNH, HỒI MÁU - BẢN FULL INTEGRATED V9.6)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -39,35 +39,83 @@ return function(Window, Utils)
     pcall(function() MonsterSystem = require(ReplicatedStorage.CommonLogic.Monster.MonsterSystem) end)
 
     -- ==========================================
-    -- HÀM BỔ TRỢ (ĐỌC DỮ LIỆU TỪ RAM GAME CHUẨN BOSS HUNT)
+    -- HÀM LẤY TÊN THẬT CỦA QUÁI (KHÔNG DÙNG UTILS)
     -- ==========================================
     local MonsterNameCache = {}
-    
-    local function GetCachedMonsterName(monster)
+
+    local function GetMonsterRealName(monster)
         if not monster then return "Unknown" end
-        
+
+        -- 1. Lấy tmplId từ attribute
         local tmplId = monster:GetAttribute("TmplId")
         if not tmplId then
             local parsedId = string.match(monster.Name, "Monster_(%d+)")
             if parsedId then tmplId = tonumber(parsedId) end
         end
-        
-        if not tmplId then return monster.Name or "Unknown" end
-        if MonsterNameCache[tmplId] then return MonsterNameCache[tmplId] end
-        
+
+        if tmplId and MonsterNameCache[tmplId] then
+            return MonsterNameCache[tmplId]
+        end
+
+        -- 2. Dùng MgrMonsterClient (cách tin cậy nhất)
         local env = getrenv and getrenv()._G and getrenv()._G.PathTool
-        if env and env.CfgMonster and env.CfgMonster.Tmpls then
-            local cfgData = env.CfgMonster.Tmpls[tostring(tmplId)] or env.CfgMonster.Tmpls[tonumber(tmplId)]
-            if cfgData then
-                local realName = cfgData.Name or cfgData.name or monster.Name
-                MonsterNameCache[tmplId] = realName
-                return realName
+        if env and env.MgrMonsterClient then
+            local mgrMonster = env.MgrMonsterClient
+            local uid = tonumber(string.match(monster.Name, "Monster_(%d+)"))
+            if uid then
+                local success, info = pcall(function() 
+                    return mgrMonster:GetMonsterInfo(uid) 
+                end)
+                if not success then
+                    success, info = pcall(function() 
+                        return mgrMonster.GetMonsterInfo(uid) 
+                    end)
+                end
+                if success and type(info) == "table" then
+                    local realTmplId = info.tmplId or info.TmplId or info.cfgId or info.id
+                    if realTmplId then
+                        local cfgMonster = env.CfgMonster and env.CfgMonster.Tmpls
+                        if cfgMonster then
+                            local cfgData = cfgMonster[tostring(realTmplId)] or cfgMonster[tonumber(realTmplId)]
+                            if cfgData then
+                                local realName = cfgData.Name or cfgData.name or monster.Name
+                                if tmplId then
+                                    MonsterNameCache[tmplId] = realName
+                                else
+                                    MonsterNameCache[realTmplId] = realName
+                                end
+                                return realName
+                            end
+                        end
+                    end
+                end
             end
         end
-        
+
+        -- 3. Fallback: lấy từ ReplicatedStorage
+        if tmplId then
+            local MonsterConfigFolder = ReplicatedStorage:FindFirstChild("CommonConfig") 
+                and ReplicatedStorage.CommonConfig:FindFirstChild("Monster")
+            if MonsterConfigFolder then
+                local configFile = MonsterConfigFolder:FindFirstChild("Monster" .. tostring(tmplId))
+                if configFile then
+                    local success, configData = pcall(require, configFile)
+                    if success and type(configData) == "table" then
+                        local realName = configData.Name or monster.Name or "Unknown"
+                        MonsterNameCache[tmplId] = realName
+                        return realName
+                    end
+                end
+            end
+        end
+
+        -- 4. Cuối cùng: trả về tên model
         return monster.Name or "Unknown"
     end
 
+    -- ==========================================
+    -- HÀM QUÉT DANH SÁCH QUÁI
+    -- ==========================================
     local function GetAllMonsterNames()
         local monsterNames = {}
         local nameDict = {}
@@ -78,7 +126,7 @@ return function(Window, Utils)
             if folder then
                 for _, monster in pairs(folder:GetChildren()) do
                     if monster:IsA("Model") then
-                        local realName = GetCachedMonsterName(monster)
+                        local realName = GetMonsterRealName(monster)
                         if realName and realName ~= "" and realName ~= "Unknown" and not nameDict[realName] then
                             nameDict[realName] = true
                             table.insert(monsterNames, realName)
@@ -94,7 +142,7 @@ return function(Window, Utils)
 
     local function IsMonsterInFilter(monster)
         if not camSettings.targetMonsterNames or #camSettings.targetMonsterNames == 0 then return true end
-        local realName = GetCachedMonsterName(monster)
+        local realName = GetMonsterRealName(monster)
         for _, targetName in ipairs(camSettings.targetMonsterNames) do
             if string.find(string.lower(realName), string.lower(targetName)) then
                 return true
@@ -103,6 +151,9 @@ return function(Window, Utils)
         return false
     end
 
+    -- ==========================================
+    -- HÀM DỊCH CHUYỂN AN TOÀN
+    -- ==========================================
     local function SafeTeleport(targetCFrame, offsetY)
         offsetY = offsetY or 5
         local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -122,6 +173,9 @@ return function(Window, Utils)
         return true
     end
 
+    -- ==========================================
+    -- ĐỌC DỮ LIỆU LƯU TRỮ
+    -- ==========================================
     local function LoadSavedPosition()
         if isfile and isfile(posFileName) and readfile then
             local success, data = pcall(function() return HttpService:JSONDecode(readfile(posFileName)) end)
@@ -144,11 +198,11 @@ return function(Window, Utils)
     camSettings.targetMonsterNames = LoadMonsterFilter()
 
     -- ==========================================
-    -- THIẾT KẾ GIAO DIỆN UI (RAYFIELD)
+    -- GIAO DIỆN UI
     -- ==========================================
     local CamTab = Window:CreateTab("Auto farm", 4483345998)
 
-    -- KHU VỰC ĐIỀU KHIỂN TỔNG HỆ THỐNG TRÊN UI
+    -- ĐIỀU KHIỂN TỔNG
     CamTab:CreateSection("--- ĐIỀU KHIỂN TỔNG ---")
     CamTab:CreateButton({
         Name = "🛑 STOP TẤT CẢ HỆ THỐNG",
@@ -227,13 +281,11 @@ return function(Window, Utils)
                 return
             end
 
-            -- Tạo danh sách options
             local options = {"Tất cả quái"}
             for _, name in ipairs(monsterNames) do
                 table.insert(options, name)
             end
 
-            -- [ĐÃ SỬA] Dùng Refresh thay vì SetOptions
             pcall(function()
                 MonsterDropdown:Refresh(options)
                 MonsterDropdown:SetCurrentOption({"Tất cả quái"})
@@ -327,10 +379,10 @@ return function(Window, Utils)
     })
 
     -- ==========================================
-    -- HỆ THỐNG CÁC VÒNG LẶP LIÊN TỤC (LOOPS RUNTIME)
+    -- HỆ THỐNG VÒNG LẶP
     -- ==========================================
     
-    -- 1. LUỒNG TỰ ĐỘNG ĐÁNH QUÁI (RADIUS BASED & CORE CHECK)
+    -- 1. LUỒNG TỰ ĐỘNG ĐÁNH QUÁI
     task.spawn(function()
         while task.wait(0.2) do
             if _G.SystemController and _G.SystemController.IsPaused then continue end
@@ -361,7 +413,7 @@ return function(Window, Utils)
         end
     end)
 
-    -- 2. LUỒNG TỰ ĐỘNG BẮT QUÁI (THEO DÕI ATTRIBUTE SỞ HỮU CỦA PLAYER)
+    -- 2. LUỒNG TỰ ĐỘNG BẮT QUÁI
     task.spawn(function()
         while task.wait(0.5) do
             if _G.SystemController and _G.SystemController.IsPaused then continue end
@@ -420,7 +472,7 @@ return function(Window, Utils)
         end
     end)
 
-    -- 3. LUỒNG KIỂM TRA HỒI MÁU PET (TELEPORT SUỐI KHI PHÁT HIỆN ĐỦ SỐ PET CHẾT)
+    -- 3. LUỒNG HỒI MÁU PET
     local function CheckDeadPetsFromUI()
         local deadCount = 0
         local totalPets = 0
@@ -511,7 +563,7 @@ return function(Window, Utils)
         end
     end)
 
-    -- 4. TỰ ĐỘNG QUAY LẠI BÃI FARM KHI VỪA VÀO GAME (INITIAL TELEPORT)
+    -- 4. TỰ ĐỘNG QUAY LẠI BÃI FARM
     task.spawn(function()
         task.wait(3)
         if camSettings.autoReturnToFarm and savedFarmPosition then
@@ -520,7 +572,7 @@ return function(Window, Utils)
         end
     end)
 
-    -- 5. CẬP NHẬT TRẠNG THÁI HIỂN THỊ (STATUS LABEL LOOP)
+    -- 5. CẬP NHẬT TRẠNG THÁI
     task.spawn(function()
         while task.wait(1.5) do
             local status = "🟢 Hệ thống đang hoạt động"
@@ -537,5 +589,5 @@ return function(Window, Utils)
         end
     end)
 
-    print("✅ Module Farm V9.5 (Full Features & Optimized Core Loaded Successfully!)")
+    print("✅ Module Farm V9.6 Loaded Successfully!")
 end
