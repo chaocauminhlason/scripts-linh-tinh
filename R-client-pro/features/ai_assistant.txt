@@ -1,12 +1,9 @@
 -- ====================================================================
--- MODULE: R-CLIENT PRO AI ASSISTANT (V2.0 - GEMINI 3.1 PRO / INTERACTIONS API)
+-- MODULE: R-CLIENT PRO AI ASSISTANT (V2.1 - GEMINI 2.5 FLASH FREE TIER)
 -- ====================================================================
 return function(Window, Utils)
     local HttpService = game:GetService("HttpService")
     local API_KEY_FILE = "R_ClientPro_AI_Key.txt"
-
-    -- URL API chuẩn của năm 2026 (v1beta Interactions API)
-    local BASE_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
 
     local AITab = Window:CreateTab("AI Trợ Lý", 4483362458)
 
@@ -26,7 +23,7 @@ return function(Window, Utils)
     -- ==========================================
     -- GIAO DIỆN CẤU HÌNH API (BẢO MẬT)
     -- ==========================================
-    AITab:CreateSection("--- CẤU HÌNH API GEMINI 3.1 PRO ---")
+    AITab:CreateSection("--- CẤU HÌNH API GEMINI FREE TIER ---")
     
     local KeyInput = AITab:CreateInput({
         Name = "Nhập API Key Gemini của bạn",
@@ -47,7 +44,7 @@ return function(Window, Utils)
     })
 
     -- ==========================================
-    -- LOGIC GIAO TIẾP GEMINI 3.1 PRO INTERACTIONS API
+    -- LOGIC GIAO TIẾP STANDARD GENERATECONTENT API (FREE)
     -- ==========================================
     local function RequestAICode(userPrompt)
         local savedKey = GetSavedAPIKey()
@@ -58,26 +55,29 @@ return function(Window, Utils)
         local reqFunc = request or http_request or (syn and syn.request)
         if not reqFunc then return false, "Executor của bạn không hỗ trợ hàm HTTP Request!" end
 
+        -- Sử dụng gemini-2.5-flash hoàn toàn tự do và miễn phí
+        local API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" .. savedKey
+
         -- System prompt ép AI chỉ trả về code Lua thuần
         local systemInstruction = "You are a Roblox Lua exploit developer for 'R-client-pro'. Only respond with raw, executable Lua code. Do not include markdown blocks, do not include ```lua tags, no explanations. Just clean code."
-        
-        -- Cấu trúc Payload chuẩn Interactions API 2026
+        local fullPrompt = systemInstruction .. "\nUser Request: " .. userPrompt
+
         local payload = {
-            model = "gemini-3.1-pro-preview",
-            input = userPrompt,
-            system_instruction = systemInstruction,
-            generation_config = {
-                thinking_level = "low" -- Tiết kiệm token, giảm độ trễ cho task code đơn giản
+            contents = {
+                {
+                    parts = {
+                        { text = fullPrompt }
+                    }
+                }
             }
         }
 
         local success, response = pcall(function()
             return reqFunc({
-                Url = BASE_URL,
+                Url = API_URL,
                 Method = "POST",
                 Headers = { 
-                    ["Content-Type"] = "application/json",
-                    ["x-goog-api-key"] = savedKey
+                    ["Content-Type"] = "application/json"
                 },
                 Body = HttpService:JSONEncode(payload)
             })
@@ -87,17 +87,13 @@ return function(Window, Utils)
             if response.StatusCode == 200 then
                 local data = HttpService:JSONDecode(response.Body)
                 
-                -- Bóc tách JSON trả về từ Interactions API (Duyệt qua steps để tìm model_output)
-                if data.steps then
-                    for _, step in ipairs(data.steps) do
-                        if step.type == "model_output" and step.content and step.content[1] and step.content[1].text then
-                             return true, step.content[1].text
-                        end
-                    end
+                -- Cấu trúc phân tách JSON chuẩn của generateContent endpoint
+                if data.candidates and data.candidates[1] and data.candidates[1].content and data.candidates[1].content.parts and data.candidates[1].content.parts[1] then
+                    return true, data.candidates[1].content.parts[1].text
                 end
-                return false, "API trả về dữ liệu không có model_output."
+                return false, "API trả về cấu trúc dữ liệu lạ."
             else
-                return false, "Lỗi API (" .. tostring(response.StatusCode) .. "): API Key có thể sai hoặc quá hạn mức.\nResponse: " .. tostring(response.Body)
+                return false, "Lỗi hệ thống (" .. tostring(response.StatusCode) .. "). Hãy chắc chắn Key của bạn là Key sạch tạo từ AI Studio."
             end
         end
         return false, "Lỗi kết nối tới máy chủ Google."
@@ -160,7 +156,6 @@ return function(Window, Utils)
     AITab:CreateButton({
         Name = "🚀 Gửi lệnh và Thực thi",
         Callback = function()
-            -- Kiểm tra xem đã có API Key chưa
             if not GetSavedAPIKey() then
                 if Rayfield then Rayfield:Notify({Title = "Lỗi", Content = "Bạn cần nhập API Key trước!", Duration = 3}) end
                 return
@@ -187,5 +182,5 @@ return function(Window, Utils)
         end)
     end
 
-    print("✅ AI Assistant Module (Gemini 3.1 Pro / Interactions API) Loaded Successfully!")
+    print("✅ AI Assistant Module (Gemini 2.5 Flash Free Tier) Loaded Successfully!")
 end
