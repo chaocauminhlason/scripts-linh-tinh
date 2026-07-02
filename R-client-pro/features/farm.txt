@@ -21,10 +21,9 @@ return function(Window, Utils)
         yieldForBoss = true,
         autoReturnToFarm = false,
         healThreshold = 1,
-        attackRadius = 200 -- Bán kính farm mặc định
+        attackRadius = 200
     }
 
-    -- Đăng ký nhận lệnh đóng/mở luồng từ SystemController (Phím P hoặc nút bấm tổng)
     if _G.SystemController and type(_G.SystemController.registerModule) == "function" then
         _G.SystemController:registerModule("AutoFarm", function(paused)
             camSettings.autoAttack = not paused
@@ -149,7 +148,7 @@ return function(Window, Utils)
     -- ==========================================
     local CamTab = Window:CreateTab("Auto farm", 4483345998)
 
-    -- [MỚI NHẤT] KHU VỰC ĐIỀU KHIỂN TỔNG HỆ THỐNG TRÊN UI
+    -- KHU VỰC ĐIỀU KHIỂN TỔNG HỆ THỐNG TRÊN UI
     CamTab:CreateSection("--- ĐIỀU KHIỂN TỔNG ---")
     CamTab:CreateButton({
         Name = "🛑 STOP TẤT CẢ HỆ THỐNG",
@@ -218,7 +217,7 @@ return function(Window, Utils)
         end
     })
 
-CamTab:CreateButton({
+    CamTab:CreateButton({
         Name = "🔍 Quét danh sách quái trên Map",
         Callback = function()
             local monsterNames = GetAllMonsterNames()
@@ -228,16 +227,15 @@ CamTab:CreateButton({
                 return
             end
 
-            -- Tạo danh sách options chuẩn
+            -- Tạo danh sách options
             local options = {"Tất cả quái"}
             for _, name in ipairs(monsterNames) do
                 table.insert(options, name)
             end
 
-            -- Update Dropdown
+            -- [ĐÃ SỬA] Dùng Refresh thay vì SetOptions
             pcall(function()
-                MonsterDropdown:SetOptions(options)
-                -- Reset về "Tất cả quái" sau khi quét để tránh lỗi logic
+                MonsterDropdown:Refresh(options)
                 MonsterDropdown:SetCurrentOption({"Tất cả quái"})
                 camSettings.targetMonsterNames = {}
                 UpdateMonsterLabel()
@@ -350,7 +348,6 @@ CamTab:CreateButton({
                 if monster:IsA("Model") then
                     local root = monster.PrimaryPart or monster:FindFirstChild("HumanoidRootPart")
                     if root and root:IsA("BasePart") and root.Transparency < 1 and monster:GetAttribute("CatchEndTick") == nil then
-                        -- Kiểm tra khoảng cách hình học thực tế với tâm farm
                         local distance = (root.Position - centerPos).Magnitude
                         if distance <= camSettings.attackRadius and IsMonsterInFilter(monster) then
                             local id = tonumber(monster.Name:match("Monster_(%d+)"))
@@ -499,7 +496,7 @@ CamTab:CreateButton({
                         plat.Anchored = true; plat.Transparency = 1; plat.CanCollide = true; plat.Parent = Workspace
                         
                         SafeTeleport(CFrame.new(recoverPos), 5)
-                        task.wait(10) -- Chờ hồ nước sạc đầy máu
+                        task.wait(10)
                         plat:Destroy()
                         
                         if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
