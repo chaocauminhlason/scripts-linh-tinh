@@ -195,61 +195,62 @@ end
     CamTab:CreateSection("--- QUẢN LÝ QUÁI FARM ---")
     local MonsterListLabel = CamTab:CreateLabel("🐾 Đang farm: Tất cả quái")
     
+-- 1. Đảm bảo UpdateMonsterLabel được định nghĩa trước
     local function UpdateMonsterLabel()
-        if #camSettings.targetMonsterNames > 0 then
-            MonsterListLabel:Set("🐾 Đang farm: " .. table.concat(camSettings.targetMonsterNames, ", "))
-        else
-            MonsterListLabel:Set("🐾 Đang farm: Tất cả quái")
+        if MonsterListLabel then
+            if #camSettings.targetMonsterNames > 0 then
+                MonsterListLabel:Set("🐾 Đang farm: " .. table.concat(camSettings.targetMonsterNames, ", "))
+            else
+                MonsterListLabel:Set("🐾 Đang farm: Tất cả quái")
+            end
         end
     end
-    UpdateMonsterLabel()
 
-    local MonsterDropdown = CamTab:CreateDropdown({
-        Name = "Chọn quái farm (Multi-select)",
+    -- 2. Khai báo Dropdown chính xác
+    MonsterDropdown = CamTab:CreateDropdown({
+        Name = "Chọn quái farm",
         Options = {"Tất cả quái"},
         CurrentOption = {"Tất cả quái"},
-        MultipleOptions = true, -- Đây là khóa chính để bật Multi-select
+        MultipleOptions = true,
         Flag = "MonsterSelectFarm",
         Callback = function(Options)
-            -- Logic xử lý khi người dùng tích chọn nhiều con
             pcall(function()
                 if table.find(Options, "Tất cả quái") then
-                    -- Nếu chọn "Tất cả quái", thì xóa hết filter để farm full map
                     camSettings.targetMonsterNames = {}
                 else
-                    -- Lưu danh sách các con đã chọn vào targetMonsterNames
                     camSettings.targetMonsterNames = Options
                 end
                 
-                -- Lưu cấu hình này vào file để lần sau vào lại không mất
                 if writefile then 
                     pcall(function() writefile(monsterFilterFile, HttpService:JSONEncode(camSettings.targetMonsterNames)) end)
                 end
-                
-                UpdateMonsterLabel() -- Cập nhật dòng text hiển thị bên dưới
+                UpdateMonsterLabel()
             end)
         end
     })
 
-CamTab:CreateButton({
+    -- 3. Nút Quét với cơ chế Refresh an toàn
+    CamTab:CreateButton({
         Name = "🔍 Quét danh sách quái trên Map",
         Callback = function()
-            local names = GetAllMonsterNames() -- Lấy list tên quái từ hàm quét
+            local names = GetAllMonsterNames()
             local finalOptions = {"Tất cả quái"}
             for _, n in pairs(names) do table.insert(finalOptions, n) end
             
-            -- Ép UI cập nhật bằng hàm Refresh (tương tự như cách bạn làm ở module Tracker)
-            -- Nếu thư viện không có Refresh, dùng dòng lệnh sau:
-            if MonsterDropdown.Refresh then
+            -- Gọi Refresh của Rayfield (Nếu có)
+            if MonsterDropdown and MonsterDropdown.Refresh then
                 MonsterDropdown:Refresh(finalOptions, true)
             else
-                -- Dự phòng: Nếu Rayfield bản của bạn không có Refresh, hãy dùng cách gán lại này
+                -- Dự phòng nếu không có Refresh
                 MonsterDropdown:SetOptions(finalOptions)
             end
             
             game.StarterGui:SetCore("SendNotification", { Title = "✅ Đã quét", Text = "Đã tìm thấy " .. #names .. " quái", Duration = 3 })
         end
     })
+    
+    -- Cập nhật label lần đầu
+    UpdateMonsterLabel()
 
     CamTab:CreateSection("--- CÀI ĐẶT FARM ---")
     CamTab:CreateToggle({ Name = "Tự Động Đánh Quái", CurrentValue = false, Flag = "FarmAutoAttack", Callback = function(V) camSettings.autoAttack = V end })
