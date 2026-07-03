@@ -73,4 +73,53 @@ return function(Window, Utils)
             pcall(function() RunService:Set3dRenderingEnabled(not Value) end) 
         end 
     })
+    local _streamerName = "Streamer" -- Tên mặc định
+    local isSpoofing = false
+
+    local function ApplyNameSpoof(newName)
+        if not isSpoofing then return end
+        
+        -- Hook vào Player Name (thay đổi UI)
+        pcall(function()
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+                LocalPlayer.Character.Humanoid.DisplayName = newName
+            end
+        end)
+        
+        -- Thêm logic ẩn danh ở đây nếu game có các label tên trên đầu nhân vật
+        -- Bạn có thể hook vào các billboard gui hoặc các textlabel trong PlayerGui
+    end
+    local StreamerTab = OptimizationTab
+    StreamerTab:CreateSection("--- TÙY CHỈNH TÊN ---")
+    local NameInput = StreamerTab:CreateInput({
+        Name = "Tên hiển thị (Streamer Mode)",
+        PlaceholderText = "Nhập tên giả...",
+        RemoveTextAfterFocusLost = false,
+        Callback = function(Text)
+            _streamerName = Text
+            if isSpoofing then ApplyNameSpoof(Text) end
+        end,
+    })
+
+    StreamerTab:CreateToggle({
+        Name = "Bật Chế Độ Ẩn Danh (Rename)",
+        CurrentValue = false,
+        Callback = function(Value)
+            isSpoofing = Value
+            if Value then
+                ApplyNameSpoof(_streamerName)
+            else
+                -- Trả lại tên thật
+                pcall(function()
+                    LocalPlayer.Character.Humanoid.DisplayName = LocalPlayer.Name
+                end)
+            end
+        end
+    })
+
+    -- Đảm bảo tên luôn được cập nhật khi nhân vật hồi sinh
+    LocalPlayer.CharacterAdded:Connect(function(char)
+        task.wait(1)
+        if isSpoofing then ApplyNameSpoof(_streamerName) end
+    end)
 end
