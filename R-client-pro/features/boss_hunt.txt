@@ -96,15 +96,40 @@ return function(Window, Utils)
     local BOSS_GLOBAL_LIFESPAN = 300
     local BOSS_ALERT_COOLDOWN = 60 
 
-    local function TriggerBossGlobalEvent(msg)
-        local lowerMsg = string.lower(msg)
-        if not attackSettings.enabled then return end 
+local function TriggerBossGlobalEvent(msg)
+    local lowerMsg = string.lower(msg)
+    if not attackSettings.enabled then return end 
+    
+    if string.find(lowerMsg, " appear at ") or string.find(lowerMsg, " spawned") then
+        local currentTime = os.time()
+        if currentTime - lastBossAlertTime < BOSS_ALERT_COOLDOWN then return end
+        lastBossAlertTime = currentTime
         
-        if string.find(lowerMsg, " appear at ") or string.find(lowerMsg, " spawned") then
-            local currentTime = os.time()
-            if currentTime - lastBossAlertTime < BOSS_ALERT_COOLDOWN then return end
-            lastBossAlertTime = currentTime
+        -- Bọc toàn bộ vào task.spawn để không làm treo luồng chính
+        task.spawn(function()
+            local controller = _G.SystemController
             
+            -- [XỬ LÝ ƯU TIÊN SỐ 1]: Đợi Auto Dungeon
+            if controller and controller.CurrentLock == "AutoDungeon" then
+                -- Bật cờ thông báo cho Dungeon biết là có Boss
+                _G.PendingBossHunt = true 
+                game.StarterGui:SetCore("SendNotification", { Title = "⏳ Hàng Đợi Boss", Text = "Đang kẹt trong Dungeon, sẽ đi săn Boss ngay khi thoát!", Duration = 5 })
+                
+                -- Vòng lặp chờ vô hạn cho đến khi Dungeon nhả Lock
+                while controller.CurrentLock == "AutoDungeon" do
+                    task.wait(1)
+                end
+                
+                game.StarterGui:SetCore("SendNotification", { Title = "⚔️ Tới giờ rồi!", Text = "Dungeon đã xong, bắt đầu đi săn Boss!", Duration = 3 })
+            end
+            
+            -- Reset cờ sau khi đã lấy được quyền
+            _G.PendingBossHunt = false 
+            
+            -- Tạm dừng các hệ thống cấp thấp (Rift, Weather) bằng cách chiếm Lock
+            if controller then controller.RequestLock("BossHunt") end
+
+            -- Kích hoạt bộ máy đi săn Boss
             pcall(function()
                 if writefile then 
                     local data = { EndTime = currentTime + BOSS_GLOBAL_LIFESPAN }
@@ -112,31 +137,26 @@ return function(Window, Utils)
                 end
             end)
             
-            game.StarterGui:SetCore("SendNotification", { Title = "⚔️ Global Boss Alert!", Text = "Sóng Boss xuất hiện! Bắt đầu quét...", Duration = 5 })
-            
             _G.BossStatus.roundCompleted = false
             _G.BossStatus.currentWorldIndex = 1
-            _G.BossStatus.scanAttempts = 0 -- Reset lượt thử khi có sóng mới
+            _G.BossStatus.scanAttempts = 0 
             
             if #attackSettings.selectedWorlds > 0 then
                 _G.BossStatus.currentWorldId = attackSettings.selectedWorlds[1]
                 if Utils and Utils.TeleportToArea then Utils.TeleportToArea(_G.BossStatus.currentWorldId) end
             end
             
-            local controller = _G.SystemController
             if attackSettings.autoHop and controller then 
                 table.insert(controller.TaskQueue, {
                     Name = "BossWaveHop",
                     Func = function()
-                        if controller.RequestLock("BossHunt") then
-                            Utils.HopServer("Tìm Server bắt sóng Boss")
-                            controller.ReleaseLock("BossHunt")
-                        end
+                        Utils.HopServer("Tìm Server bắt sóng Boss")
                     end
                 })
             end
-        end
+        end)
     end
+end
 
     local function HookBossBubble(labDesc)
         labDesc:GetPropertyChangedSignal("Text"):Connect(function()
