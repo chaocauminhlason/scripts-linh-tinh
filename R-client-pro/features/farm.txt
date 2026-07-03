@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: R-GAME (AUTO BẮT, ĐÁNH, HỒI MÁU - BẢN FULL INTEGRATED V9.6 FINAL)
+-- MODULE: R-GAME (AUTO BẮT, ĐÁNH, HỒI MÁU - BẢN FULL INTEGRATED V10 FINAL)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -9,7 +9,7 @@ return function(Window, Utils)
     local LocalPlayer = Players.LocalPlayer
 
     -- ==========================================
-    -- HOÀN THIỆN CẤU HÌNH STATE & ĐĂNG KÝ HỆ THỐNG
+    -- 1. CẤU HÌNH STATE & ĐĂNG KÝ HỆ THỐNG
     -- ==========================================
     local camSettings = {
         autoAttack = false,
@@ -22,7 +22,6 @@ return function(Window, Utils)
         autoReturnToFarm = false,
         healThreshold = 1,
         attackRadius = 200
-        local MonsterDropdown = nil
     }
 
     if _G.SystemController and type(_G.SystemController.registerModule) == "function" then
@@ -40,12 +39,11 @@ return function(Window, Utils)
     pcall(function() MonsterSystem = require(ReplicatedStorage.CommonLogic.Monster.MonsterSystem) end)
 
     -- ==========================================
-    -- HÀM BỔ TRỢ (ĐÃ FIX: UPVALUES & CLIENTMONSTERS)
+    -- 2. HÀM BỔ TRỢ (UPVALUES & DỊCH TÊN)
     -- ==========================================
     local MonsterNameCache = {}
     local InternalMonsterTable = nil
 
-    -- Khởi tạo kết nối vào vùng nhớ ẩn của game
     local function InitMonsterMemory()
         if InternalMonsterTable then return end
         pcall(function()
@@ -62,7 +60,6 @@ return function(Window, Utils)
     local function GetCachedMonsterName(monster)
         if not monster then return "Unknown" end
         
-        -- Bóc UID từ tên ngoài map (VD: "Monster_46808" -> 46808)
         local uidStr = string.match(monster.Name, "Monster_(%d+)")
         if not uidStr then return monster.Name end
         
@@ -91,35 +88,32 @@ return function(Window, Utils)
                 end
             end
         end
-        
         return monster.Name
     end
 
--- Đảm bảo hàm này nằm TẠI ĐÂY, trong cùng 1 file với các hàm khác
-local function GetCachedMonsterName(monster)
-    -- ... (giữ nguyên logic lấy tên như tôi đã gửi ở trên) ...
-    -- Nếu bạn lỡ tay xóa hoặc làm mất, hãy chép lại đúng code từ phần "HÀM BỔ TRỢ"
-end
-
--- Sửa lại hàm quét trong file Auto Farm thành thế này:
-local function GetAllMonsterNames()
-    local monsterNames = {}
-    local nameDict = {}
-    local clientMonsters = Workspace:FindFirstChild("ClientMonsters")
-    
-    if clientMonsters then
-        for _, obj in pairs(clientMonsters:GetChildren()) do
-            -- Dùng pcall để nếu hàm dịch tên lỗi thì không làm crash cả hệ thống quét
-            local success, realName = pcall(function() return GetCachedMonsterName(obj) end)
-            
-            if success and realName and realName ~= "Unknown" and not nameDict[realName] then
-                nameDict[realName] = true
-                table.insert(monsterNames, realName)
+    local function GetAllMonsterNames()
+        local monsterNames = {}
+        local nameDict = {}
+        
+        local foldersToScan = {"ClientMonsters", "Monsters"}
+        for _, folderName in ipairs(foldersToScan) do
+            local folder = Workspace:FindFirstChild(folderName)
+            if folder then
+                for _, obj in pairs(folder:GetChildren()) do
+                    if obj:IsA("Model") or obj:IsA("BasePart") then
+                        local success, realName = pcall(function() return GetCachedMonsterName(obj) end)
+                        if success and realName and realName ~= "Unknown" and not string.find(realName, "Monster_") and not nameDict[realName] then
+                            nameDict[realName] = true
+                            table.insert(monsterNames, realName)
+                        end
+                    end
+                end
             end
         end
+        
+        table.sort(monsterNames)
+        return monsterNames
     end
-    return monsterNames
-end
 
     local function IsMonsterInFilter(monster)
         if not camSettings.targetMonsterNames or #camSettings.targetMonsterNames == 0 then return true end
@@ -166,9 +160,10 @@ end
     camSettings.targetMonsterNames = LoadMonsterFilter()
 
     -- ==========================================
-    -- THIẾT KẾ GIAO DIỆN UI (RAYFIELD)
+    -- 3. THIẾT KẾ GIAO DIỆN UI (RAYFIELD)
     -- ==========================================
     local CamTab = Window:CreateTab("Auto farm", 4483345998)
+    local MonsterDropdown = nil -- Khai báo biến toàn cục cho Module
 
     CamTab:CreateSection("--- ĐIỀU KHIỂN TỔNG ---")
     CamTab:CreateButton({
@@ -195,22 +190,21 @@ end
     CamTab:CreateSection("--- QUẢN LÝ QUÁI FARM ---")
     local MonsterListLabel = CamTab:CreateLabel("🐾 Đang farm: Tất cả quái")
     
--- 1. Đảm bảo UpdateMonsterLabel được định nghĩa trước
     local function UpdateMonsterLabel()
-        if MonsterListLabel then
-            if #camSettings.targetMonsterNames > 0 then
-                MonsterListLabel:Set("🐾 Đang farm: " .. table.concat(camSettings.targetMonsterNames, ", "))
-            else
-                MonsterListLabel:Set("🐾 Đang farm: Tất cả quái")
-            end
+        if #camSettings.targetMonsterNames > 0 then
+            MonsterListLabel:Set("🐾 Đang farm: " .. table.concat(camSettings.targetMonsterNames, ", "))
+        else
+            MonsterListLabel:Set("🐾 Đang farm: Tất cả quái")
         end
     end
+    UpdateMonsterLabel()
 
-    -- 2. Khai báo Dropdown chính xác
+    -- Khởi tạo Dropdown hỗ trợ Multi-select
+    local initOptions = #camSettings.targetMonsterNames > 0 and camSettings.targetMonsterNames or {"Tất cả quái"}
     MonsterDropdown = CamTab:CreateDropdown({
-        Name = "Chọn quái farm",
+        Name = "Chọn quái farm (Multi-select)",
         Options = {"Tất cả quái"},
-        CurrentOption = {"Tất cả quái"},
+        CurrentOption = initOptions,
         MultipleOptions = true,
         Flag = "MonsterSelectFarm",
         Callback = function(Options)
@@ -220,37 +214,38 @@ end
                 else
                     camSettings.targetMonsterNames = Options
                 end
-                
-                if writefile then 
-                    pcall(function() writefile(monsterFilterFile, HttpService:JSONEncode(camSettings.targetMonsterNames)) end)
-                end
+                if writefile then pcall(function() writefile(monsterFilterFile, HttpService:JSONEncode(camSettings.targetMonsterNames)) end) end
                 UpdateMonsterLabel()
             end)
         end
     })
 
-    -- 3. Nút Quét với cơ chế Refresh an toàn
+    -- Nút Quét dùng hàm Refresh
     CamTab:CreateButton({
         Name = "🔍 Quét danh sách quái trên Map",
         Callback = function()
-            local names = GetAllMonsterNames()
-            local finalOptions = {"Tất cả quái"}
-            for _, n in pairs(names) do table.insert(finalOptions, n) end
-            
-            -- Gọi Refresh của Rayfield (Nếu có)
-            if MonsterDropdown and MonsterDropdown.Refresh then
-                MonsterDropdown:Refresh(finalOptions, true)
-            else
-                -- Dự phòng nếu không có Refresh
-                MonsterDropdown:SetOptions(finalOptions)
-            end
-            
-            game.StarterGui:SetCore("SendNotification", { Title = "✅ Đã quét", Text = "Đã tìm thấy " .. #names .. " quái", Duration = 3 })
+            pcall(function()
+                local names = GetAllMonsterNames()
+                if #names == 0 then
+                    game.StarterGui:SetCore("SendNotification", { Title = "⚠️ Cảnh báo", Text = "Không tìm thấy quái nào!", Duration = 3 })
+                    return
+                end
+
+                local finalOptions = {"Tất cả quái"}
+                for _, name in ipairs(names) do table.insert(finalOptions, name) end
+                
+                if MonsterDropdown then
+                    if MonsterDropdown.Refresh then
+                        MonsterDropdown:Refresh(finalOptions, true)
+                    else
+                        MonsterDropdown:SetOptions(finalOptions)
+                    end
+                end
+                
+                game.StarterGui:SetCore("SendNotification", { Title = "✅ Quét Hoàn Tất", Text = "Đã tìm thấy " .. #names .. " loại quái", Duration = 3 })
+            end)
         end
     })
-    
-    -- Cập nhật label lần đầu
-    UpdateMonsterLabel()
 
     CamTab:CreateSection("--- CÀI ĐẶT FARM ---")
     CamTab:CreateToggle({ Name = "Tự Động Đánh Quái", CurrentValue = false, Flag = "FarmAutoAttack", Callback = function(V) camSettings.autoAttack = V end })
@@ -285,7 +280,7 @@ end
     })
 
     CamTab:CreateButton({
-        Name = "🚀 Dịch chuyển nhanh về tọa độ Farm đã lưu",
+        Name = "🚀 Dịch chuyển nhanh về tọa độ Farm",
         Callback = function()
             if savedFarmPosition then
                 SafeTeleport(savedFarmPosition, 5)
@@ -295,10 +290,10 @@ end
     })
 
     -- ==========================================
-    -- HỆ THỐNG CÁC VÒNG LẶP LIÊN TỤC (LOOPS RUNTIME)
+    -- 4. HỆ THỐNG CÁC VÒNG LẶP LIÊN TỤC (LOOPS)
     -- ==========================================
     
-    -- 1. LUỒNG TỰ ĐỘNG ĐÁNH QUÁI
+    -- LUỒNG TỰ ĐỘNG ĐÁNH QUÁI
     task.spawn(function()
         while task.wait(0.2) do
             if _G.SystemController and _G.SystemController.IsPaused then continue end
@@ -316,7 +311,6 @@ end
                 if monstersFolder then
                     for _, monster in pairs(monstersFolder:GetChildren()) do
                         if monster:IsA("Model") or monster:IsA("BasePart") then
-                            -- Lấy lõi vật lý (Fix lỗi không có Humanoid)
                             local root = monster.PrimaryPart or monster:FindFirstChild("HumanoidRootPart") or monster:FindFirstChild("Root") or (monster:IsA("BasePart") and monster)
                             
                             if root and root:IsA("BasePart") and monster:GetAttribute("CatchEndTick") == nil then
@@ -335,7 +329,7 @@ end
         end
     end)
 
-    -- 2. LUỒNG TỰ ĐỘNG BẮT QUÁI
+    -- LUỒNG TỰ ĐỘNG BẮT QUÁI
     task.spawn(function()
         while task.wait(0.5) do
             if _G.SystemController and _G.SystemController.IsPaused then continue end
@@ -393,7 +387,7 @@ end
         end
     end)
 
-    -- 3. TỰ ĐỘNG QUAY LẠI BÃI FARM KHI VỪA VÀO GAME
+    -- LUỒNG TỰ VỀ BÃI FARM
     task.spawn(function()
         task.wait(3)
         if camSettings.autoReturnToFarm and savedFarmPosition then
@@ -401,5 +395,5 @@ end
         end
     end)
 
-    print("✅ Module Farm V9.6 Final (ClientMonsters + Upvalues Logic) Loaded Successfully!")
+    print("✅ Module Farm V10 Final (Multi-select + Refresh Update) Loaded Successfully!")
 end
