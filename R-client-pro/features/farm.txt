@@ -205,45 +205,25 @@ end
 
     local MonsterDropdown = CamTab:CreateDropdown({
         Name = "Chọn quái farm",
-        Options = {"Tất cả quái"},
-        CurrentOption = #camSettings.targetMonsterNames > 0 and camSettings.targetMonsterNames or {"Tất cả quái"},
+        Options = {"Test 1", "Test 2"}, -- Dữ liệu giả để kiểm tra UI
+        CurrentOption = {"Test 1"},
         MultipleOptions = true,
         Flag = "MonsterSelectFarm",
         Callback = function(Options)
-            pcall(function()
-                if table.find(Options, "Tất cả quái") then
-                    camSettings.targetMonsterNames = {}
-                else
-                    local filteredOptions = {}
-                    for _, opt in ipairs(Options) do if opt ~= "Tất cả quái" then table.insert(filteredOptions, opt) end end
-                    camSettings.targetMonsterNames = filteredOptions
-                end
-                if writefile then pcall(function() writefile(monsterFilterFile, HttpService:JSONEncode(camSettings.targetMonsterNames)) end) end
-                UpdateMonsterLabel()
-            end)
+            print("Dropdown đã chọn: ", table.concat(Options, ", "))
         end
     })
 
     CamTab:CreateButton({
-        Name = "🔍 Quét danh sách quái trên Map",
+        Name = "🔍 Test Dropdown",
         Callback = function()
+            local names = {"Wickloom", "Monster_46808"} -- Dữ liệu giả
+            print("Đang nạp vào dropdown: ", unpack(names))
+            
+            -- Ép dữ liệu vào dropdown
             pcall(function()
-                local monsterNames = GetAllMonsterNames()
-                if #monsterNames == 0 then
-                    game.StarterGui:SetCore("SendNotification", { Title = "⚠️ Cảnh báo", Text = "Không tìm thấy quái nào xung quanh!", Duration = 3 })
-                    return
-                end
-
-                local options = {"Tất cả quái"}
-                for _, name in ipairs(monsterNames) do table.insert(options, name) end
-                
-                if MonsterDropdown and MonsterDropdown.SetOptions then
-                    MonsterDropdown:SetOptions(options)
-                    MonsterDropdown:SetCurrentOption({"Tất cả quái"})
-                    camSettings.targetMonsterNames = {}
-                    UpdateMonsterLabel()
-                end
-                game.StarterGui:SetCore("SendNotification", { Title = "✅ Quét Hoàn Tất", Text = "Đã tìm thấy " .. #monsterNames .. " loại quái", Duration = 3 })
+                MonsterDropdown:SetOptions(names)
+                print("Đã nạp xong!")
             end)
         end
     })
