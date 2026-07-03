@@ -204,16 +204,30 @@ end
     end
     UpdateMonsterLabel()
 
-    MonsterDropdown = CamTab:CreateDropdown({
-        Name = "Chọn quái farm",
+    local MonsterDropdown = CamTab:CreateDropdown({
+        Name = "Chọn quái farm (Multi-select)",
         Options = {"Tất cả quái"},
         CurrentOption = {"Tất cả quái"},
-        MultipleOptions = true,
+        MultipleOptions = true, -- Đây là khóa chính để bật Multi-select
         Flag = "MonsterSelectFarm",
         Callback = function(Options)
-            -- Logic cập nhật filter...
-            camSettings.targetMonsterNames = (not table.find(Options, "Tất cả quái")) and Options or {}
-            UpdateMonsterLabel()
+            -- Logic xử lý khi người dùng tích chọn nhiều con
+            pcall(function()
+                if table.find(Options, "Tất cả quái") then
+                    -- Nếu chọn "Tất cả quái", thì xóa hết filter để farm full map
+                    camSettings.targetMonsterNames = {}
+                else
+                    -- Lưu danh sách các con đã chọn vào targetMonsterNames
+                    camSettings.targetMonsterNames = Options
+                end
+                
+                -- Lưu cấu hình này vào file để lần sau vào lại không mất
+                if writefile then 
+                    pcall(function() writefile(monsterFilterFile, HttpService:JSONEncode(camSettings.targetMonsterNames)) end)
+                end
+                
+                UpdateMonsterLabel() -- Cập nhật dòng text hiển thị bên dưới
+            end)
         end
     })
 
