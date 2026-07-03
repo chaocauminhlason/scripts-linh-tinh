@@ -95,25 +95,23 @@ return function(Window, Utils)
     end
 
     local function GetAllMonsterNames()
-        local monsterNames = {}
-        local nameDict = {}
-        
-        -- Quét cả 2 thư mục để không bỏ sót quái
-        local foldersToScan = {"ClientMonsters", "Monsters"}
-        for _, folderName in ipairs(foldersToScan) do
-            local folder = Workspace:FindFirstChild(folderName)
-            if folder then
-                for _, obj in pairs(folder:GetChildren()) do
-                    if obj:IsA("Model") or obj:IsA("BasePart") then
-                        local realName = GetCachedMonsterName(obj)
-                        if realName and realName ~= "Unknown" and not string.find(realName, "Monster_") and not nameDict[realName] then
-                            nameDict[realName] = true
-                            table.insert(monsterNames, realName)
-                        end
-                    end
-                end
+    local monsterNames = {}
+    local nameDict = {}
+    local clientMonsters = Workspace:FindFirstChild("ClientMonsters")
+    
+    if clientMonsters then
+        for _, obj in pairs(clientMonsters:GetChildren()) do
+            -- Dùng pcall để nếu hàm dịch tên lỗi thì không làm crash cả hệ thống quét
+            local success, realName = pcall(function() return GetCachedMonsterName(obj) end)
+            
+            if success and realName and realName ~= "Unknown" and not nameDict[realName] then
+                nameDict[realName] = true
+                table.insert(monsterNames, realName)
             end
         end
+    end
+    return monsterNames
+end
         
         table.sort(monsterNames)
         return monsterNames
