@@ -94,7 +94,14 @@ return function(Window, Utils)
         return monster.Name
     end
 
-    local function GetAllMonsterNames()
+-- Đảm bảo hàm này nằm TẠI ĐÂY, trong cùng 1 file với các hàm khác
+local function GetCachedMonsterName(monster)
+    -- ... (giữ nguyên logic lấy tên như tôi đã gửi ở trên) ...
+    -- Nếu bạn lỡ tay xóa hoặc làm mất, hãy chép lại đúng code từ phần "HÀM BỔ TRỢ"
+end
+
+-- Sửa lại hàm quét trong file Auto Farm thành thế này:
+local function GetAllMonsterNames()
     local monsterNames = {}
     local nameDict = {}
     local clientMonsters = Workspace:FindFirstChild("ClientMonsters")
@@ -112,10 +119,6 @@ return function(Window, Utils)
     end
     return monsterNames
 end
-        
-        table.sort(monsterNames)
-        return monsterNames
-    end
 
     local function IsMonsterInFilter(monster)
         if not camSettings.targetMonsterNames or #camSettings.targetMonsterNames == 0 then return true end
