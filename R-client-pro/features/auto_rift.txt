@@ -117,9 +117,13 @@ return function(Window, Utils)
     })
     
     RiftTab:CreateSlider({
-        Name = "Thời gian nghỉ giữa các vòng (Phút)", Min = 1, Max = 60, Default = 5, Flag = "RiftRestTime",
-        Callback = function(Value) riftSettings.restTimeMinutes = Value end
-    })
+    Name = "Thời gian nghỉ ", 
+    Range = {1, 60}, 
+    Increment = 1, 
+    CurrentValue = 5, 
+    Flag = "RiftRestTime",
+    Callback = function(Value) riftSettings.restTimeMinutes = Value end
+})
 
     RiftTab:CreateSection("--- CÔNG CỤ SỬA LỖI ---")
     RiftTab:CreateButton({ Name = "Ép vào Combat Mode (Fix lỗi kẹt)", Callback = function() riftState = "COMBAT"; hasEncounteredMonsters = false; RiftStatus:Set("STATUS: Đã ép Chiến Đấu!") end })
