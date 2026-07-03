@@ -120,12 +120,17 @@ return function(Window, Utils)
         if monstersFolder then
             for _, m in pairs(monstersFolder:GetChildren()) do
                 if not string.match(m.Name, "Monster_") then continue end
-                local root = m
-                if not root:IsA("BasePart") then continue end
-                local id = tonumber(m.Name:match("Monster_(%d+)"))
                 
+                -- Lấy phần lõi của quái để tính tọa độ chính xác
+                local root = m:IsA("Model") and m.PrimaryPart or m
+                if not root or not root:IsA("BasePart") then 
+                    root = m:FindFirstChildWhichIsA("BasePart")
+                    if not root then continue end
+                end
+
+                local id = tonumber(m.Name:match("Monster_(%d+)"))
                 if id and catchCount[id] and catchCount[id] >= 3 then continue end
-                if root:GetAttribute("CatchEndTick") ~= nil then table.insert(deadList, m) continue end
+                if m:GetAttribute("CatchEndTick") ~= nil or root:GetAttribute("CatchEndTick") ~= nil then table.insert(deadList, m) continue end
                 
                 local hpVal = m:FindFirstChild("Health")
                 if hpVal and hpVal:IsA("StringValue") then
@@ -135,7 +140,7 @@ return function(Window, Utils)
 
                 hasAlive = true
                 local d = (hrp.Position - root.Position).Magnitude
-                if d < minDist then minDist = d best = m end
+                if d < minDist then minDist = d best = root end
             end
         end
         return hasAlive, deadList, best, minDist
@@ -380,17 +385,42 @@ return function(Window, Utils)
                     if bestTarget then
                         local targetPos = bestTarget.Position
                         if closestDist2D > 12 then
-                            if closestDist2D > 40 then pcall(function() Utils.ToggleMount(true) end) end
+                            if closestDist2D > 40 then 
+                                pcall(function() Utils.ToggleMount(true) end) 
+                                -- Ép dịch chuyển lại gần quái nếu đứng quá xa
+                                hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 5))
+                                task.wait(0.2)
+                            end
+                            
                             humanoid:MoveTo(targetPos)
+                            
+                            -- HỆ THỐNG GỠ KẸT (STUCK DETECTION)
+                            if dungeonLastPosition and (hrp.Position - dungeonLastPosition).Magnitude < 1 then
+                                dungeonStuckTimer = dungeonStuckTimer + 0.5
+                                if dungeonStuckTimer >= 2 then 
+                                    humanoid.Jump = true
+                                    hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 5, 0))
+                                    dungeonStuckTimer = 0 
+                                end
+                            else 
+                                dungeonStuckTimer = 0 
+                            end
+                            dungeonLastPosition = hrp.Position
                         else
+                            -- Đã áp sát mục tiêu
                             humanoid:MoveTo(hrp.Position) 
                             pcall(function() Utils.SmartDismount() end)
-                            local id = tonumber(bestTarget.Name:match("Monster_(%d+)"))
-                            if id then task.spawn(function() pcall(function() Utils.AttackMonster(id) end) end) end 
+                            dungeonStuckTimer = 0
+                            
+                            -- Xử lý ID cho cả BasePart và Model
+                            local id = tonumber(bestTarget.Parent.Name:match("Monster_(%d+)")) or tonumber(bestTarget.Name:match("Monster_(%d+)"))
+                            if id then 
+                                task.spawn(function() pcall(function() Utils.AttackMonster(id) end) end) 
+                            end 
                         end
                     end
                 else 
-                    -- [TEST LOGIC 3]: THOÁT NGAY LẬP TỨC NẾU ĐÃ THẤY QUÁI MÀ GIỜ KHÔNG CÒN
+                    -- [THOÁT KHI XONG VIỆC]
                     if not hasEncounteredMonsters then
                         print("[TEST-LOG] Combat Mode: Đợi Server spawn con quái duy nhất...")
                         RiftStatus:Set("STATUS: Đang đợi Server spawn quái (Chờ vô hạn)...")
