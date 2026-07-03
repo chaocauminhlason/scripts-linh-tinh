@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: R-CLIENT PRO AI ASSISTANT (V4.3 - PATCHED)
+-- MODULE: R-CLIENT PRO AI ASSISTANT (V4.3 - UI REVAMP & MULTILINE INPUT)
 -- ====================================================================
 return function(Window, Utils, WebhookModule)
     local HttpService = game:GetService("HttpService")
@@ -14,7 +14,7 @@ return function(Window, Utils, WebhookModule)
     end
 
     -- ==========================================
-    -- HÀM TIỆN ÍCH
+    -- HÀM TIỆN ÍCH (XỬ LÝ DẤU & WEBHOOK)
     -- ==========================================
     local function GetSavedAPIKey()
         if isfile and isfile(API_KEY_FILE) then
@@ -28,32 +28,28 @@ return function(Window, Utils, WebhookModule)
         if setclipboard then pcall(function() setclipboard(text) end) end
     end
 
-    -- FIX Bug 4: utf8Map khai báo 1 lần ngoài function, tránh tạo lại mỗi lần gọi
-    local utf8Map = {
-        ["á"]="a",["à"]="a",["ả"]="a",["ã"]="a",["ạ"]="a",["ă"]="a",["ắ"]="a",["ằ"]="a",["ẳ"]="a",["ẵ"]="a",["ặ"]="a",["â"]="a",["ấ"]="a",["ầ"]="a",["ẩ"]="a",["ẫ"]="a",["ậ"]="a",
-        ["é"]="e",["è"]="e",["ẻ"]="e",["ẽ"]="e",["ẹ"]="e",["ê"]="e",["ế"]="e",["ề"]="e",["ể"]="e",["ễ"]="e",["ệ"]="e",
-        ["í"]="i",["ì"]="i",["ỉ"]="i",["ĩ"]="i",["ị"]="i",
-        ["ó"]="o",["ò"]="o",["ỏ"]="o",["õ"]="o",["ọ"]="o",["ô"]="o",["ố"]="o",["ồ"]="o",["ổ"]="o",["ỗ"]="o",["ộ"]="o",["ơ"]="o",["ớ"]="o",["ờ"]="o",["ở"]="o",["ỡ"]="o",["ợ"]="o",
-        ["ú"]="u",["ù"]="u",["ủ"]="u",["ũ"]="u",["ụ"]="u",["ư"]="u",["ứ"]="u",["ừ"]="u",["ử"]="u",["ữ"]="u",["ự"]="u",
-        ["ý"]="y",["ỳ"]="y",["ỷ"]="y",["ỹ"]="y",["ỵ"]="y",["đ"]="d",
-        ["Á"]="A",["À"]="A",["Ả"]="A",["Ã"]="A",["Ạ"]="A",["Ă"]="A",["Ắ"]="A",["Ằ"]="A",["Ẳ"]="A",["Ẵ"]="A",["Ặ"]="A",["Â"]="A",["Ấ"]="A",["Ầ"]="A",["Ẩ"]="A",["Ẫ"]="A",["Ậ"]="A",
-        ["É"]="E",["È"]="E",["Ẻ"]="E",["Ẽ"]="E",["Ẹ"]="E",["Ê"]="E",["Ế"]="E",["Ề"]="E",["Ể"]="E",["Ễ"]="E",["Ệ"]="E",
-        ["Í"]="I",["Ì"]="I",["Ỉ"]="I",["Ĩ"]="I",["Ị"]="I",
-        ["Ó"]="O",["Ò"]="O",["Ỏ"]="O",["Õ"]="O",["Ọ"]="O",["Ô"]="O",["Ố"]="O",["Ồ"]="O",["Ổ"]="O",["Ỗ"]="O",["Ộ"]="O",["Ơ"]="O",["Ớ"]="O",["Ờ"]="O",["Ở"]="O",["Ỡ"]="O",["Ợ"]="O",
-        ["Ú"]="U",["Ù"]="U",["Ủ"]="U",["Ũ"]="U",["Ụ"]="U",["Ư"]="U",["Ứ"]="U",["Ừ"]="U",["Ử"]="U",["Ữ"]="U",["Ự"]="U",
-        ["Ý"]="Y",["Ỳ"]="Y",["Ỷ"]="Y",["Ỹ"]="Y",["Ỵ"]="Y",["Đ"]="D"
-    }
-
-    -- FIX Bug 4: single-pass scan thay vì O(n) * số ký tự
     local function RemoveAccents(str)
         if type(str) ~= "string" then return str end
-        return (str:gsub("[%z\1-\127\194-\244][\128-\191]*", function(c)
-            return utf8Map[c] or c
-        end))
+        local utf8Map = {
+            ["á"]="a", ["à"]="a", ["ả"]="a", ["ã"]="a", ["ạ"]="a", ["ă"]="a", ["ắ"]="a", ["ằ"]="a", ["ẳ"]="a", ["ẵ"]="a", ["ặ"]="a", ["â"]="a", ["ấ"]="a", ["ầ"]="a", ["ẩ"]="a", ["ẫ"]="a", ["ậ"]="a",
+            ["é"]="e", ["è"]="e", ["ẻ"]="e", ["ẽ"]="e", ["ẹ"]="e", ["ê"]="e", ["ế"]="e", ["ề"]="e", ["ể"]="e", ["ễ"]="e", ["ệ"]="e",
+            ["í"]="i", ["ì"]="i", ["ỉ"]="i", ["ĩ"]="i", ["ị"]="i",
+            ["ó"]="o", ["ò"]="o", ["ỏ"]="o", ["õ"]="o", ["ọ"]="o", ["ô"]="o", ["ố"]="o", ["ồ"]="o", ["ổ"]="o", ["ỗ"]="o", ["ộ"]="o", ["ơ"]="o", ["ớ"]="o", ["ờ"]="o", ["ở"]="o", ["ỡ"]="o", ["ợ"]="o",
+            ["ú"]="u", ["ù"]="u", ["ủ"]="u", ["ũ"]="u", ["ụ"]="u", ["ư"]="u", ["ứ"]="u", ["ừ"]="u", ["ử"]="u", ["ữ"]="u", ["ự"]="u",
+            ["ý"]="y", ["ỳ"]="y", ["ỷ"]="y", ["ỹ"]="y", ["ỵ"]="y", ["đ"]="d",
+            ["Á"]="A", ["À"]="A", ["Ả"]="A", ["Ã"]="A", ["Ạ"]="A", ["Ă"]="A", ["Ắ"]="A", ["Ằ"]="A", ["Ẳ"]="A", ["Ẵ"]="A", ["Ặ"]="A", ["Â"]="A", ["Ấ"]="A", ["Ầ"]="A", ["Ẩ"]="A", ["Ẫ"]="A", ["Ậ"]="A",
+            ["É"]="E", ["È"]="E", ["Ẻ"]="E", ["Ẽ"]="E", ["Ẹ"]="E", ["Ê"]="E", ["Ế"]="E", ["Ề"]="E", ["Ể"]="E", ["Ễ"]="E", ["Ệ"]="E",
+            ["Í"]="I", ["Ì"]="I", ["Ỉ"]="I", ["Ĩ"]="I", ["Ị"]="I",
+            ["Ó"]="O", ["Ò"]="O", ["Ỏ"]="O", ["Õ"]="O", ["Ọ"]="O", ["Ô"]="O", ["Ố"]="O", ["Ồ"]="O", ["Ổ"]="O", ["Ỗ"]="O", ["Ộ"]="O", ["Ơ"]="O", ["Ớ"]="O", ["Ờ"]="O", ["Ở"]="O", ["Ỡ"]="O", ["Ợ"]="O",
+            ["Ú"]="U", ["Ù"]="U", ["Ủ"]="U", ["Ũ"]="U", ["Ụ"]="U", ["Ư"]="U", ["Ứ"]="U", ["Ừ"]="U", ["Ử"]="U", ["Ữ"]="U", ["Ự"]="U",
+            ["Ý"]="Y", ["Ỳ"]="Y", ["Ỷ"]="Y", ["Ỹ"]="Y", ["Ỵ"]="Y", ["Đ"]="D"
+        }
+        for k, v in pairs(utf8Map) do str = string.gsub(str, k, v) end
+        return str
     end
 
     -- ==========================================
-    -- UI
+    -- THIẾT KẾ GIAO DIỆN (UI)
     -- ==========================================
     local ScreenGui = Instance.new("ScreenGui")
     ScreenGui.Name = GUI_NAME
@@ -61,11 +57,11 @@ return function(Window, Utils, WebhookModule)
     ScreenGui.ResetOnSpawn = false
 
     local MainFrame = Instance.new("Frame")
-    MainFrame.Size = UDim2.new(0, 450, 0, 390)
+    MainFrame.Size = UDim2.new(0, 450, 0, 380) -- Căn chỉnh lại tổng chiều cao
     MainFrame.Position = UDim2.new(1, -470, 0, 50)
     MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
     MainFrame.BorderSizePixel = 0
-    MainFrame.ClipsDescendants = false  -- FIX Bug 2: true akan clip UICorner shadow
+    MainFrame.ClipsDescendants = true
     MainFrame.Visible = false
     MainFrame.Parent = ScreenGui
     Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 8)
@@ -74,13 +70,12 @@ return function(Window, Utils, WebhookModule)
     TitleBar.Size = UDim2.new(1, 0, 0, 30)
     TitleBar.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
     TitleBar.Parent = MainFrame
-    Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 8)
 
     local TitleLabel = Instance.new("TextLabel")
     TitleLabel.Size = UDim2.new(1, -40, 1, 0)
     TitleLabel.Position = UDim2.new(0, 10, 0, 0)
     TitleLabel.BackgroundTransparency = 1
-    TitleLabel.Text = "🧠 R-Client Pro | AI (L-Alt de An/Hien)"
+    TitleLabel.Text = "🧠 R-Client Pro | AI (L-Alt để Ẩn/Hiện)"
     TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     TitleLabel.Font = Enum.Font.GothamBold
     TitleLabel.TextSize = 13
@@ -91,9 +86,7 @@ return function(Window, Utils, WebhookModule)
     TitleBar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true; dragStart = input.Position; startPos = MainFrame.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then dragging = false end
-            end)
+            input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
         end
     end)
     TitleBar.InputChanged:Connect(function(input)
@@ -113,7 +106,7 @@ return function(Window, Utils, WebhookModule)
     KeyInput.TextColor3 = Color3.fromRGB(200, 200, 200)
     KeyInput.Font = Enum.Font.Gotham
     KeyInput.TextSize = 12
-    KeyInput.PlaceholderText = GetSavedAPIKey() and "Key da luu" or "Nhap Gemini API Key..."
+    KeyInput.PlaceholderText = GetSavedAPIKey() and "✅ Key đã lưu" or "🔑 Nhập Gemini API Key..."
     KeyInput.Text = ""
     KeyInput.ClearTextOnFocus = false
     KeyInput.Parent = MainFrame
@@ -122,23 +115,33 @@ return function(Window, Utils, WebhookModule)
     KeyInput.FocusLost:Connect(function()
         if KeyInput.Text ~= "" and writefile then
             pcall(function() writefile(API_KEY_FILE, KeyInput.Text) end)
-            KeyInput.PlaceholderText = "Da cap nhat Key!"
+            KeyInput.PlaceholderText = "✅ Đã cập nhật Key!"
             KeyInput.Text = ""
         end
     end)
 
+    -- KHU VỰC KẾT QUẢ (Thu nhỏ & Thêm Padding)
     local OutputScroll = Instance.new("ScrollingFrame")
-    OutputScroll.Size = UDim2.new(1, -20, 0, 150)
+    OutputScroll.Size = UDim2.new(1, -20, 0, 80) -- Cao 80px là đủ nhìn kết quả ngắn
     OutputScroll.Position = UDim2.new(0, 10, 0, 80)
     OutputScroll.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
     OutputScroll.BorderSizePixel = 0
     OutputScroll.ScrollBarThickness = 4
+    OutputScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y -- Tự dãn thanh cuộn mượt mà
+    OutputScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
     OutputScroll.Parent = MainFrame
     Instance.new("UICorner", OutputScroll).CornerRadius = UDim.new(0, 4)
 
+    local OutputPadding = Instance.new("UIPadding")
+    OutputPadding.PaddingLeft = UDim.new(0, 6)
+    OutputPadding.PaddingRight = UDim.new(0, 6)
+    OutputPadding.PaddingTop = UDim.new(0, 6)
+    OutputPadding.PaddingBottom = UDim.new(0, 6)
+    OutputPadding.Parent = OutputScroll
+
     local OutputLabel = Instance.new("TextLabel")
-    OutputLabel.Size = UDim2.new(1, -10, 1, 0)
-    OutputLabel.Position = UDim2.new(0, 5, 0, 0)
+    OutputLabel.Size = UDim2.new(1, 0, 0, 0)
+    OutputLabel.AutomaticSize = Enum.AutomaticSize.Y -- Chữ tới đâu, nhích cao tới đó
     OutputLabel.BackgroundTransparency = 1
     OutputLabel.TextColor3 = Color3.fromRGB(150, 255, 150)
     OutputLabel.Font = Enum.Font.Code
@@ -146,79 +149,77 @@ return function(Window, Utils, WebhookModule)
     OutputLabel.TextXAlignment = Enum.TextXAlignment.Left
     OutputLabel.TextYAlignment = Enum.TextYAlignment.Top
     OutputLabel.TextWrapped = true
-    OutputLabel.Text = "> He thong AI san sang..."
+    OutputLabel.Text = "> Hệ thống AI sẵn sàng..."
     OutputLabel.Parent = OutputScroll
 
-    -- FIX Bug 3: dùng AbsoluteSize.X thay vì scale 1 để tránh clip text ngang
-    OutputLabel:GetPropertyChangedSignal("TextBounds"):Connect(function()
-        OutputScroll.CanvasSize = UDim2.new(0, 0, 0, OutputLabel.TextBounds.Y + 20)
-        OutputLabel.Size = UDim2.new(0, OutputScroll.AbsoluteSize.X - 10, 0, OutputLabel.TextBounds.Y)
-    end)
-
+    -- KHU VỰC NHẬP LỆNH (Phóng to & MultiLine)
     local PromptInput = Instance.new("TextBox")
-    PromptInput.Size = UDim2.new(1, -20, 0, 50)
-    PromptInput.Position = UDim2.new(0, 10, 0, 240)
+    PromptInput.Size = UDim2.new(1, -20, 0, 100) -- Rộng rãi để code
+    PromptInput.Position = UDim2.new(0, 10, 0, 170)
     PromptInput.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
     PromptInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-    PromptInput.Font = Enum.Font.Gotham
+    PromptInput.Font = Enum.Font.Code
     PromptInput.TextSize = 13
-    PromptInput.PlaceholderText = "Nhap lenh..."
+    PromptInput.PlaceholderText = "Nhập lệnh của bạn tại đây (Hỗ trợ dán code nhiều dòng)..."
     PromptInput.TextWrapped = true
     PromptInput.ClearTextOnFocus = false
+    PromptInput.MultiLine = true -- Tính năng đắt giá: Có thể gõ Enter xuống dòng!
     PromptInput.TextXAlignment = Enum.TextXAlignment.Left
     PromptInput.TextYAlignment = Enum.TextYAlignment.Top
     PromptInput.Parent = MainFrame
     Instance.new("UICorner", PromptInput).CornerRadius = UDim.new(0, 4)
+    
+    local PromptPadding = Instance.new("UIPadding")
+    PromptPadding.PaddingLeft = UDim.new(0, 6)
+    PromptPadding.PaddingRight = UDim.new(0, 6)
+    PromptPadding.PaddingTop = UDim.new(0, 6)
+    PromptPadding.PaddingBottom = UDim.new(0, 6)
+    PromptPadding.Parent = PromptInput
 
     -- NÚT TOGGLE WEBHOOK
     local useWebhook = false
     local WebhookToggleBtn = Instance.new("TextButton")
     WebhookToggleBtn.Size = UDim2.new(1, -20, 0, 30)
-    WebhookToggleBtn.Position = UDim2.new(0, 10, 0, 300)
+    WebhookToggleBtn.Position = UDim2.new(0, 10, 0, 280)
     WebhookToggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
     WebhookToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     WebhookToggleBtn.Font = Enum.Font.GothamBold
     WebhookToggleBtn.TextSize = 12
-    WebhookToggleBtn.Text = "Gui Log qua Webhook: DANG TAT"
+    WebhookToggleBtn.Text = "🔕 Gửi Log qua Webhook: ĐANG TẮT"
     WebhookToggleBtn.Parent = MainFrame
     Instance.new("UICorner", WebhookToggleBtn).CornerRadius = UDim.new(0, 4)
 
-    -- FIX Bug 5: guard WebhookModule nil trước khi toggle
     WebhookToggleBtn.MouseButton1Click:Connect(function()
-        if not WebhookModule or type(WebhookModule.SendNotification) ~= "function" then
-            OutputLabel.Text = "> [LOI] WebhookModule khong duoc cung cap hoac thieu ham SendNotification."
-            return
-        end
         useWebhook = not useWebhook
         if useWebhook then
-            WebhookToggleBtn.Text = "Gui Log qua Webhook: DANG BAT"
+            WebhookToggleBtn.Text = "🔔 Gửi Log qua Webhook: ĐANG BẬT"
             WebhookToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
         else
-            WebhookToggleBtn.Text = "Gui Log qua Webhook: DANG TAT"
+            WebhookToggleBtn.Text = "🔕 Gửi Log qua Webhook: ĐANG TẮT"
             WebhookToggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
         end
     end)
 
     local SubmitBtn = Instance.new("TextButton")
     SubmitBtn.Size = UDim2.new(1, -20, 0, 40)
-    SubmitBtn.Position = UDim2.new(0, 10, 0, 340)
+    SubmitBtn.Position = UDim2.new(0, 10, 0, 320)
     SubmitBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
     SubmitBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     SubmitBtn.Font = Enum.Font.GothamBold
     SubmitBtn.TextSize = 14
-    SubmitBtn.Text = "GUI & THUC THI"
+    SubmitBtn.Text = "🚀 GỬI & THỰC THI"
     SubmitBtn.Parent = MainFrame
     Instance.new("UICorner", SubmitBtn).CornerRadius = UDim.new(0, 4)
 
     -- ==========================================
-    -- LOGIC AI
+    -- LOGIC TƯƠNG TÁC AI & THỰC THI
     -- ==========================================
     local function RequestAICode(userPrompt)
         local savedKey = GetSavedAPIKey()
-        if not savedKey then return false, "Chua co API Key." end
-
+        if not savedKey then return false, "Chưa có API Key." end
+        
         local reqFunc = request or http_request or (syn and syn.request)
-        if not reqFunc then return false, "Executor khong ho tro HTTP Request!" end
+        if not reqFunc then return false, "Executor không hỗ trợ HTTP Request!" end
 
         local API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" .. savedKey
         local systemInstruction = "You are a Roblox Lua exploit developer. Only respond with raw, executable Lua code. Do not include markdown blocks, do not include ```lua tags, no explanations."
@@ -237,32 +238,30 @@ return function(Window, Utils, WebhookModule)
             if data.candidates and data.candidates[1] and data.candidates[1].content and data.candidates[1].content.parts[1] then
                 return true, data.candidates[1].content.parts[1].text
             end
-            return false, "Khong doc duoc phan hoi tu AI."
         elseif success then
-            -- FIX Bug 1: return đủ thông tin lỗi HTTP thay vì return rỗng
-            return false, "HTTP " .. tostring(response.StatusCode) .. ": " .. tostring(response.Body)
+            return false, "HTTP " .. tostring(response.StatusCode)
         end
-        return false, "Loi ket noi API."
+        return false, "Lỗi kết nối API."
     end
 
     SubmitBtn.MouseButton1Click:Connect(function()
         local prompt = PromptInput.Text
         if prompt == "" then return end
 
-        SubmitBtn.Text = "DANG XU LY..."
+        SubmitBtn.Text = "⏳ ĐANG XỬ LÝ..."
         SubmitBtn.BackgroundColor3 = Color3.fromRGB(150, 100, 0)
-        OutputLabel.Text = "> Dang cho AI..."
+        OutputLabel.Text = "> Đang chờ AI..."
 
         task.spawn(function()
             local success, rawCode = RequestAICode(prompt)
             local logMsg = ""
-
+            
             if success then
                 rawCode = string.gsub(rawCode, "```lua\n?", "")
                 rawCode = string.gsub(rawCode, "```\n?", "")
                 rawCode = string.gsub(rawCode, "^%s*(.-)%s*$", "%1")
 
-                OutputLabel.Text = "-- KET QUA --\n" .. rawCode
+                OutputLabel.Text = "-- KẾT QUẢ --\n" .. rawCode
                 CopyToClipboard(rawCode)
                 PromptInput.Text = ""
 
@@ -271,31 +270,31 @@ return function(Window, Utils, WebhookModule)
                     local runSuccess, runtimeError = pcall(func)
                     if not runSuccess then
                         logMsg = "Runtime Error:\n" .. tostring(runtimeError)
-                        OutputLabel.Text = OutputLabel.Text .. "\n\nLOI RUNTIME:\n" .. tostring(runtimeError)
+                        OutputLabel.Text = OutputLabel.Text .. "\n\n❌ LỖI RUNTIME:\n" .. tostring(runtimeError)
                     else
                         logMsg = "Code executed successfully:\n" .. rawCode
                     end
                 else
                     logMsg = "Compile Error:\n" .. tostring(compileError)
-                    OutputLabel.Text = OutputLabel.Text .. "\n\nLOI CU PHAP:\n" .. tostring(compileError)
+                    OutputLabel.Text = OutputLabel.Text .. "\n\n❌ LỖI CÚ PHÁP:\n" .. tostring(compileError)
                 end
-
-                SubmitBtn.Text = "DA THUC THI"
+                
+                SubmitBtn.Text = "✅ ĐÃ THỰC THI"
                 SubmitBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
             else
                 logMsg = "API Error: " .. tostring(rawCode)
-                OutputLabel.Text = "LOI:\n" .. tostring(rawCode)
-                SubmitBtn.Text = "LOI"
+                OutputLabel.Text = "❌ LỖI:\n" .. tostring(rawCode)
+                SubmitBtn.Text = "❌ LỖI"
                 SubmitBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
             end
-
+            
             if useWebhook and WebhookModule and type(WebhookModule.SendNotification) == "function" then
-                local finalLog = RemoveAccents("[AI Log]\nPrompt: " .. prompt .. "\n" .. logMsg)
+                local finalLog = RemoveAccents("[AI Assistant Log]\nUser Prompt: " .. prompt .. "\n" .. logMsg)
                 pcall(function() WebhookModule.SendNotification(finalLog) end)
             end
-
+            
             task.wait(2)
-            SubmitBtn.Text = "GUI & THUC THI"
+            SubmitBtn.Text = "🚀 GỬI & THỰC THI"
             SubmitBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
         end)
     end)
@@ -306,5 +305,5 @@ return function(Window, Utils, WebhookModule)
         end
     end)
 
-    print("AI Assistant Module (V4.3 Patched) Loaded!")
+    print("✅ AI Assistant Module (V4.3) Loaded!")
 end
