@@ -256,6 +256,7 @@ return function(Window, Utils)
                 _G.BossStatus.currentWorldId = attackSettings.selectedWorlds[1]
                 Utils.TeleportToArea(_G.BossStatus.currentWorldId)
                 StatusLabel:Set("🟢 Trạng thái: Đang quét boss...")
+                task.wait(1)
             else
                 StatusLabel:Set("🔴 Trạng thái: Đã tắt")
             end
