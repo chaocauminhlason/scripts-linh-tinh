@@ -237,7 +237,7 @@ end
     -- UI LAYER 
     -- ==========================================
     local BossTab = Window:CreateTab("Săn Boss", 4483345998)
-    BossTab:CreateSection("--- CHỌN WORLD CÓ BOSS ---")
+    BossTab:CreateSection("CHỌN WORLD CÓ BOSS")
     local TargetLabel = BossTab:CreateLabel("🎯 Đã chọn " .. #attackSettings.selectedWorlds .. " world có boss")
     
     Utils.CreateAreaMultiSelect(BossTab, {
@@ -259,7 +259,7 @@ end
     local BossStatusLabel = BossTab:CreateLabel("📊 Boss trên map: Chưa có")
     local WorldStatusLabel = BossTab:CreateLabel("🌍 World hiện tại: Chưa xác định")
 
-    BossTab:CreateSection("--- AUTO SĂN BOSS ---")
+    BossTab:CreateSection("AUTO SĂN BOSS")
     local StatusLabel = BossTab:CreateLabel("🔴 Trạng thái: Đang nghỉ")
 
     BossTab:CreateToggle({
@@ -413,7 +413,7 @@ end
         end
     end)
 
-    BossTab:CreateSection("--- ĐIỀU KHIỂN THỦ CÔNG ---")
+    BossTab:CreateSection("ĐIỀU KHIỂN THỦ CÔNG")
     BossTab:CreateButton({ Name = "🏠 VỀ STARTER ISLAND", Callback = function() Utils.TeleportToStarterIsland() end })
 
     print("✅ Boss Hunt 4.7 (Smart Retry & Distance Check) loaded successfully!")
