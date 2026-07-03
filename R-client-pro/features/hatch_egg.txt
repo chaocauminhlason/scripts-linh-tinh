@@ -1,5 +1,5 @@
 -- ====================================================================
--- MODULE: SMART AUTO HATCH V9 (FINAL FIXED)
+-- MODULE: SMART AUTO HATCH V9.1 (MULTI-SELECT UPGRADE)
 -- ====================================================================
 return function(Window, Utils)
     local EggTab = Window:CreateTab("Trứng & Ấp", 4483362458)
@@ -9,7 +9,7 @@ return function(Window, Utils)
         autoSkip = false,
         autoClaim = false,
         stopIfBagFull = true,
-        eggIdToHatch = 1,
+        eggIdsToHatch = {}, -- Chuyển thành Table để chứa nhiều ID
         maxSlots = 1 
     }
 
@@ -47,6 +47,11 @@ return function(Window, Utils)
         table.insert(eggOptions, "⚠️ Bấm Refresh để tải danh sách!")
         eggIdMap["⚠️ Bấm Refresh để tải danh sách!"] = 1
     end
+    
+    -- Khởi tạo giá trị mặc định cho mảng chọn
+    if #eggOptions > 0 and eggIdMap[eggOptions[1]] then
+        table.insert(hatchSettings.eggIdsToHatch, eggIdMap[eggOptions[1]])
+    end
 
     -- ==========================================
     -- GIAO DIỆN UI
@@ -69,15 +74,18 @@ return function(Window, Utils)
 
     EggTab:CreateSection("--- CHỌN TRỨNG ---")
     local EggDropdown = EggTab:CreateDropdown({
-        Name = "Chọn Loại Trứng",
+        Name = "Chọn Loại Trứng (Có thể chọn nhiều)",
         Options = eggOptions,
         CurrentOption = {eggOptions[1]},
-        MultipleOptions = false,
+        MultipleOptions = true, -- Bật tính năng chọn nhiều
         Flag = "EggSelectDropdown",
         Callback = function(Options)
-            local selectedString = Options[1]
-            if eggIdMap[selectedString] then
-                hatchSettings.eggIdToHatch = eggIdMap[selectedString]
+            -- Làm sạch mảng cũ và nạp danh sách ID mới vào
+            hatchSettings.eggIdsToHatch = {}
+            for _, selectedString in ipairs(Options) do
+                if eggIdMap[selectedString] then
+                    table.insert(hatchSettings.eggIdsToHatch, eggIdMap[selectedString])
+                end
             end
         end,
     })
@@ -161,53 +169,53 @@ return function(Window, Utils)
             local currentTime = workspace:GetServerTimeNow()
 
             for slotNum = 1, hatchSettings.maxSlots do
-                -- Lấy dữ liệu chuẩn qua hàm của game
                 local eggId = clientEgg:GetHatchEggTmplId(slotNum)
                 local startTick = clientEgg:GetHatchEggStartTick(slotNum) or 0
 
                 -- AUTO START: Khi Lò trống
                 if hatchSettings.autoStart and not eggId then
-                    pcall(function()
-                        local oldId = get_thread_id()
-                        set_thread_id(2) -- Ép quyền
+                    -- Kiểm tra xem có chọn trứng nào chưa
+                    if #hatchSettings.eggIdsToHatch > 0 then
+                        -- Random một quả trong danh sách bạn đã chọn để đưa vào lò
+                        local randomIdx = math.random(1, #hatchSettings.eggIdsToHatch)
+                        local targetEggId = hatchSettings.eggIdsToHatch[randomIdx]
 
-                        -- Gọi hàm StartHatch trực tiếp hoặc qua EggSystem
-                        if env.EggSystem and env.EggSystem.ClientHatchStart then
-                            env.EggSystem.ClientHatchStart(slotNum, hatchSettings.eggIdToHatch)
-                        elseif type(clientEgg.StartHatch) == "function" then
-                            clientEgg:StartHatch(slotNum, hatchSettings.eggIdToHatch, currentTime)
-                        end
-                        
-                        -- Đồng bộ UI
-                        if env.EventSystem then env.EventSystem.Execute("EggHatchChange") end
-                        
-                        set_thread_id(oldId) -- Trả quyền
-                    end)
-                    task.wait(0.3)
+                        pcall(function()
+                            local oldId = get_thread_id()
+                            set_thread_id(2) 
+
+                            if env.EggSystem and env.EggSystem.ClientHatchStart then
+                                env.EggSystem.ClientHatchStart(slotNum, targetEggId)
+                            elseif type(clientEgg.StartHatch) == "function" then
+                                clientEgg:StartHatch(slotNum, targetEggId, currentTime)
+                            end
+                            
+                            if env.EventSystem then env.EventSystem.Execute("EggHatchChange") end
+                            
+                            set_thread_id(oldId) 
+                        end)
+                        task.wait(0.3)
+                    end
                 
                 -- AUTO CLAIM: Khi Lò có trứng
                 elseif hatchSettings.autoClaim and eggId then
-                    -- Tính giờ chuẩn từ file cấu hình
                     local eggCfg = env.CfgEgg and env.CfgEgg.Tmpls[tostring(eggId)]
                     local hatchTime = eggCfg and eggCfg.HatchTime or 3600
                     
-                    -- Nếu đã chín
                     if (startTick + hatchTime) <= currentTime then
                         pcall(function()
                             local oldId = get_thread_id()
-                            set_thread_id(2) -- Ép quyền
+                            set_thread_id(2) 
 
-                            -- Gọi hàm Claim
                             if env.EggSystem and env.EggSystem.ClientHatchTaken then
                                 env.EggSystem.ClientHatchTaken(slotNum)
                             elseif type(clientEgg.ClientHatchTaken) == "function" then
                                 clientEgg:ClientHatchTaken(slotNum)
                             end
 
-                            -- Đồng bộ UI
                             if env.EventSystem then env.EventSystem.Execute("EggHatchChange") end
 
-                            set_thread_id(oldId) -- Trả quyền
+                            set_thread_id(oldId) 
                         end)
                         task.wait(0.3)
                     end
