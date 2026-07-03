@@ -1,7 +1,7 @@
 -- ====================================================================
--- MODULE: R-CLIENT PRO AI ASSISTANT (V4.0 - STANDALONE FLOATING UI)
+-- MODULE: R-CLIENT PRO AI ASSISTANT (V4.1 - WEBHOOK & NO-ACCENT LOGGING)
 -- ====================================================================
-return function(Window, Utils) -- Vẫn nhận tham số nhưng không dùng Rayfield Window
+return function(Window, Utils, WebhookModule) -- Đã thêm WebhookModule vào tham số
     local HttpService = game:GetService("HttpService")
     local CoreGui = game:GetService("CoreGui")
     local UserInputService = game:GetService("UserInputService")
@@ -9,32 +9,50 @@ return function(Window, Utils) -- Vẫn nhận tham số nhưng không dùng Ray
     local API_KEY_FILE = "R_ClientPro_AI_Key.txt"
     local GUI_NAME = "RClientPro_AIAssistantUI"
 
-    -- Xóa UI cũ nếu bị trùng lặp khi chạy lại script
     if CoreGui:FindFirstChild(GUI_NAME) then
         CoreGui[GUI_NAME]:Destroy()
     end
 
     -- ==========================================
-    -- HÀM TIỆN ÍCH
+    -- HÀM TIỆN ÍCH (XỬ LÝ DẤU & WEBHOOK)
     -- ==========================================
     local function GetSavedAPIKey()
         if isfile and isfile(API_KEY_FILE) then
             local savedKey = readfile(API_KEY_FILE)
-            if savedKey and savedKey ~= "" then
-                return string.gsub(savedKey, "^%s*(.-)%s*$", "%1")
-            end
+            if savedKey and savedKey ~= "" then return string.gsub(savedKey, "^%s*(.-)%s*$", "%1") end
         end
         return nil
     end
 
     local function CopyToClipboard(text)
-        if setclipboard then
-            pcall(function() setclipboard(text) end)
+        if setclipboard then pcall(function() setclipboard(text) end) end
+    end
+
+    -- Hàm chuyển tiếng Việt có dấu thành không dấu để chống lỗi font Webhook
+    local function RemoveAccents(str)
+        if type(str) ~= "string" then return str end
+        local utf8Map = {
+            ["á"]="a", ["à"]="a", ["ả"]="a", ["ã"]="a", ["ạ"]="a", ["ă"]="a", ["ắ"]="a", ["ằ"]="a", ["ẳ"]="a", ["ẵ"]="a", ["ặ"]="a", ["â"]="a", ["ấ"]="a", ["ầ"]="a", ["ẩ"]="a", ["ẫ"]="a", ["ậ"]="a",
+            ["é"]="e", ["è"]="e", ["ẻ"]="e", ["ẽ"]="e", ["ẹ"]="e", ["ê"]="e", ["ế"]="e", ["ề"]="e", ["ể"]="e", ["ễ"]="e", ["ệ"]="e",
+            ["í"]="i", ["ì"]="i", ["ỉ"]="i", ["ĩ"]="i", ["ị"]="i",
+            ["ó"]="o", ["ò"]="o", ["ỏ"]="o", ["õ"]="o", ["ọ"]="o", ["ô"]="o", ["ố"]="o", ["ồ"]="o", ["ổ"]="o", ["ỗ"]="o", ["ộ"]="o", ["ơ"]="o", ["ớ"]="o", ["ờ"]="o", ["ở"]="o", ["ỡ"]="o", ["ợ"]="o",
+            ["ú"]="u", ["ù"]="u", ["ủ"]="u", ["ũ"]="u", ["ụ"]="u", ["ư"]="u", ["ứ"]="u", ["ừ"]="u", ["ử"]="u", ["ữ"]="u", ["ự"]="u",
+            ["ý"]="y", ["ỳ"]="y", ["ỷ"]="y", ["ỹ"]="y", ["ỵ"]="y", ["đ"]="d",
+            ["Á"]="A", ["À"]="A", ["Ả"]="A", ["Ã"]="A", ["Ạ"]="A", ["Ă"]="A", ["Ắ"]="A", ["Ằ"]="A", ["Ẳ"]="A", ["Ẵ"]="A", ["Ặ"]="A", ["Â"]="A", ["Ấ"]="A", ["Ầ"]="A", ["Ẩ"]="A", ["Ẫ"]="A", ["Ậ"]="A",
+            ["É"]="E", ["È"]="E", ["Ẻ"]="E", ["Ẽ"]="E", ["Ẹ"]="E", ["Ê"]="E", ["Ế"]="E", ["Ề"]="E", ["Ể"]="E", ["Ễ"]="E", ["Ệ"]="E",
+            ["Í"]="I", ["Ì"]="I", ["Ỉ"]="I", ["Ĩ"]="I", ["Ị"]="I",
+            ["Ó"]="O", ["Ò"]="O", ["Ỏ"]="O", ["Õ"]="O", ["Ọ"]="O", ["Ô"]="O", ["Ố"]="O", ["Ồ"]="O", ["Ổ"]="O", ["Ỗ"]="O", ["Ộ"]="O", ["Ơ"]="O", ["Ớ"]="O", ["Ờ"]="O", ["Ở"]="O", ["Ỡ"]="O", ["Ợ"]="O",
+            ["Ú"]="U", ["Ù"]="U", ["Ủ"]="U", ["Ũ"]="U", ["Ụ"]="U", ["Ư"]="U", ["Ứ"]="U", ["Ừ"]="U", ["Ử"]="U", ["Ữ"]="U", ["Ự"]="U",
+            ["Ý"]="Y", ["Ỳ"]="Y", ["Ỷ"]="Y", ["Ỹ"]="Y", ["Ỵ"]="Y", ["Đ"]="D"
+        }
+        for k, v in pairs(utf8Map) do
+            str = string.gsub(str, k, v)
         end
+        return str
     end
 
     -- ==========================================
-    -- THIẾT KẾ GIAO DIỆN (CUSTOM FLOATING UI)
+    -- THIẾT KẾ GIAO DIỆN (UI)
     -- ==========================================
     local ScreenGui = Instance.new("ScreenGui")
     ScreenGui.Name = GUI_NAME
@@ -42,49 +60,41 @@ return function(Window, Utils) -- Vẫn nhận tham số nhưng không dùng Ray
     ScreenGui.ResetOnSpawn = false
 
     local MainFrame = Instance.new("Frame")
-    MainFrame.Size = UDim2.new(0, 450, 0, 350)
-    MainFrame.Position = UDim2.new(1, -470, 0, 50) -- Góc trên bên phải
+    MainFrame.Size = UDim2.new(0, 450, 0, 390) -- Tăng chiều cao để lấy chỗ cho nút Webhook
+    MainFrame.Position = UDim2.new(1, -470, 0, 50)
     MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
     MainFrame.BorderSizePixel = 0
     MainFrame.ClipsDescendants = true
     MainFrame.Parent = ScreenGui
+    MainFrame.Visible = false
+    Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 8)
 
-    local UICorner = Instance.new("UICorner")
-    UICorner.CornerRadius = UDim.new(0, 8)
-    UICorner.Parent = MainFrame
-
-    -- TIÊU ĐỀ & KÉO THẢ (DRAGGABLE)
+    
     local TitleBar = Instance.new("Frame")
     TitleBar.Size = UDim2.new(1, 0, 0, 30)
     TitleBar.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
-    TitleBar.BorderSizePixel = 0
     TitleBar.Parent = MainFrame
 
     local TitleLabel = Instance.new("TextLabel")
     TitleLabel.Size = UDim2.new(1, -40, 1, 0)
     TitleLabel.Position = UDim2.new(0, 10, 0, 0)
     TitleLabel.BackgroundTransparency = 1
-    TitleLabel.Text = "🧠 R-Client Pro | AI Assistant (Nhấn L-Alt để Ẩn/Hiện)"
+    TitleLabel.Text = "🧠 R-Client Pro | AI (L-Alt để Ẩn/Hiện)"
     TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     TitleLabel.Font = Enum.Font.GothamBold
     TitleLabel.TextSize = 13
     TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
     TitleLabel.Parent = TitleBar
 
-    -- Tính năng kéo thả (Drag)
     local dragging, dragInput, dragStart, startPos
     TitleBar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = MainFrame.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then dragging = false end
-            end)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true; dragStart = input.Position; startPos = MainFrame.Position
+            input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
         end
     end)
     TitleBar.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
+        if input.UserInputType == Enum.UserInputType.MouseMovement then dragInput = input end
     end)
     UserInputService.InputChanged:Connect(function(input)
         if input == dragInput and dragging then
@@ -93,7 +103,6 @@ return function(Window, Utils) -- Vẫn nhận tham số nhưng không dùng Ray
         end
     end)
 
-    -- KHU VỰC NHẬP API KEY
     local KeyInput = Instance.new("TextBox")
     KeyInput.Size = UDim2.new(1, -20, 0, 30)
     KeyInput.Position = UDim2.new(0, 10, 0, 40)
@@ -101,21 +110,20 @@ return function(Window, Utils) -- Vẫn nhận tham số nhưng không dùng Ray
     KeyInput.TextColor3 = Color3.fromRGB(200, 200, 200)
     KeyInput.Font = Enum.Font.Gotham
     KeyInput.TextSize = 12
-    KeyInput.PlaceholderText = GetSavedAPIKey() and "✅ Key đã được lưu (Nhập vào đây nếu muốn đổi)" or "🔑 Dán Gemini API Key vào đây..."
+    KeyInput.PlaceholderText = GetSavedAPIKey() and "✅ Key đã lưu" or "🔑 Nhập Gemini API Key..."
     KeyInput.Text = ""
     KeyInput.ClearTextOnFocus = false
     KeyInput.Parent = MainFrame
     Instance.new("UICorner", KeyInput).CornerRadius = UDim.new(0, 4)
 
-    KeyInput.FocusLost:Connect(function(enterPressed)
+    KeyInput.FocusLost:Connect(function()
         if KeyInput.Text ~= "" and writefile then
             pcall(function() writefile(API_KEY_FILE, KeyInput.Text) end)
-            KeyInput.PlaceholderText = "✅ Đã cập nhật Key mới thành công!"
+            KeyInput.PlaceholderText = "✅ Đã cập nhật Key!"
             KeyInput.Text = ""
         end
     end)
 
-    -- KẾT QUẢ HIỂN THỊ TỪ AI (CÓ THANH CUỘN)
     local OutputScroll = Instance.new("ScrollingFrame")
     OutputScroll.Size = UDim2.new(1, -20, 0, 150)
     OutputScroll.Position = UDim2.new(0, 10, 0, 80)
@@ -135,16 +143,14 @@ return function(Window, Utils) -- Vẫn nhận tham số nhưng không dùng Ray
     OutputLabel.TextXAlignment = Enum.TextXAlignment.Left
     OutputLabel.TextYAlignment = Enum.TextYAlignment.Top
     OutputLabel.TextWrapped = true
-    OutputLabel.Text = "> Hệ thống AI sẵn sàng. Hãy nhập yêu cầu..."
+    OutputLabel.Text = "> Hệ thống AI sẵn sàng..."
     OutputLabel.Parent = OutputScroll
 
-    -- Tự động dãn độ dài thanh cuộn
     OutputLabel:GetPropertyChangedSignal("TextBounds"):Connect(function()
         OutputScroll.CanvasSize = UDim2.new(0, 0, 0, OutputLabel.TextBounds.Y + 20)
         OutputLabel.Size = UDim2.new(1, -10, 0, OutputLabel.TextBounds.Y)
     end)
 
-    -- KHU VỰC NHẬP LỆNH (PROMPT)
     local PromptInput = Instance.new("TextBox")
     PromptInput.Size = UDim2.new(1, -20, 0, 50)
     PromptInput.Position = UDim2.new(0, 10, 0, 240)
@@ -152,7 +158,7 @@ return function(Window, Utils) -- Vẫn nhận tham số nhưng không dùng Ray
     PromptInput.TextColor3 = Color3.fromRGB(255, 255, 255)
     PromptInput.Font = Enum.Font.Gotham
     PromptInput.TextSize = 13
-    PromptInput.PlaceholderText = "Nhập lệnh (Ví dụ: Bay đến con quái gần nhất...)"
+    PromptInput.PlaceholderText = "Nhập lệnh..."
     PromptInput.TextWrapped = true
     PromptInput.ClearTextOnFocus = false
     PromptInput.TextXAlignment = Enum.TextXAlignment.Left
@@ -160,15 +166,38 @@ return function(Window, Utils) -- Vẫn nhận tham số nhưng không dùng Ray
     PromptInput.Parent = MainFrame
     Instance.new("UICorner", PromptInput).CornerRadius = UDim.new(0, 4)
 
-    -- NÚT GỬI LỆNH
+    -- NÚT TOGGLE WEBHOOK
+    local useWebhook = false
+    local WebhookToggleBtn = Instance.new("TextButton")
+    WebhookToggleBtn.Size = UDim2.new(1, -20, 0, 30)
+    WebhookToggleBtn.Position = UDim2.new(0, 10, 0, 300)
+    WebhookToggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+    WebhookToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    WebhookToggleBtn.Font = Enum.Font.GothamBold
+    WebhookToggleBtn.TextSize = 12
+    WebhookToggleBtn.Text = "🔕 Gửi Log qua Webhook: ĐANG TẮT"
+    WebhookToggleBtn.Parent = MainFrame
+    Instance.new("UICorner", WebhookToggleBtn).CornerRadius = UDim.new(0, 4)
+
+    WebhookToggleBtn.MouseButton1Click:Connect(function()
+        useWebhook = not useWebhook
+        if useWebhook then
+            WebhookToggleBtn.Text = "🔔 Gửi Log qua Webhook: ĐANG BẬT"
+            WebhookToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
+        else
+            WebhookToggleBtn.Text = "🔕 Gửi Log qua Webhook: ĐANG TẮT"
+            WebhookToggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+        end
+    end)
+
     local SubmitBtn = Instance.new("TextButton")
     SubmitBtn.Size = UDim2.new(1, -20, 0, 40)
-    SubmitBtn.Position = UDim2.new(0, 10, 0, 300)
+    SubmitBtn.Position = UDim2.new(0, 10, 0, 340) -- Đẩy xuống dưới nút Webhook
     SubmitBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
     SubmitBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     SubmitBtn.Font = Enum.Font.GothamBold
     SubmitBtn.TextSize = 14
-    SubmitBtn.Text = "🚀 GỬI & THỰC THI (Auto Copy)"
+    SubmitBtn.Text = "🚀 GỬI & THỰC THI"
     SubmitBtn.Parent = MainFrame
     Instance.new("UICorner", SubmitBtn).CornerRadius = UDim.new(0, 4)
 
@@ -177,14 +206,13 @@ return function(Window, Utils) -- Vẫn nhận tham số nhưng không dùng Ray
     -- ==========================================
     local function RequestAICode(userPrompt)
         local savedKey = GetSavedAPIKey()
-        if not savedKey then return false, "Chưa có API Key. Hãy nhập vào ô phía trên." end
+        if not savedKey then return false, "Chưa có API Key." end
         
         local reqFunc = request or http_request or (syn and syn.request)
-        if not reqFunc then return false, "Executor của bạn không hỗ trợ hàm HTTP Request!" end
+        if not reqFunc then return false, "Executor không hỗ trợ HTTP Request!" end
 
         local API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" .. savedKey
-        local systemInstruction = "You are a Roblox Lua exploit developer for 'R-client-pro'. Only respond with raw, executable Lua code. Do not include markdown blocks, do not include ```lua tags, no explanations. Just clean code. To get real monster names, use getrenv()._G.PathTool.CfgMonster.Tmpls[tostring(id)].Name."
-        
+        local systemInstruction = "You are a Roblox Lua exploit developer. Only respond with raw, executable Lua code. Do not include markdown blocks, do not include ```lua tags, no explanations."
         local payload = { contents = { { parts = { { text = systemInstruction .. "\nUser Request: " .. userPrompt } } } } }
 
         local success, response = pcall(function()
@@ -195,71 +223,10 @@ return function(Window, Utils) -- Vẫn nhận tham số nhưng không dùng Ray
             })
         end)
 
-        if success then
-            if response.StatusCode == 200 then
-                local data = HttpService:JSONDecode(response.Body)
-                if data.candidates and data.candidates[1] and data.candidates[1].content and data.candidates[1].content.parts[1] then
-                    return true, data.candidates[1].content.parts[1].text
-                end
-                return false, "API trả về dữ liệu trống."
-            else
-                local errorMsg = "HTTP " .. tostring(response.StatusCode) .. "\n"
-                pcall(function() errorMsg = errorMsg .. tostring(HttpService:JSONDecode(response.Body).error.message) end)
-                return false, errorMsg
+        if success and response.StatusCode == 200 then
+            local data = HttpService:JSONDecode(response.Body)
+            if data.candidates and data.candidates[1] and data.candidates[1].content and data.candidates[1].content.parts[1] then
+                return true, data.candidates[1].content.parts[1].text
             end
-        end
-        return false, "Không thể kết nối tới Google API."
-    end
-
-    SubmitBtn.MouseButton1Click:Connect(function()
-        local prompt = PromptInput.Text
-        if prompt == "" then return end
-
-        SubmitBtn.Text = "⏳ ĐANG XỬ LÝ..."
-        SubmitBtn.BackgroundColor3 = Color3.fromRGB(150, 100, 0)
-        OutputLabel.Text = "> AI đang suy nghĩ lệnh: " .. prompt .. " ..."
-
-        task.spawn(function()
-            local success, rawCode = RequestAICode(prompt)
-            
-            if success then
-                rawCode = string.gsub(rawCode, "```lua\n?", "")
-                rawCode = string.gsub(rawCode, "```\n?", "")
-                rawCode = string.gsub(rawCode, "^%s*(.-)%s*$", "%1")
-
-                OutputLabel.Text = "-- KẾT QUẢ TỪ AI --\n" .. rawCode
-                CopyToClipboard(rawCode)
-                PromptInput.Text = "" -- Xóa ô nhập liệu sau khi gửi thành công
-
-                local func, compileError = loadstring(rawCode)
-                if func then
-                    local runSuccess, runtimeError = pcall(func)
-                    if not runSuccess then
-                        OutputLabel.Text = OutputLabel.Text .. "\n\n❌ LỖI RUNTIME:\n" .. tostring(runtimeError)
-                    end
-                else
-                    OutputLabel.Text = OutputLabel.Text .. "\n\n❌ LỖI CÚ PHÁP:\n" .. tostring(compileError)
-                end
-                SubmitBtn.Text = "✅ ĐÃ THỰC THI (COPIED)"
-                SubmitBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
-            else
-                OutputLabel.Text = "❌ LỖI API:\n" .. tostring(rawCode)
-                SubmitBtn.Text = "❌ LỖI KẾT NỐI"
-                SubmitBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
-            end
-            
-            task.wait(2)
-            SubmitBtn.Text = "🚀 GỬI & THỰC THI (Auto Copy)"
-            SubmitBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
-        end)
-    end)
-
-    -- HOTKEY ẨN/HIỆN GIAO DIỆN NÀY (Bấm Alt trái)
-    UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if not gameProcessed and input.KeyCode == Enum.KeyCode.LeftAlt then
-            MainFrame.Visible = not MainFrame.Visible
-        end
-    end)
-
-    print("✅ AI Assistant Module (V4.0 - Standalone UI) Loaded Successfully!")
-end
+        elseif success then
+            return
