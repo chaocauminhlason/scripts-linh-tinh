@@ -365,7 +365,7 @@ end
 	                              hrp.CFrame = CFrame.new(bossPos + Vector3.new(0, 8, 0))
                                 print("[Boss] 🚀 Dịch chuyển tiếp cận (Khoảng cách hiện tại: " .. math.floor(distance) .. " studs)")
 															else
-																pcall(function() Utils.ToggleMount(true) end)
+																pcall(function() Utils.SmartDismount() end)
 											          task.wait(0.2)
                             end
                         end
