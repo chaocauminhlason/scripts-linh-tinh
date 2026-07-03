@@ -1,69 +1,265 @@
 -- ====================================================================
--- MODULE: R-CLIENT PRO AI ASSISTANT (V3.0 - UI CUSTOM & AUTO-COPY)
+-- MODULE: R-CLIENT PRO AI ASSISTANT (V4.0 - STANDALONE FLOATING UI)
 -- ====================================================================
-return function(Window, Utils)
+return function(Window, Utils) -- Vẫn nhận tham số nhưng không dùng Rayfield Window
     local HttpService = game:GetService("HttpService")
+    local CoreGui = game:GetService("CoreGui")
+    local UserInputService = game:GetService("UserInputService")
+    
     local API_KEY_FILE = "R_ClientPro_AI_Key.txt"
+    local GUI_NAME = "RClientPro_AIAssistantUI"
 
-    local AITab = Window:CreateTab("AI Trợ Lý", 4483362458)
+    -- Xóa UI cũ nếu bị trùng lặp khi chạy lại script
+    if CoreGui:FindFirstChild(GUI_NAME) then
+        CoreGui[GUI_NAME]:Destroy()
+    end
 
-    -- Hàm hỗ trợ copy
+    -- ==========================================
+    -- HÀM TIỆN ÍCH
+    -- ==========================================
+    local function GetSavedAPIKey()
+        if isfile and isfile(API_KEY_FILE) then
+            local savedKey = readfile(API_KEY_FILE)
+            if savedKey and savedKey ~= "" then
+                return string.gsub(savedKey, "^%s*(.-)%s*$", "%1")
+            end
+        end
+        return nil
+    end
+
     local function CopyToClipboard(text)
         if setclipboard then
-            setclipboard(text)
-            Rayfield:Notify({Title = "AI Assistant", Content = "Đã tự động copy code vào Clipboard!", Duration = 2})
+            pcall(function() setclipboard(text) end)
         end
     end
 
-    -- Giao diện Input (Bạn có thể gõ dài, nó sẽ cuộn)
-    AITab:CreateSection("--- TRÒ CHUYỆN VỚI AI ---")
-    local currentPrompt = ""
-    
-    -- Mẹo: Rayfield không cho chỉnh size cứng, nhưng bạn có thể dùng Input thường
-    local InputBox = AITab:CreateInput({
-        Name = "Nhập yêu cầu tại đây (Gõ dài thoải mái)",
-        PlaceholderText = "Ví dụ: Tìm quái và in tên thật...",
-        RemoveTextAfterFocusLost = false,
-        Callback = function(Text)
-            currentPrompt = Text
-        end,
-    })
+    -- ==========================================
+    -- THIẾT KẾ GIAO DIỆN (CUSTOM FLOATING UI)
+    -- ==========================================
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = GUI_NAME
+    ScreenGui.Parent = CoreGui
+    ScreenGui.ResetOnSpawn = false
 
-    -- Tạo một cái Paragraph để hiển thị nội dung AI trả về cho dễ đọc
-    local OutputDisplay = AITab:CreateParagraph({Title = "Kết quả từ AI", Content = "Chưa có kết quả..."})
+    local MainFrame = Instance.new("Frame")
+    MainFrame.Size = UDim2.new(0, 450, 0, 350)
+    MainFrame.Position = UDim2.new(1, -470, 0, 50) -- Góc trên bên phải
+    MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+    MainFrame.BorderSizePixel = 0
+    MainFrame.ClipsDescendants = true
+    MainFrame.Parent = ScreenGui
+
+    local UICorner = Instance.new("UICorner")
+    UICorner.CornerRadius = UDim.new(0, 8)
+    UICorner.Parent = MainFrame
+
+    -- TIÊU ĐỀ & KÉO THẢ (DRAGGABLE)
+    local TitleBar = Instance.new("Frame")
+    TitleBar.Size = UDim2.new(1, 0, 0, 30)
+    TitleBar.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+    TitleBar.BorderSizePixel = 0
+    TitleBar.Parent = MainFrame
+
+    local TitleLabel = Instance.new("TextLabel")
+    TitleLabel.Size = UDim2.new(1, -40, 1, 0)
+    TitleLabel.Position = UDim2.new(0, 10, 0, 0)
+    TitleLabel.BackgroundTransparency = 1
+    TitleLabel.Text = "🧠 R-Client Pro | AI Assistant (Nhấn L-Alt để Ẩn/Hiện)"
+    TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    TitleLabel.Font = Enum.Font.GothamBold
+    TitleLabel.TextSize = 13
+    TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    TitleLabel.Parent = TitleBar
+
+    -- Tính năng kéo thả (Drag)
+    local dragging, dragInput, dragStart, startPos
+    TitleBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = MainFrame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    TitleBar.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+
+    -- KHU VỰC NHẬP API KEY
+    local KeyInput = Instance.new("TextBox")
+    KeyInput.Size = UDim2.new(1, -20, 0, 30)
+    KeyInput.Position = UDim2.new(0, 10, 0, 40)
+    KeyInput.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+    KeyInput.TextColor3 = Color3.fromRGB(200, 200, 200)
+    KeyInput.Font = Enum.Font.Gotham
+    KeyInput.TextSize = 12
+    KeyInput.PlaceholderText = GetSavedAPIKey() and "✅ Key đã được lưu (Nhập vào đây nếu muốn đổi)" or "🔑 Dán Gemini API Key vào đây..."
+    KeyInput.Text = ""
+    KeyInput.ClearTextOnFocus = false
+    KeyInput.Parent = MainFrame
+    Instance.new("UICorner", KeyInput).CornerRadius = UDim.new(0, 4)
+
+    KeyInput.FocusLost:Connect(function(enterPressed)
+        if KeyInput.Text ~= "" and writefile then
+            pcall(function() writefile(API_KEY_FILE, KeyInput.Text) end)
+            KeyInput.PlaceholderText = "✅ Đã cập nhật Key mới thành công!"
+            KeyInput.Text = ""
+        end
+    end)
+
+    -- KẾT QUẢ HIỂN THỊ TỪ AI (CÓ THANH CUỘN)
+    local OutputScroll = Instance.new("ScrollingFrame")
+    OutputScroll.Size = UDim2.new(1, -20, 0, 150)
+    OutputScroll.Position = UDim2.new(0, 10, 0, 80)
+    OutputScroll.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+    OutputScroll.BorderSizePixel = 0
+    OutputScroll.ScrollBarThickness = 4
+    OutputScroll.Parent = MainFrame
+    Instance.new("UICorner", OutputScroll).CornerRadius = UDim.new(0, 4)
+
+    local OutputLabel = Instance.new("TextLabel")
+    OutputLabel.Size = UDim2.new(1, -10, 1, 0)
+    OutputLabel.Position = UDim2.new(0, 5, 0, 0)
+    OutputLabel.BackgroundTransparency = 1
+    OutputLabel.TextColor3 = Color3.fromRGB(150, 255, 150)
+    OutputLabel.Font = Enum.Font.Code
+    OutputLabel.TextSize = 12
+    OutputLabel.TextXAlignment = Enum.TextXAlignment.Left
+    OutputLabel.TextYAlignment = Enum.TextYAlignment.Top
+    OutputLabel.TextWrapped = true
+    OutputLabel.Text = "> Hệ thống AI sẵn sàng. Hãy nhập yêu cầu..."
+    OutputLabel.Parent = OutputScroll
+
+    -- Tự động dãn độ dài thanh cuộn
+    OutputLabel:GetPropertyChangedSignal("TextBounds"):Connect(function()
+        OutputScroll.CanvasSize = UDim2.new(0, 0, 0, OutputLabel.TextBounds.Y + 20)
+        OutputLabel.Size = UDim2.new(1, -10, 0, OutputLabel.TextBounds.Y)
+    end)
+
+    -- KHU VỰC NHẬP LỆNH (PROMPT)
+    local PromptInput = Instance.new("TextBox")
+    PromptInput.Size = UDim2.new(1, -20, 0, 50)
+    PromptInput.Position = UDim2.new(0, 10, 0, 240)
+    PromptInput.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+    PromptInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+    PromptInput.Font = Enum.Font.Gotham
+    PromptInput.TextSize = 13
+    PromptInput.PlaceholderText = "Nhập lệnh (Ví dụ: Bay đến con quái gần nhất...)"
+    PromptInput.TextWrapped = true
+    PromptInput.ClearTextOnFocus = false
+    PromptInput.TextXAlignment = Enum.TextXAlignment.Left
+    PromptInput.TextYAlignment = Enum.TextYAlignment.Top
+    PromptInput.Parent = MainFrame
+    Instance.new("UICorner", PromptInput).CornerRadius = UDim.new(0, 4)
+
+    -- NÚT GỬI LỆNH
+    local SubmitBtn = Instance.new("TextButton")
+    SubmitBtn.Size = UDim2.new(1, -20, 0, 40)
+    SubmitBtn.Position = UDim2.new(0, 10, 0, 300)
+    SubmitBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+    SubmitBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    SubmitBtn.Font = Enum.Font.GothamBold
+    SubmitBtn.TextSize = 14
+    SubmitBtn.Text = "🚀 GỬI & THỰC THI (Auto Copy)"
+    SubmitBtn.Parent = MainFrame
+    Instance.new("UICorner", SubmitBtn).CornerRadius = UDim.new(0, 4)
 
     -- ==========================================
-    -- LOGIC THỰC THI (KÈM AUTO-COPY)
+    -- LOGIC TƯƠNG TÁC AI & THỰC THI
     -- ==========================================
-    local function ExecuteAICommand(promptText)
+    local function RequestAICode(userPrompt)
+        local savedKey = GetSavedAPIKey()
+        if not savedKey then return false, "Chưa có API Key. Hãy nhập vào ô phía trên." end
+        
+        local reqFunc = request or http_request or (syn and syn.request)
+        if not reqFunc then return false, "Executor của bạn không hỗ trợ hàm HTTP Request!" end
+
+        local API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" .. savedKey
+        local systemInstruction = "You are a Roblox Lua exploit developer for 'R-client-pro'. Only respond with raw, executable Lua code. Do not include markdown blocks, do not include ```lua tags, no explanations. Just clean code. To get real monster names, use getrenv()._G.PathTool.CfgMonster.Tmpls[tostring(id)].Name."
+        
+        local payload = { contents = { { parts = { { text = systemInstruction .. "\nUser Request: " .. userPrompt } } } } }
+
+        local success, response = pcall(function()
+            return reqFunc({
+                Url = API_URL, Method = "POST",
+                Headers = { ["Content-Type"] = "application/json" },
+                Body = HttpService:JSONEncode(payload)
+            })
+        end)
+
+        if success then
+            if response.StatusCode == 200 then
+                local data = HttpService:JSONDecode(response.Body)
+                if data.candidates and data.candidates[1] and data.candidates[1].content and data.candidates[1].content.parts[1] then
+                    return true, data.candidates[1].content.parts[1].text
+                end
+                return false, "API trả về dữ liệu trống."
+            else
+                local errorMsg = "HTTP " .. tostring(response.StatusCode) .. "\n"
+                pcall(function() errorMsg = errorMsg .. tostring(HttpService:JSONDecode(response.Body).error.message) end)
+                return false, errorMsg
+            end
+        end
+        return false, "Không thể kết nối tới Google API."
+    end
+
+    SubmitBtn.MouseButton1Click:Connect(function()
+        local prompt = PromptInput.Text
+        if prompt == "" then return end
+
+        SubmitBtn.Text = "⏳ ĐANG XỬ LÝ..."
+        SubmitBtn.BackgroundColor3 = Color3.fromRGB(150, 100, 0)
+        OutputLabel.Text = "> AI đang suy nghĩ lệnh: " .. prompt .. " ..."
+
         task.spawn(function()
-            local success, rawCode = RequestAICode(promptText) -- (Giữ nguyên hàm Request cũ)
+            local success, rawCode = RequestAICode(prompt)
             
             if success then
                 rawCode = string.gsub(rawCode, "```lua\n?", "")
                 rawCode = string.gsub(rawCode, "```\n?", "")
-                
-                -- AUTO-COPY VÀO CLIPBOARD
+                rawCode = string.gsub(rawCode, "^%s*(.-)%s*$", "%1")
+
+                OutputLabel.Text = "-- KẾT QUẢ TỪ AI --\n" .. rawCode
                 CopyToClipboard(rawCode)
-                
-                -- Hiển thị lên UI cho dễ nhìn
-                OutputDisplay:Set({Title = "Kết quả từ AI (Đã Copy)", Content = rawCode})
+                PromptInput.Text = "" -- Xóa ô nhập liệu sau khi gửi thành công
 
-                -- Thực thi
-                local func = loadstring(rawCode)
-                if func then pcall(func) end
+                local func, compileError = loadstring(rawCode)
+                if func then
+                    local runSuccess, runtimeError = pcall(func)
+                    if not runSuccess then
+                        OutputLabel.Text = OutputLabel.Text .. "\n\n❌ LỖI RUNTIME:\n" .. tostring(runtimeError)
+                    end
+                else
+                    OutputLabel.Text = OutputLabel.Text .. "\n\n❌ LỖI CÚ PHÁP:\n" .. tostring(compileError)
+                end
+                SubmitBtn.Text = "✅ ĐÃ THỰC THI (COPIED)"
+                SubmitBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
             else
-                OutputDisplay:Set({Title = "Lỗi", Content = tostring(rawCode)})
+                OutputLabel.Text = "❌ LỖI API:\n" .. tostring(rawCode)
+                SubmitBtn.Text = "❌ LỖI KẾT NỐI"
+                SubmitBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
             end
+            
+            task.wait(2)
+            SubmitBtn.Text = "🚀 GỬI & THỰC THI (Auto Copy)"
+            SubmitBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
         end)
-    end
+    end)
 
-    AITab:CreateButton({
-        Name = "🚀 Gửi lệnh và Tự động Copy",
-        Callback = function()
-            if currentPrompt ~= "" then
-                ExecuteAICommand(currentPrompt)
-            end
+    -- HOTKEY ẨN/HIỆN GIAO DIỆN NÀY (Bấm Alt trái)
+    UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if not gameProcessed and input.KeyCode == Enum.KeyCode.LeftAlt then
+            MainFrame.Visible = not MainFrame.Visible
         end
-    })
+    end)
+
+    print("✅ AI Assistant Module (V4.0 - Standalone UI) Loaded Successfully!")
 end
