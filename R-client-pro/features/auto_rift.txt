@@ -205,7 +205,7 @@ return function(Window, Utils)
 
                 if not riftSettings.scanDynamic and not riftSettings.scanStatic then task.wait(1); continue end
 
-                -- [TEST LOGIC 1]: CHUYỂN WORLD
+                -- [TEST LOGIC 1]: CHUYỂN WORLD VÀ CHỜ DỮ LIỆU
                 local targetWorldId = riftSettings.selectedWorlds[cycleState.currentIndex]
                 if targetWorldId then
                     if cycleState.currentLoadedWorld ~= targetWorldId then
@@ -213,8 +213,8 @@ return function(Window, Utils)
                         pcall(function() Utils.TeleportToArea(targetWorldId) end)
                         cycleState.currentLoadedWorld = targetWorldId
                         
-                        print("[TEST-LOG] Bắt đầu đợi 4 giây cho cổng Rift load lên map...")
-                        task.wait(4)
+                        print("[TEST-LOG] Bắt đầu đợi 7 giây cho Server nạp dữ liệu map (StreamingEnabled)...")
+                        task.wait(7) -- Đã tăng từ 4s lên 7s để chống lag load map
                         print("[TEST-LOG] Đợi load map xong, tiến hành quét cổng!")
                         continue
                     end
@@ -230,27 +230,80 @@ return function(Window, Utils)
                 
                 local bestPortal, shortestDistance = nil, math.huge
 
-                -- Quét thư mục
+                print("[TEST-LOG] --- BẮT ĐẦU QUÉT RIFT TẠI MAP " .. tostring(targetWorldId) .. " ---")
+
+                -- [MÁY QUÉT 1]: QUÉT DYNAMIC
                 local dynamicFolder = Workspace:FindFirstChild("DynamicDungeon")
-                if riftSettings.scanDynamic and dynamicFolder then
-                    for _, obj in pairs(dynamicFolder:GetChildren()) do
-                        local idStr = string.match(obj.Name, "Dungeon_(%d+)")
-                        if idStr then
-                            local id = tonumber(idStr)
-                            local properTeamId = obj:GetAttribute("DungeonStartTick")
-                            if properTeamId and properTeamId > 0 then
-                                local dynamicKey = "Dyn_" .. idStr .. "_" .. properTeamId
-                                if not completedRifts[dynamicKey] then
-                                    local doorPos = GetPortalPosition(obj)
-                                    local dist = (hrp.Position - doorPos).Magnitude
-                                    if dist < shortestDistance then
-                                        shortestDistance = dist; local endTick = obj:GetAttribute("DungeonEndTick"); local duration = 300
-                                        if endTick and endTick > properTeamId then duration = endTick - properTeamId end
-                                        bestPortal = {id = id, key = dynamicKey, pos = doorPos, teamId = properTeamId, penalty = duration}
+                if riftSettings.scanDynamic then
+                    if dynamicFolder then
+                        local dynChildren = dynamicFolder:GetChildren()
+                        print("[TEST-LOG] Thấy thư mục DynamicDungeon. Số object bên trong: " .. #dynChildren)
+                        for _, obj in pairs(dynChildren) do
+                            local idStr = string.match(obj.Name, "Dungeon_(%d+)")
+                            if idStr then
+                                local id = tonumber(idStr)
+                                local properTeamId = obj:GetAttribute("DungeonStartTick")
+                                if properTeamId and properTeamId > 0 then
+                                    local dynamicKey = "Dyn_" .. idStr .. "_" .. properTeamId
+                                    if not completedRifts[dynamicKey] then
+                                        local doorPos = GetPortalPosition(obj)
+                                        local dist = (hrp.Position - doorPos).Magnitude
+                                        print("[TEST-LOG] ✅ HỢP LỆ: Cổng Dynamic " .. idStr .. " | Khoảng cách: " .. math.floor(dist))
+                                        if dist < shortestDistance then
+                                            shortestDistance = dist; local endTick = obj:GetAttribute("DungeonEndTick"); local duration = 300
+                                            if endTick and endTick > properTeamId then duration = endTick - properTeamId end
+                                            bestPortal = {id = id, key = dynamicKey, pos = doorPos, teamId = properTeamId, penalty = duration}
+                                        end
+                                    else
+                                        print("[TEST-LOG] ❌ Bỏ qua: Cổng Dynamic " .. idStr .. " đang nằm trong Blacklist!")
+                                    end
+                                else
+                                    print("[TEST-LOG] ❌ Bỏ qua: Cổng Dynamic " .. idStr .. " thiếu Attribute DungeonStartTick")
+                                end
+                            end
+                        end
+                    else
+                        print("[TEST-LOG] ⚠️ Không thấy thư mục Workspace.DynamicDungeon")
+                    end
+                end
+
+                -- [MÁY QUÉT 2]: QUÉT STATIC
+                if riftSettings.scanStatic and not bestPortal then
+                    local areaFolder = Workspace:FindFirstChild("Area")
+                    if areaFolder then
+                        for _, mapFolder in pairs(areaFolder:GetChildren()) do
+                            local arDungeon = mapFolder:FindFirstChild("Area") and mapFolder.Area:FindFirstChild("Dungeon")
+                            if arDungeon then
+                                local statChildren = arDungeon:GetChildren()
+                                print("[TEST-LOG] Thấy thư mục Dungeon trong map " .. mapFolder.Name .. ". Số object: " .. #statChildren)
+                                for _, obj in pairs(statChildren) do
+                                    local idStr = string.match(obj.Name, "Dungeon_(%d+)")
+                                    if idStr then
+                                        local id = tonumber(idStr)
+                                        local properTeamId = obj:GetAttribute("DungeonStartTick")
+                                        if properTeamId and properTeamId > 0 then
+                                            local staticKey = "Stat_" .. idStr .. "_" .. properTeamId
+                                            if not completedRifts[staticKey] then
+                                                local doorPos = GetPortalPosition(obj)
+                                                local dist = (hrp.Position - doorPos).Magnitude
+                                                print("[TEST-LOG] ✅ HỢP LỆ: Cổng Static " .. idStr .. " | Khoảng cách: " .. math.floor(dist))
+                                                if dist < shortestDistance then
+                                                    shortestDistance = dist; local endTick = obj:GetAttribute("DungeonEndTick"); local duration = 300
+                                                    if endTick and endTick > properTeamId then duration = endTick - properTeamId end
+                                                    bestPortal = {id = id, key = staticKey, pos = doorPos, teamId = properTeamId, penalty = duration}
+                                                end
+                                            else
+                                                print("[TEST-LOG] ❌ Bỏ qua: Cổng Static " .. idStr .. " đang nằm trong Blacklist!")
+                                            end
+                                        else
+                                            print("[TEST-LOG] ❌ Bỏ qua: Cổng Static " .. idStr .. " thiếu Attribute DungeonStartTick")
+                                        end
                                     end
                                 end
                             end
                         end
+                    else
+                        print("[TEST-LOG] ⚠️ Không thấy thư mục Workspace.Area")
                     end
                 end
 
@@ -258,7 +311,7 @@ return function(Window, Utils)
                     targetRiftId = bestPortal.id; targetRiftKey = bestPortal.key; targetExpireDuration = bestPortal.penalty
                     if controller then controller.RequestLock("AutoRift") end
 
-                    print("[TEST-LOG] Đã tìm thấy Rift: " .. tostring(targetRiftId) .. ". Đang áp sát cổng...")
+                    print("[TEST-LOG] 🎯 Đã chốt mục tiêu: Rift " .. tostring(targetRiftId) .. ". Đang áp sát cổng...")
                     RiftStatus:Set("STATUS: Đã khóa Rift: " .. tostring(targetRiftId) .. ". Đang vào...")
                     hrp.CFrame = CFrame.new(bestPortal.pos + Vector3.new(0, 3, 0))
                     task.wait(0.5) 
@@ -277,41 +330,40 @@ return function(Window, Utils)
                     task.spawn(SendEnterRemote)
                     task.wait(2.0) 
                     
-                    -- [TEST LOGIC 2]: KIỂM TRA ĐÃ VÀO RIFT HAY VẪN Ở SẢNH
+                    -- KIỂM TRA VÀO RIFT
                     local checkChar = LocalPlayer.Character
                     local checkHrp = checkChar and checkChar:FindFirstChild("HumanoidRootPart")
                     if checkHrp then
                         local distFromPortal = (checkHrp.Position - bestPortal.pos).Magnitude
-                        print("[TEST-LOG] Kiểm tra khoảng cách tới cổng cũ: " .. math.floor(distFromPortal) .. " studs")
+                        print("[TEST-LOG] Khoảng cách tới cổng cũ sau khi gửi lệnh: " .. math.floor(distFromPortal) .. " studs")
                         
                         if distFromPortal < 150 then
-                            print("[TEST-LOG] KHOẢNG CÁCH < 150 -> Vẫn đang ở Open World! Thử gửi Remote lần 2...")
+                            print("[TEST-LOG] ⚠️ Vẫn đang ở Open World! Thử gửi Remote lần 2...")
                             task.spawn(SendEnterRemote) 
                             task.wait(2.0)
                             
                             local distRecheck = (checkHrp.Position - bestPortal.pos).Magnitude
                             if distRecheck < 150 then
-                                print("[TEST-LOG] KHOẢNG CÁCH VẪN < 150 -> Lỗi không vào được Rift! Bỏ qua cổng này.")
+                                print("[TEST-LOG] ❌ Lỗi chặn cổng! Bỏ qua và chuyển mục tiêu.")
                                 RiftStatus:Set("STATUS: Không thể vào Rift (Bị chặn/Lỗi). Đổi mục tiêu!")
                                 completedRifts[targetRiftKey] = os.time() + 60 
                                 targetRiftId = nil; targetRiftKey = nil; riftState = "SCANNING"
                                 if controller then controller.ReleaseLock("AutoRift") end
                             else
-                                print("[TEST-LOG] Văng xa > 150 -> VÀO RIFT THÀNH CÔNG (Sau lần 2)!")
+                                print("[TEST-LOG] 🚀 VÀO RIFT THÀNH CÔNG (Lần 2)!")
                                 dungeonStuckTimer = 0; hasEncounteredMonsters = false; riftState = "COMBAT"
                             end
                         else
-                            print("[TEST-LOG] Văng xa > 150 -> VÀO RIFT THÀNH CÔNG ngay lần 1!")
+                            print("[TEST-LOG] 🚀 VÀO RIFT THÀNH CÔNG ngay lập tức!")
                             dungeonStuckTimer = 0; hasEncounteredMonsters = false; riftState = "COMBAT"
                         end
                     end
                 else
-                    print("[TEST-LOG] Map này không có Rift -> Next Map!")
+                    print("[TEST-LOG] ⏩ Map này không có Rift hợp lệ -> Chuyển Map tiếp theo!")
                     cycleState.currentIndex = cycleState.currentIndex + 1
                     cycleState.currentLoadedWorld = nil 
                     task.wait(0.5) 
                 end
-
             elseif riftState == "COMBAT" then
                 if unhandledDeadCount > 0 then
                     RiftStatus:Set("STATUS: Đang ném bóng bắt quái...")
