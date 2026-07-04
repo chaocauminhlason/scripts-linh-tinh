@@ -76,50 +76,82 @@ return function(Window, Utils)
     local _streamerName = "Streamer" -- Tên mặc định
     local isSpoofing = false
 
-    local function ApplyNameSpoof(newName)
-        if not isSpoofing then return end
-        
-        -- Hook vào Player Name (thay đổi UI)
-        pcall(function()
-            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-                LocalPlayer.Character.Humanoid.DisplayName = newName
-            end
-        end)
-        
-        -- Thêm logic ẩn danh ở đây nếu game có các label tên trên đầu nhân vật
-        -- Bạn có thể hook vào các billboard gui hoặc các textlabel trong PlayerGui
-    end
-    local StreamerTab = OptimizationTab
-    StreamerTab:CreateSection("--- TÙY CHỈNH TÊN ---")
+    local realName = LocalPlayer.Name
+    local realDisplayName = LocalPlayer.DisplayName
+
+StreamerTab:CreateSection("--- TÙY CHỈNH TÊN ---")
     local NameInput = StreamerTab:CreateInput({
         Name = "Tên hiển thị (Streamer Mode)",
         PlaceholderText = "Nhập tên giả...",
         RemoveTextAfterFocusLost = false,
         Callback = function(Text)
-            _streamerName = Text
-            if isSpoofing then ApplyNameSpoof(Text) end
+            if Text and Text ~= "" then
+                _streamerName = Text
+            end
         end,
     })
 
     StreamerTab:CreateToggle({
         Name = "Bật Chế Độ Ẩn Danh (Rename)",
         CurrentValue = false,
+        Flag = "StreamerSpoofToggle",
         Callback = function(Value)
             isSpoofing = Value
-            if Value then
-                ApplyNameSpoof(_streamerName)
-            else
-                -- Trả lại tên thật
+            
+            -- Trả lại tên thật nếu tắt công tắc
+            if not Value then
                 pcall(function()
-                    LocalPlayer.Character.Humanoid.DisplayName = LocalPlayer.Name
+                    local char = LocalPlayer.Character
+                    if char then
+                        local labName = char:FindFirstChild("HumanoidRootPart")
+                            and char.HumanoidRootPart:FindFirstChild("NameTag")
+                            and char.HumanoidRootPart.NameTag:FindFirstChild("FmSize")
+                            and char.HumanoidRootPart.NameTag.FmSize:FindFirstChild("FmName")
+                            and char.HumanoidRootPart.NameTag.FmSize.FmName:FindFirstChild("LabName")
+                        
+                        if labName then
+                            labName.Text = realDisplayName
+                        end
+                        
+                        local hum = char:FindFirstChild("Humanoid")
+                        if hum then hum.DisplayName = realDisplayName end
+                    end
                 end)
             end
         end
     })
 
-    -- Đảm bảo tên luôn được cập nhật khi nhân vật hồi sinh
-    LocalPlayer.CharacterAdded:Connect(function(char)
-        task.wait(1)
-        if isSpoofing then ApplyNameSpoof(_streamerName) end
+    -- ==========================================
+    -- VÒNG LẶP KHÓA MỤC TIÊU (0.1s/lần)
+    -- ==========================================
+    task.spawn(function()
+        while task.wait(0.1) do
+            if isSpoofing then
+                pcall(function()
+                    local char = LocalPlayer.Character
+                    if char then
+                        -- 1. Đánh thẳng vào đường dẫn Custom UI từ ảnh F9
+                        local labName = char:FindFirstChild("HumanoidRootPart")
+                            and char.HumanoidRootPart:FindFirstChild("NameTag")
+                            and char.HumanoidRootPart.NameTag:FindFirstChild("FmSize")
+                            and char.HumanoidRootPart.NameTag.FmSize:FindFirstChild("FmName")
+                            and char.HumanoidRootPart.NameTag.FmSize.FmName:FindFirstChild("LabName")
+                        
+                        if labName then
+                            -- Nếu thấy có chứa tên thật thì đè tên giả vào
+                            if string.find(labName.Text, realName) or string.find(labName.Text, realDisplayName) then
+                                labName.Text = _streamerName
+                            end
+                        end
+                        
+                        -- 2. Đổi luôn DisplayName của Humanoid (Đề phòng game dùng cả 2)
+                        local hum = char:FindFirstChild("Humanoid")
+                        if hum and hum.DisplayName ~= _streamerName then
+                            hum.DisplayName = _streamerName
+                        end
+                    end
+                end)
+            end
+        end
     end)
 end
