@@ -36,7 +36,7 @@ return function(Window, Utils)
     }
 
     local worldSettings = { enabled = false, autoHop = false, selectedWorlds = {2,3,4,5,6,7,8,9,10,11,12} }
-    local specialSettings = { enabled = false }
+    local specialSettings = { enabled = false, selectedWorlds = {2,3,4,5,6,7,8,9,10,11,12} }
 
     _G.BossStatus = _G.BossStatus or {
         bossFound = false, bossId = nil, bossName = "", bossPosition = nil,
@@ -53,6 +53,10 @@ return function(Window, Utils)
         if Utils and Utils.LoadSelectedAreas then
             local savedWorlds = Utils.LoadSelectedAreas("R_SelectedBossWorlds.json")
             if type(savedWorlds) == "table" and #savedWorlds > 0 then worldSettings.selectedWorlds = savedWorlds end
+
+            -- LOAD CẤU HÌNH SPECIAL BOSS
+            local savedSpWorlds = Utils.LoadSelectedAreas("R_SelectedSpBossWorlds.json")
+            if type(savedSpWorlds) == "table" and #savedSpWorlds > 0 then specialSettings.selectedWorlds = savedSpWorlds end
         end
     end)
 
@@ -67,6 +71,7 @@ return function(Window, Utils)
         end
     end
 
+    local SpTargetLabel = BossTab:CreateLabel("🎯 Đã chọn " .. #specialSettings.selectedWorlds .. " world")
     local function SpecialBossToggle(enable)
         specialSettings.enabled = enable
         if not enable then
@@ -74,6 +79,19 @@ return function(Window, Utils)
             if _G.SystemController then _G.SystemController.ReleaseLock("SpecialBoss") end
         end
     end
+
+    -- THÊM BẢNG CHỌN WORLD NHƯ BOSS THƯỜNG
+    Utils.CreateAreaMultiSelect(BossTab, {
+        name = "Chọn World Săn Special Boss", flag = "SpBossWorldSelect",
+        defaultAreas = Utils.GetAreaNamesByIds(specialSettings.selectedWorlds),
+        callback = function(selectedIds)
+            if type(selectedIds) == "table" then
+                specialSettings.selectedWorlds = selectedIds
+                if Utils and Utils.SaveSelectedAreas then Utils.SaveSelectedAreas(selectedIds, "R_SelectedSpBossWorlds.json") end
+                if #selectedIds == 0 then SpTargetLabel:Set("⚠️ Chưa chọn world nào!") else SpTargetLabel:Set("🎯 Đã chọn " .. #selectedIds .. " world") end
+            end
+        end
+    })
 
     if _G.SystemController and type(_G.SystemController.registerModule) == "function" then
         _G.SystemController:registerModule("boss", WorldBossToggle)
@@ -171,15 +189,28 @@ return function(Window, Utils)
                     local worldId = GetSpecialWorldId(bossName)
                     
                     if worldId then
-                        print("🚨 [SPECIAL] Chốt hạ: " .. bossName .. " tại Đảo " .. worldId)
-                        SpStatusLabel:Set("⚔️ Phát hiện: " .. bossName .. " (Đảo " .. worldId .. ")")
-                        spHuntState.isActive = true
-                        spHuntState.targetBoss = bossName
-                        spHuntState.targetWorldId = worldId
-                        spHuntState.timeout = os.time() + 180 
-                        _G.PendingSpecialBoss = true 
-                        game.StarterGui:SetCore("SendNotification", { Title = "🚨 Special Boss!", Text = bossName .. " vừa xuất hiện ở đảo " .. worldId, Duration = 5 })
-                    end
+                        -- KIỂM TRA XEM ID ĐẢO NÀY CÓ NẰM TRONG DANH SÁCH BẠN ĐÃ TÍCH CHỌN KHÔNG
+                        local isWorldAllowed = false
+                        for _, allowedId in pairs(specialSettings.selectedWorlds) do
+                            if tonumber(allowedId) == tonumber(worldId) then
+                                isWorldAllowed = true
+                                break
+                            end
+                        end
+
+                        if isWorldAllowed then
+                            print("🚨 [SPECIAL] Chốt hạ: " .. bossName .. " tại Đảo " .. worldId)
+                            SpStatusLabel:Set("⚔️ Phát hiện: " .. bossName .. " (Đảo " .. worldId .. ")")
+                            spHuntState.isActive = true
+                            spHuntState.targetBoss = bossName
+                            spHuntState.targetWorldId = worldId
+                            spHuntState.timeout = os.time() + 180 
+                            _G.PendingSpecialBoss = true 
+                            game.StarterGui:SetCore("SendNotification", { Title = "🚨 Special Boss!", Text = bossName .. " xuất hiện ở đảo " .. worldId, Duration = 5 })
+                        else
+                            print("⏩ [SPECIAL] Bỏ qua " .. bossName .. " ở Đảo " .. worldId .. " vì không nằm trong danh sách chọn!")
+                            -- spTriggered được giữ bằng true để nó không quét lại bong bóng này nữa, tiết kiệm tài nguyên
+                        end
                 end
             end
             
