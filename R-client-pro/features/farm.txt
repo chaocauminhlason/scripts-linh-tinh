@@ -129,7 +129,7 @@ return function(Window, Utils, Controller)
         local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if not hrp then return false end
         local targetPos = targetCFrame.Position + Vector3.new(0, offsetY, 0)
-        local rayOrigin = targetPos + Vector3.new(0, 10, 0)
+        local rayOrigin = targetPos + Vector3.new(0, 20, 0)
         local rayDirection = Vector3.new(0, -20, 0)
         local raycastParams = RaycastParams.new()
         raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
