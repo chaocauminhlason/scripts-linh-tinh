@@ -1,6 +1,6 @@
 -- ====================================================================
 -- MODULE: TỔNG LÃNH BỘ SĂN BOSS (WORLD BOSS & SPECIAL BOSS HỢP NHẤT)
--- BẢN CẬP NHẬT: CHUNG UI TAB, CHUNG SENSOR UI, CHIA ƯU TIÊN LUỒNG CHẠY
+-- BẢN CẬP NHẬT: FIX LỖI UI, THÊM END, SỬ DỤNG UTILS.GETMONSTERREALNAME
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -48,13 +48,11 @@ return function(Window, Utils)
         timeout = 0, stuckTimer = 0, lastPos = nil
     }
 
-    -- Khôi phục cấu hình World đã lưu cho Boss Thường
     pcall(function()
         if Utils and Utils.LoadSelectedAreas then
             local savedWorlds = Utils.LoadSelectedAreas("R_SelectedBossWorlds.json")
             if type(savedWorlds) == "table" and #savedWorlds > 0 then worldSettings.selectedWorlds = savedWorlds end
 
-            -- LOAD CẤU HÌNH SPECIAL BOSS
             local savedSpWorlds = Utils.LoadSelectedAreas("R_SelectedSpBossWorlds.json")
             if type(savedSpWorlds) == "table" and #savedSpWorlds > 0 then specialSettings.selectedWorlds = savedSpWorlds end
         end
@@ -71,7 +69,6 @@ return function(Window, Utils)
         end
     end
 
-    local SpTargetLabel = BossTab:CreateLabel("🎯 Đã chọn " .. #specialSettings.selectedWorlds .. " world")
     local function SpecialBossToggle(enable)
         specialSettings.enabled = enable
         if not enable then
@@ -79,19 +76,6 @@ return function(Window, Utils)
             if _G.SystemController then _G.SystemController.ReleaseLock("SpecialBoss") end
         end
     end
-
-    -- THÊM BẢNG CHỌN WORLD NHƯ BOSS THƯỜNG
-    Utils.CreateAreaMultiSelect(BossTab, {
-        name = "Chọn World Săn Special Boss", flag = "SpBossWorldSelect",
-        defaultAreas = Utils.GetAreaNamesByIds(specialSettings.selectedWorlds),
-        callback = function(selectedIds)
-            if type(selectedIds) == "table" then
-                specialSettings.selectedWorlds = selectedIds
-                if Utils and Utils.SaveSelectedAreas then Utils.SaveSelectedAreas(selectedIds, "R_SelectedSpBossWorlds.json") end
-                if #selectedIds == 0 then SpTargetLabel:Set("⚠️ Chưa chọn world nào!") else SpTargetLabel:Set("🎯 Đã chọn " .. #selectedIds .. " world") end
-            end
-        end
-    })
 
     if _G.SystemController and type(_G.SystemController.registerModule) == "function" then
         _G.SystemController:registerModule("boss", WorldBossToggle)
@@ -106,12 +90,25 @@ return function(Window, Utils)
     -- --- PHẦN 1: SPECIAL BOSS ---
     BossTab:CreateSection("🌟 AUTO SPECIAL BOSS (ƯU TIÊN CAO)")
     local SpStatusLabel = BossTab:CreateLabel("🔴 Trạng thái: Đang ngủ đông (Chờ thông báo)")
+    local SpTargetLabel = BossTab:CreateLabel("🎯 Đã chọn " .. #specialSettings.selectedWorlds .. " world")
 
     BossTab:CreateToggle({
         Name = "Bật Auto Săn Special Boss", CurrentValue = false, Flag = "AutoSpecialBossToggle",
         Callback = function(Value)
             SpecialBossToggle(Value)
             if Value then SpStatusLabel:Set("🟢 Trạng thái: Đang túc trực chờ sóng...") else SpStatusLabel:Set("🔴 Trạng thái: Đã tắt") end
+        end
+    })
+
+    Utils.CreateAreaMultiSelect(BossTab, {
+        name = "Chọn World Săn Special Boss", flag = "SpBossWorldSelect",
+        defaultAreas = Utils.GetAreaNamesByIds(specialSettings.selectedWorlds),
+        callback = function(selectedIds)
+            if type(selectedIds) == "table" then
+                specialSettings.selectedWorlds = selectedIds
+                if Utils and Utils.SaveSelectedAreas then Utils.SaveSelectedAreas(selectedIds, "R_SelectedSpBossWorlds.json") end
+                if #selectedIds == 0 then SpTargetLabel:Set("⚠️ Chưa chọn world nào!") else SpTargetLabel:Set("🎯 Đã chọn " .. #selectedIds .. " world") end
+            end
         end
     })
 
@@ -189,7 +186,6 @@ return function(Window, Utils)
                     local worldId = GetSpecialWorldId(bossName)
                     
                     if worldId then
-                        -- KIỂM TRA XEM ID ĐẢO NÀY CÓ NẰM TRONG DANH SÁCH BẠN ĐÃ TÍCH CHỌN KHÔNG
                         local isWorldAllowed = false
                         for _, allowedId in pairs(specialSettings.selectedWorlds) do
                             if tonumber(allowedId) == tonumber(worldId) then
@@ -209,8 +205,8 @@ return function(Window, Utils)
                             game.StarterGui:SetCore("SendNotification", { Title = "🚨 Special Boss!", Text = bossName .. " xuất hiện ở đảo " .. worldId, Duration = 5 })
                         else
                             print("⏩ [SPECIAL] Bỏ qua " .. bossName .. " ở Đảo " .. worldId .. " vì không nằm trong danh sách chọn!")
-                            -- spTriggered được giữ bằng true để nó không quét lại bong bóng này nữa, tiết kiệm tài nguyên
                         end
+                    end -- ✅ ĐÃ BỔ SUNG CHỮ END BỊ THIẾU Ở ĐÂY
                 end
             end
             
@@ -224,13 +220,11 @@ return function(Window, Utils)
                     
                     task.spawn(function()
                         local controller = _G.SystemController
-                        -- Ưu tiên chờ Auto Dungeon thoát ra
                         if controller and controller.CurrentLock == "AutoDungeon" then
                             while controller.CurrentLock == "AutoDungeon" do task.wait(1) end
                         end
                         _G.PendingBossHunt = false
                         
-                        -- Tự hủy sóng World Boss nếu Special Boss đang giành quyền
                         if _G.PendingSpecialBoss or (controller and controller.CurrentLock == "SpecialBoss") then
                             print("⚠️ [WORLD BOSS] Bỏ qua sóng vì Special Boss đang hoạt động!")
                             return
@@ -275,7 +269,7 @@ return function(Window, Utils)
     pcall(function() DataPullFunc = ReplicatedStorage:WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc") end)
 
     -- ==========================================
-    -- 5. LUỒNG CHẠY: SPECIAL BOSS
+    -- 5. LUỒNG CHẠY: SPECIAL BOSS (SỬ DỤNG UTILS MỚI)
     -- ==========================================
     task.spawn(function()
         while task.wait(0.2) do
@@ -309,30 +303,25 @@ return function(Window, Utils)
 
             local clientMonsters = Workspace:FindFirstChild("ClientMonsters")
             local bestTarget = nil; local closestDist = math.huge
+            
             if clientMonsters then
-                local env = getrenv()._G.PathTool
-                local mgrMonster = env.MgrMonsterClient
-                local cfgMonster = env.CfgMonster.Tmpls
-                
+                -- ✅ Áp dụng Utils.GetMonsterRealName để code sạch và mạnh hơn
                 for _, obj in pairs(clientMonsters:GetChildren()) do
                     if obj:IsA("Model") then
-                        local idStr = string.match(obj.Name, "Monster_(%d+)")
-                        if idStr then
-                            local uid = tonumber(idStr)
-                            local success, info = pcall(function() return mgrMonster:GetMonsterInfo(uid) end)
-                            if not success or not info then success, info = pcall(function() return mgrMonster.GetMonsterInfo(uid) end) end
+                        local realName = Utils.GetMonsterRealName(obj)
+                        if realName and realName ~= "Unknown" then
+                            local targetLower = string.lower(spHuntState.targetBoss)
+                            local rNameLower = string.lower(realName)
                             
-                            if success and type(info) == "table" and (info.tmplId or info.TmplId or info.cfgId or info.id) then
-                                local tmplId = info.tmplId or info.TmplId or info.cfgId or info.id
-                                local cfgData = cfgMonster[tostring(tmplId)] or cfgMonster[tonumber(tmplId)]
-                                if cfgData then
-                                    local realName = string.lower(cfgData.Name or cfgData.name or "")
-                                    local targetLower = string.lower(spHuntState.targetBoss)
-                                    if string.find(realName, targetLower) or string.find(targetLower, realName) then
-                                        local root = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
-                                        if root then
-                                            local dist = (hrp.Position - root.Position).Magnitude
-                                            if dist < closestDist then closestDist = dist; bestTarget = {id = uid, root = root} end
+                            if string.find(rNameLower, targetLower) or string.find(targetLower, rNameLower) then
+                                local root = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+                                if root then
+                                    local dist = (hrp.Position - root.Position).Magnitude
+                                    if dist < closestDist then 
+                                        closestDist = dist
+                                        local uidStr = string.match(obj.Name, "Monster_(%d+)")
+                                        if uidStr then
+                                            bestTarget = {id = tonumber(uidStr), root = root} 
                                         end
                                     end
                                 end
@@ -371,7 +360,7 @@ return function(Window, Utils)
     end)
 
     -- ==========================================
-    -- 6. LUỒNG CHẠY: WORLD BOSS THƯỜNG
+    -- 6. LUỒNG CHẠY: WORLD BOSS THƯỜNG (SỬ DỤNG UTILS MỚI)
     -- ==========================================
     local function ScanWorldBoss()
         local currentWorldId = _G.BossStatus.currentWorldId
@@ -379,30 +368,21 @@ return function(Window, Utils)
         local keywords = WorldBossMapping[currentWorldId] or {}
         if #keywords == 0 then return nil, nil, nil end
 
-        local env = getrenv()._G.PathTool
-        if not env or not env.MgrMonsterClient or not env.CfgMonster then return nil, nil, nil end
-        local mgrMonster = env.MgrMonsterClient; local cfgMonster = env.CfgMonster.Tmpls
         local clientMonsters = Workspace:FindFirstChild("ClientMonsters")
         if not clientMonsters then return nil, nil, nil end
 
+        -- ✅ Áp dụng Utils.GetMonsterRealName
         for _, obj in pairs(clientMonsters:GetChildren()) do
             if obj:IsA("Model") then
-                local idStr = string.match(obj.Name, "Monster_(%d+)")
-                if idStr then
-                    local uid = tonumber(idStr)
-                    local success, info = pcall(function() return mgrMonster:GetMonsterInfo(uid) end)
-                    if not success or not info then success, info = pcall(function() return mgrMonster.GetMonsterInfo(uid) end) end
-                    
-                    if success and type(info) == "table" and (info.tmplId or info.TmplId or info.cfgId or info.id) then
-                        local tmplId = info.tmplId or info.TmplId or info.cfgId or info.id
-                        local cfgData = cfgMonster[tostring(tmplId)] or cfgMonster[tonumber(tmplId)]
-                        if cfgData then
-                            local lowerName = string.lower(cfgData.Name or cfgData.name or "")
-                            for _, kw in pairs(keywords) do
-                                if string.find(lowerName, kw) then
-                                    local root = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
-                                    return uid, (cfgData.Name or cfgData.name), (root and root.Position or obj.Position)
-                                end
+                local realName = Utils.GetMonsterRealName(obj)
+                if realName and realName ~= "Unknown" then
+                    local lowerName = string.lower(realName)
+                    for _, kw in pairs(keywords) do
+                        if string.find(lowerName, string.lower(kw)) then
+                            local root = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+                            local idStr = string.match(obj.Name, "Monster_(%d+)")
+                            if idStr then
+                                return tonumber(idStr), realName, (root and root.Position or obj.Position)
                             end
                         end
                     end
@@ -419,7 +399,6 @@ return function(Window, Utils)
             if controller and controller.IsPaused then WbStatusLabel:Set("⏸️ ĐÃ DỪNG (Main Controller)"); task.wait(0.5); continue end
             if not worldSettings.enabled or #worldSettings.selectedWorlds == 0 then task.wait(1); continue end
 
-            -- [ƯU TIÊN NỘI BỘ]: Nếu Special Boss đang đòi quyền hoặc đang đánh, World Boss tạm dừng ngay lập tức
             if _G.PendingSpecialBoss or (controller and controller.CurrentLock == "SpecialBoss") then
                 WbStatusLabel:Set("🛑 Đang nhường đường cho Special Boss...")
                 if controller and controller.CurrentLock == "BossHunt" then controller.ReleaseLock("BossHunt") end
