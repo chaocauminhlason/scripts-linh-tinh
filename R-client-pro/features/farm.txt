@@ -165,9 +165,9 @@ return function(Window, Utils, Controller)
     local CamTab = Window:CreateTab("Auto farm", 4483345998)
     local MonsterDropdown = nil -- Khai báo biến toàn cục cho Module
 
-    CamTab:CreateSection("--- ĐIỀU KHIỂN TỔNG ---")
+    CamTab:CreateSection("ĐIỀU KHIỂN TỔNG")
     CamTab:CreateButton({
-        Name = "🛑 STOP TẤT CẢ HỆ THỐNG",
+        Name = "🛑 STOP TẤT CẢ",
         Callback = function()
             if _G.SystemController then
                 _G.SystemController.IsPaused = true
@@ -177,7 +177,7 @@ return function(Window, Utils, Controller)
         end
     })
     CamTab:CreateButton({
-        Name = "▶️ RESUME TẤT CẢ HỆ THỐNG",
+        Name = "▶️ RESUME TẤT CẢ",
         Callback = function()
             if _G.SystemController then
                 _G.SystemController.IsPaused = false
@@ -187,7 +187,7 @@ return function(Window, Utils, Controller)
         end
     })
 
-    CamTab:CreateSection("--- QUẢN LÝ QUÁI FARM ---")
+    --CamTab:CreateSection("QUẢN LÝ QUÁI FARM")
     local MonsterListLabel = CamTab:CreateLabel("🐾 Đang farm: Tất cả quái")
     
     local function UpdateMonsterLabel()
@@ -247,23 +247,23 @@ return function(Window, Utils, Controller)
         end
     })
 
-    CamTab:CreateSection("--- CÀI ĐẶT FARM ---")
+    CamTab:CreateSection("FARM")
     CamTab:CreateToggle({ Name = "Tự Động Đánh Quái", CurrentValue = false, Flag = "FarmAutoAttack", Callback = function(V) camSettings.autoAttack = V end })
     CamTab:CreateSlider({ Name = "Bán kính Farm", Range = {10, 2000}, Increment = 10, Suffix = " studs", CurrentValue = 200, Flag = "FarmRadiusSlider", Callback = function(V) camSettings.attackRadius = V end })
     CamTab:CreateToggle({ Name = "Tự Động Bắt Quái", CurrentValue = false, Flag = "FarmAutoCatch", Callback = function(V) camSettings.autoCatch = V end })
     CamTab:CreateToggle({ Name = "Tạm dừng khi có Boss", CurrentValue = true, Flag = "FarmYieldForBoss", Callback = function(V) camSettings.yieldForBoss = V end })
 
-    CamTab:CreateSection("--- CÀI ĐẶT HỒI MÁU ---")
+    CamTab:CreateSection("HỒI MÁU")
     CamTab:CreateToggle({ 
         Name = "Tự Động Hồi Máu Pet", CurrentValue = false, Flag = "FarmAutoHeal", 
         Callback = function(V) pcall(function() camSettings.autoHeal = V end) end 
     })
     CamTab:CreateSlider({
-        Name = "Ngưỡng số lượng Pet chết để đi hồi máu", Range = {1, 5}, Increment = 1, Suffix = " Pet", CurrentValue = 1, Flag = "HealThresholdSlider",
+        Name = "Max pet heal", Range = {1, 3}, Increment = 1, Suffix = " Pet", CurrentValue = 1, Flag = "HealThresholdSlider",
         Callback = function(Value) pcall(function() camSettings.healThreshold = Value end) end,
     })
 
-    CamTab:CreateSection("--- TỰ ĐỘNG VỀ FARM ---")
+    CamTab:CreateSection("TỰ ĐỘNG VỀ FARM")
     CamTab:CreateToggle({
         Name = "Tự động về vị trí farm khi vào game", CurrentValue = false, Flag = "AutoReturnToFarm",
         Callback = function(V)
@@ -272,12 +272,12 @@ return function(Window, Utils, Controller)
         end
     })
 
-    CamTab:CreateSection("--- TỌA ĐỘ FARM ---")
+    CamTab:CreateSection("TỌA ĐỘ FARM")
     local initText = savedFarmPosition and string.format("📍 %d, %d, %d", math.floor(savedFarmPosition.Position.X), math.floor(savedFarmPosition.Position.Y), math.floor(savedFarmPosition.Position.Z)) or "📍 Chưa cấu hình"
     local FarmPosLabel = CamTab:CreateLabel("Tọa độ hiện tại: " .. initText)
 
     CamTab:CreateButton({
-        Name = "💾 Lưu vị trí đang đứng làm tâm điểm Farm",
+        Name = "💾 Lưu vị trí Farm",
         Callback = function()
             local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
             if hrp then
@@ -290,7 +290,7 @@ return function(Window, Utils, Controller)
     })
 
     CamTab:CreateButton({
-        Name = "🚀 Dịch chuyển nhanh về tọa độ Farm",
+        Name = "🚀 Dịch chuyển về tọa độ Farm",
         Callback = function()
             if savedFarmPosition then
                 SafeTeleport(savedFarmPosition, 5)
@@ -489,7 +489,7 @@ return function(Window, Utils, Controller)
                     camSettings.savedPosition = savedFarmPosition or hrp.CFrame
                     local recoverPos = FindRecoverPosition()
                     if recoverPos then
-                        game.StarterGui:SetCore("SendNotification", { Title = "🔄 Auto Heal", Text = "Pet đã kiệt sức. Tiến hành Teleport suối hồi máu...", Duration = 3 })
+                        game.StarterGui:SetCore("SendNotification", { Title = "🔄 Auto Heal", Text = "Pet đã kiệt sức. Tiến hành Teleport hồi máu...", Duration = 3 })
                         local plat = Instance.new("Part")
                         plat.Size = Vector3.new(20, 1, 20); plat.Position = recoverPos - Vector3.new(0, 3, 0)
                         plat.Anchored = true; plat.Transparency = 1; plat.CanCollide = true; plat.Parent = Workspace
@@ -518,5 +518,5 @@ return function(Window, Utils, Controller)
         end
     end)
 
-    print("✅ Module Farm V10 Final (Multi-select + Refresh Update) Loaded Successfully!")
+    
 end
