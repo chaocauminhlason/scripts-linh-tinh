@@ -254,16 +254,19 @@ return function(Window, Utils)
     end)
 
     -- ==========================================
-    -- MASTER LOOP: ĐIỀU PHỐI THỜI TIẾT (FIX TRÙNG LẶP ID)
+    -- MASTER LOOP: ĐIỀU PHỐI THỜI TIẾT (CÓ TÔN TRỌNG BOSS & DUNGEON)
     -- ==========================================
     task.spawn(function()
         local currentlyInTargetWeather = false
         local lastHopTime = 0 
-        local HOP_COOLDOWN = 5
+        local HOP_COOLDOWN = 10 
 
         while task.wait(2) do
             local controller = _G.SystemController
-            if controller and controller.IsPaused then continue end
+            
+            if controller and controller.IsPaused and not currentlyInTargetWeather then 
+                continue 
+            end
 
             if weatherHopSettings.enabled then
                 local env = getrenv()._G.PathTool
@@ -276,10 +279,7 @@ return function(Window, Utils)
                         if ok and isActive then
                             isTarget = true
                             for name, id in pairs(WeatherMap) do
-                                if id == tid then
-                                    activeTargetName = name
-                                    break
-                                end
+                                if id == tid then activeTargetName = name break end
                             end
                             break
                         end
@@ -287,44 +287,49 @@ return function(Window, Utils)
                 end
 
                 if isTarget then
-                    _G.ServerManager.pauseFarm = false
-                    _G.ServerManager.currentWeather = activeTargetName
-                    _G.BlacklistedServers = {}
-                    
+                    -- 🌤️ THỜI TIẾT ĐÚNG MỤC TIÊU -> NHẢ LOCK ĐỂ AI LÀM GÌ THÌ LÀM
                     if not currentlyInTargetWeather then
-                        print("[Weather] ✅ Xác nhận đang ở thời tiết mục tiêu: " .. tostring(activeTargetName))
+                        print("[Weather] ✅ Đã tìm thấy thời tiết VIP: " .. tostring(activeTargetName))
+                        game.StarterGui:SetCore("SendNotification", { Title = "🌤️ Thời Tiết VIP", Text = "Đang ở: " .. activeTargetName, Duration = 5 })
                         currentlyInTargetWeather = true
-                    end
-                else
-                    _G.ServerManager.pauseFarm = true
-                    currentlyInTargetWeather = false
-                    
-                    if (os.time() - lastHopTime) >= HOP_COOLDOWN then
-                        if controller then
-                            if not controller.ActiveTask then
-                                print("[Weather] 📥 Đẩy lệnh ServerHop vào hàng đợi...")
-                                
-                                table.insert(controller.TaskQueue, {
-                                    Name = "WeatherHop",
-                                    Func = function()
-                                        if controller.RequestLock("WeatherHop") then
-                                            lastHopTime = os.time()
-                                            Utils.HopServer("Săn Thời Tiết VIP")
-                                            controller.ReleaseLock("WeatherHop")
-                                        end
-                                    end
-                                })
-                                lastHopTime = os.time()
-                            end
-                        else
-                            warn("[Weather] ⚠️ SystemController chưa nạp! Chạy Hop độc lập...")
-                            lastHopTime = os.time()
-                            Utils.HopServer("Săn Thời Tiết VIP (Độc lập)")
+                        
+                        if controller and controller.CurrentLock == "WeatherHop" then
+                            controller.ReleaseLock("WeatherHop")
                         end
                     end
+                else
+                    -- 🌪️ THỜI TIẾT RÁC -> KIỂM TRA XEM CÓ ĐƯỢC PHÉP NHẢY SERVER KHÔNG
+                    currentlyInTargetWeather = false
+                    
+                    local canHop = true
+                    if controller and controller.CurrentLock then
+                        local lock = controller.CurrentLock
+                        -- DANH SÁCH VIP: Nếu đang làm các việc này thì cấm ngặt việc nhảy Server
+                        if lock == "BossHunt" or lock == "SpecialBoss" or lock == "AutoDungeon" then
+                            canHop = false
+                        end
+                    end
+                    
+                    if canHop then
+                        -- Không vướng VIP, được phép đạp Auto Farm ra và nhảy Server
+                        if (os.time() - lastHopTime) >= HOP_COOLDOWN then
+                            lastHopTime = os.time()
+                            
+                            print("🚨 [Weather] Thời tiết rác! Đang Server Hop...")
+                            if controller then controller.CurrentLock = "WeatherHop" end
+                            
+                            task.spawn(function()
+                                pcall(function() Utils.HopServer("Săn Thời Tiết VIP") end)
+                            end)
+                            
+                            task.wait(10)
+                        end
+                    else
+                        -- Đang vướng Boss hoặc Dungeon -> Chấp nhận ở lại cày cho xong
+                        -- Print log ra để bạn biết nó đang nhịn (bạn có thể xóa dòng print này nếu sợ trôi F9)
+                        print("[Weather] ⏳ Thời tiết xấu nhưng đang vướng " .. controller.CurrentLock .. ", nhẫn nhịn chờ xong việc...")
+                    end
                 end
-            else
-                _G.ServerManager.pauseFarm = false
             end
         end
     end)
