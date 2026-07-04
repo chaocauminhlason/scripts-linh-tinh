@@ -24,7 +24,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     
     if input.KeyCode == Enum.KeyCode.P then -- Đổi sang phím P
-        SystemController.IsPaused = not SystemController.IsPaused
+        SystemController.IsPaused = true
         
         for name, pauseFunc in pairs(SystemController.Modules) do
             pcall(function() pauseFunc(SystemController.IsPaused) end)
