@@ -252,7 +252,17 @@ return function(Window, Utils, Controller)
     CamTab:CreateSlider({ Name = "Bán kính Farm", Range = {10, 2000}, Increment = 10, Suffix = " studs", CurrentValue = 200, Flag = "FarmRadiusSlider", Callback = function(V) camSettings.attackRadius = V end })
     CamTab:CreateToggle({ Name = "Tự Động Bắt Quái", CurrentValue = false, Flag = "FarmAutoCatch", Callback = function(V) camSettings.autoCatch = V end })
     CamTab:CreateToggle({ Name = "Tạm dừng khi có Boss", CurrentValue = true, Flag = "FarmYieldForBoss", Callback = function(V) camSettings.yieldForBoss = V end })
-    
+
+    CamTab:CreateSection("--- CÀI ĐẶT HỒI MÁU ---")
+    CamTab:CreateToggle({ 
+        Name = "Tự Động Hồi Máu Pet", CurrentValue = false, Flag = "FarmAutoHeal", 
+        Callback = function(V) pcall(function() camSettings.autoHeal = V end) end 
+    })
+    CamTab:CreateSlider({
+        Name = "Ngưỡng số lượng Pet chết để đi hồi máu", Range = {1, 5}, Increment = 1, Suffix = " Pet", CurrentValue = 1, Flag = "HealThresholdSlider",
+        Callback = function(Value) pcall(function() camSettings.healThreshold = Value end) end,
+    })
+
     CamTab:CreateSection("--- TỰ ĐỘNG VỀ FARM ---")
     CamTab:CreateToggle({
         Name = "Tự động về vị trí farm khi vào game", CurrentValue = false, Flag = "AutoReturnToFarm",
@@ -329,6 +339,29 @@ return function(Window, Utils, Controller)
         end
     end)
 
+        local function FindRecoverPosition()
+        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not hrp then return nil end
+        local bestPos, minDist = nil, math.huge
+        local areaFolder = Workspace:FindFirstChild("Area")
+        if areaFolder then
+            for _, mapFolder in ipairs(areaFolder:GetChildren()) do
+                local recFolder = mapFolder:FindFirstChild("ServerZone") and mapFolder.ServerZone:FindFirstChild("Recover")
+                if recFolder then
+                    for _, recPart in ipairs(recFolder:GetDescendants()) do
+                        if recPart:IsA("BasePart") then
+                            local dist = (hrp.Position - recPart.Position).Magnitude
+                            if dist < minDist then 
+                                minDist = dist
+                                bestPos = recPart.Position 
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        return bestPos
+    end
     -- LUỒNG TỰ ĐỘNG BẮT QUÁI
     task.spawn(function()
         while task.wait(0.5) do
@@ -383,6 +416,96 @@ return function(Window, Utils, Controller)
                         end
                     end
                 end)
+            end
+        end
+    end)
+        -- 3. LUỒNG HỒI MÁU PET
+    local function CheckDeadPetsFromUI()
+        local deadCount = 0
+        local totalPets = 0
+        pcall(function()
+            local petListUI = LocalPlayer:FindFirstChild("PlayerGui") 
+                and LocalPlayer.PlayerGui:FindFirstChild("MainGui") 
+                and LocalPlayer.PlayerGui.MainGui:FindFirstChild("ScreenGui") 
+                and LocalPlayer.PlayerGui.MainGui.ScreenGui:FindFirstChild("MainLeftView") 
+                and LocalPlayer.PlayerGui.MainGui.ScreenGui.MainLeftView:FindFirstChild("PetList")
+            if not petListUI then return end
+            for _, cell in pairs(petListUI:GetChildren()) do
+                if cell.Name == "ItemCell" then
+                    local labName = cell:FindFirstChild("LabName", true)
+                    if labName and labName.Text ~= "Label" and labName.Text ~= "" then
+                        totalPets = totalPets + 1
+                        local hp0 = cell:FindFirstChild("hp0", true)
+                        if hp0 then
+                            local bgColor = hp0.BackgroundColor3
+                            if bgColor and (bgColor.R > 0.8 and bgColor.G < 0.3 and bgColor.B < 0.3) then
+                                deadCount = deadCount + 1
+                            end
+                        else
+                            deadCount = deadCount + 1
+                        end
+                    end
+                end
+            end
+        end)
+        return deadCount, totalPets
+    end
+
+        local function FindRecoverPosition()
+        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not hrp then return nil end
+        local bestPos, minDist = nil, math.huge
+        local areaFolder = Workspace:FindFirstChild("Area")
+        if areaFolder then
+            for _, mapFolder in ipairs(areaFolder:GetChildren()) do
+                local recFolder = mapFolder:FindFirstChild("ServerZone") and mapFolder.ServerZone:FindFirstChild("Recover")
+                if recFolder then
+                    for _, recPart in ipairs(recFolder:GetDescendants()) do
+                        if recPart:IsA("BasePart") then
+                            local dist = (hrp.Position - recPart.Position).Magnitude
+                            if dist < minDist then 
+                                minDist = dist
+                                bestPos = recPart.Position 
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        return bestPos
+    end
+
+    task.spawn(function()
+        while task.wait(1) do
+            if _G.SystemController and _G.SystemController.IsPaused then continue end
+            if not camSettings.autoHeal or camSettings.isHealing then continue end
+            if LocalPlayer:GetAttribute("RidePetId") ~= nil then continue end
+            
+            local deadCount, totalPets = CheckDeadPetsFromUI()
+            if totalPets > 0 and deadCount >= camSettings.healThreshold then
+                camSettings.isHealing = true
+                local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    camSettings.savedPosition = savedFarmPosition or hrp.CFrame
+                    local recoverPos = FindRecoverPosition()
+                    if recoverPos then
+                        game.StarterGui:SetCore("SendNotification", { Title = "🔄 Auto Heal", Text = "Pet đã kiệt sức. Tiến hành Teleport suối hồi máu...", Duration = 3 })
+                        local plat = Instance.new("Part")
+                        plat.Size = Vector3.new(20, 1, 20); plat.Position = recoverPos - Vector3.new(0, 3, 0)
+                        plat.Anchored = true; plat.Transparency = 1; plat.CanCollide = true; plat.Parent = Workspace
+                        
+                        SafeTeleport(CFrame.new(recoverPos), 5)
+                        task.wait(10)
+                        plat:Destroy()
+                        
+                        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                            SafeTeleport(camSettings.savedPosition, 5)
+                        end
+                        game.StarterGui:SetCore("SendNotification", { Title = "✅ Hoàn Tất", Text = "Đã khôi phục sinh lực Pet và về bãi farm!", Duration = 3 })
+                    end
+                end
+                camSettings.isHealing = false
+                camSettings.savedPosition = nil
             end
         end
     end)
