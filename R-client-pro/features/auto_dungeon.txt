@@ -115,7 +115,7 @@ return function(Window, Utils, WebhookModule)
         end
     })
 
-    DungeonTab:CreateSection("--- LOGIC TRONG HẦM NGỤC ---")
+    DungeonTab:CreateSection("LOGIC TRONG HẦM NGỤC")
     DungeonTab:CreateToggle({ Name = "Tự Động Đánh Quái", CurrentValue = false, Flag = "AutoAttack_V2", Callback = function(Value) autoAttackEnabled = Value end })
     DungeonTab:CreateToggle({ Name = "Tự Động Thoát Màn 20", CurrentValue = false, Flag = "AutoExitDungeon", Callback = function(Value) autoExitEnabled = Value if not Value then autoExitTriggered = false stage20ClockStarted = false waitingForHost = false end end })
     
@@ -124,7 +124,7 @@ return function(Window, Utils, WebhookModule)
         Callback = function(Value) waitHostTimeoutMinutes = Value end,
     })
 
-    DungeonTab:CreateSection("--- LOGIC NGOÀI SẢNH (LOBBY) ---")
+    DungeonTab:CreateSection("LOGIC NGOÀI SẢNH (LOBBY)")
     DungeonTab:CreateToggle({ Name = "Tự Động Join Phòng", CurrentValue = false, Flag = "AutoJoinOthers", Callback = function(Value) autoJoinOthersEnabled = Value end })
     DungeonTab:CreateToggle({ Name = "Tự Động Tạo Phòng & Start", CurrentValue = false, Flag = "AutoCreateRoom", Callback = function(Value) autoCreateEnabled = Value end })
 
@@ -309,7 +309,7 @@ return function(Window, Utils, WebhookModule)
                 -- ========================================================
                 -- [TÍCH HỢP]: LOGIC NGOÀI SẢNH - NHƯỜNG ĐƯỜNG CHO BOSS
                 -- ========================================================
-                if _G.PendingBossHunt then
+                if _G.PendingBossHunt or _G.PendingSpecialBoss then
                     DungeonStatus:Set("🛑 Sảnh: Đang nhường đường cho Auto Boss...")
                     if controller then controller.ReleaseLock("AutoDungeon") end
                     
