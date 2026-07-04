@@ -79,6 +79,8 @@ return function(Window, Utils)
     local realName = LocalPlayer.Name
     local realDisplayName = LocalPlayer.DisplayName
 
+    local StreamerTab = OptimizationTab
+
 StreamerTab:CreateSection("--- TÙY CHỈNH TÊN ---")
     local NameInput = StreamerTab:CreateInput({
         Name = "Tên hiển thị (Streamer Mode)",
