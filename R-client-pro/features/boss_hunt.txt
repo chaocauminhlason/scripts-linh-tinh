@@ -39,8 +39,9 @@ return function(Window, Utils)
     -- BOSS MAPPING & BIẾN TOÀN CỤC
     -- ==========================================
     local WorldBossMapping = {
-        [2] = {"flaragon", "flara"}, [3] = {"gildron", "gil", "dron"}, [4] = {"shadeknight", "shake", "knight"},
-        [5] = {"mountusk", "godzilla", "glaza"}, [6] = {"tidevex", "tide", "vex"},
+        [2] = {"flaragon", "flara"}, [3] = {"mountusk", "godzilla", 
+		[4] = {"shadeknight", "shake", "knight"}, "glaza"},[5] = {"gildron", "gil", "dron"},  
+		[6] = {"tidevex", "tide", "vex"},
         [7] = {"frostwyrm", "frost", "wyrm"}, [8] = {"dracospike", "draco", "gai"},
         [9] = {"thunderclaw", "thunder", "claw"}, [10] = {"lampyr"},
         [11] = {"scareaper", "scare", "reaper"}, [12] = {"Beatopus", "Bea", "topus"}
@@ -413,8 +414,5 @@ end
         end
     end)
 
-    BossTab:CreateSection("ĐIỀU KHIỂN THỦ CÔNG")
-    BossTab:CreateButton({ Name = "🏠 VỀ STARTER ISLAND", Callback = function() Utils.TeleportToStarterIsland() end })
 
-    print("✅ Boss Hunt 4.7 (Smart Retry & Distance Check) loaded successfully!")
 end
