@@ -79,9 +79,9 @@ end
 local AreaMap = {
     [1] = "Starter Island",
     [2] = "Volcano",
-    [3] = "Duneveil Isle",
+    [3] = "Frost Isle",
     [4] = "Neverland",
-    [5] = "Frost Isle",
+    [5] = "Duneveil Isle",
     [6] = "Tideland",
     [7] = "Spirit Grove",
     [8] = "Dragon's Breath",
