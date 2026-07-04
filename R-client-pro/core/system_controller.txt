@@ -19,42 +19,37 @@ end
 -- [QUAN TRỌNG NHẤT]: Ép ngay nó vào _G để các file khác gọi không bị lỗi nil
 _G.SystemController = SystemController 
 
--- [1] HỆ THỐNG HOTKEY (PAUSE/RESUME)
+-- [1] HỆ THỐNG HOTKEY (CHỈ PAUSE - PANIC BUTTON)
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     
-    if input.KeyCode == Enum.KeyCode.P then -- Đổi sang phím P
+    if input.KeyCode == Enum.KeyCode.P then -- Phím P để ép dừng khẩn cấp
+        -- 1. Chốt cứng trạng thái hệ thống là đang Dừng
         SystemController.IsPaused = true
         
+        -- 2. Gửi lệnh TẮT (truyền false) đến tất cả các module đang chạy
         for name, pauseFunc in pairs(SystemController.Modules) do
-            pcall(function() pauseFunc(SystemController.IsPaused) end)
+            pcall(function() pauseFunc(false) end)
         end
-        -- Đảm bảo _G.Config tồn tại để không văng lỗi khi spam P sớm
-        _G.Config = _G.Config or {}
         
-        if SystemController.IsPaused then
-            -- BƯỚC PAUSE: Lưu trạng thái & Cắt luồng
-            print("[System] ⏸️ PAUSED - Đang lưu trạng thái...")
-            SystemController.SavedState.AutoFarm = _G.Config.AutoFarm or false
-            SystemController.SavedState.BossHunt = _G.Config.BossHunt or false
-            
-            -- Tắt toàn bộ
-            _G.Config.AutoFarm = false
-            _G.Config.BossHunt = false
-            
-            pcall(function()
-                game.StarterGui:SetCore("SendNotification", {Title = "Hệ Thống", Text = "⏸️ Đã DỪNG mọi hoạt động (P)", Duration = 3})
-            end)
-        else
-            -- BƯỚC RESUME: Nạp lại trạng thái cũ
-            print("[System] ▶️ RESUMED - Đang nạp lại trạng thái...")
-            _G.Config.AutoFarm = SystemController.SavedState.AutoFarm
-            _G.Config.BossHunt = SystemController.SavedState.BossHunt
-            
-            pcall(function()
-                game.StarterGui:SetCore("SendNotification", {Title = "Hệ Thống", Text = "▶️ Tiếp tục hoạt động (P)", Duration = 3})
-            end)
-        end
+        -- 3. Lưu lại trạng thái của _G.Config (nếu bạn vẫn dùng hệ thống cũ này)
+        _G.Config = _G.Config or {}
+        print("[System] 🛑 PANIC BUTTON - Đang ép dừng và lưu trạng thái...")
+        SystemController.SavedState.AutoFarm = _G.Config.AutoFarm or false
+        SystemController.SavedState.BossHunt = _G.Config.BossHunt or false
+        
+        -- 4. Tắt biến cấu hình
+        _G.Config.AutoFarm = false
+        _G.Config.BossHunt = false
+        
+        -- 5. Thông báo ra màn hình
+        pcall(function()
+            game.StarterGui:SetCore("SendNotification", {
+                Title = "PANIC BUTTON", 
+                Text = "🛑 Đã ÉP DỪNG mọi hoạt động!", 
+                Duration = 3
+            })
+        end)
     end
 end)
 
