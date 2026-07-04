@@ -305,7 +305,7 @@ return function(Window, Utils)
                     if controller and controller.CurrentLock then
                         local lock = controller.CurrentLock
                         -- DANH SÁCH VIP: Nếu đang làm các việc này thì cấm ngặt việc nhảy Server
-                        if lock == "BossHunt" or lock == "SpecialBoss" or lock == "AutoDungeon" then
+                        if lock == "BossHunt" or lock == "SpecialBoss" or lock == "AutoDungeon" or lock == "AutoRift" then
                             canHop = false
                         end
                     end
