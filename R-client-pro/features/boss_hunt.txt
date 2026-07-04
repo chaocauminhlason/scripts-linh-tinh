@@ -17,7 +17,7 @@ return function(Window, Utils)
         [2] = {"flaragon", "flara"}, [3] = {"gildron", "gil", "dron"}, [4] = {"shadeknight", "shake", "knight"},
         [5] = {"mountusk", "godzilla", "glaza", "glazadon"}, [6] = {"tidevex", "tide", "vex"},
         [7] = {"frostwyrm", "frost", "wyrm"}, [8] = {"dracospike", "draco", "gai"},
-        [9] = {"thunderclaw", "thunder", "claw"}, [10] = {"lampyr"},
+        [9] = {"thunderclaw", "thunder", "claw", "Crystalfae"}, [10] = {"lampyr"},
         [11] = {"scareaper", "scare", "reaper"}, [12] = {"Beatopus", "Bea", "topus"}
     }
 
