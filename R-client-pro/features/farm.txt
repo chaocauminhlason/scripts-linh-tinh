@@ -1,7 +1,7 @@
 -- ====================================================================
 -- MODULE: R-GAME (AUTO BẮT, ĐÁNH, HỒI MÁU - BẢN FULL INTEGRATED V10 FINAL)
 -- ====================================================================
-return function(Window, Utils)
+return function(Window, Utils, Controller)
     local Players = game:GetService("Players")
     local Workspace = game:GetService("Workspace")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
