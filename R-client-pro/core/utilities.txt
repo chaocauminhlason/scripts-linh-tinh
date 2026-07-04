@@ -944,6 +944,103 @@ function Utils.HopServer(reason)
     end)
 end
 
+local MonsterNameCache = {}
+
+function Utils.GetMonsterRealName(monster)
+    if not monster then return "Unknown" end
+
+    -- 1. Lấy tmplId từ attribute
+    local tmplId = monster:GetAttribute("TmplId")
+    if not tmplId then
+        local parsedId = string.match(monster.Name, "Monster_(%d+)")
+        if parsedId then tmplId = tonumber(parsedId) end
+    end
+
+    if tmplId and MonsterNameCache[tmplId] then
+        return MonsterNameCache[tmplId]
+    end
+
+    -- 2. Dùng MgrMonsterClient (tin cậy nhất)
+    local env = getrenv and getrenv()._G and getrenv()._G.PathTool
+    if env and env.MgrMonsterClient then
+        local mgrMonster = env.MgrMonsterClient
+        local uid = tonumber(string.match(monster.Name, "Monster_(%d+)"))
+        if uid then
+            local success, info = pcall(function() 
+                return mgrMonster:GetMonsterInfo(uid) 
+            end)
+            if not success then
+                success, info = pcall(function() 
+                    return mgrMonster.GetMonsterInfo(uid) 
+                end)
+            end
+            if success and type(info) == "table" then
+                local realTmplId = info.tmplId or info.TmplId or info.cfgId or info.id
+                if realTmplId then
+                    local cfgMonster = env.CfgMonster and env.CfgMonster.Tmpls
+                    if cfgMonster then
+                        local cfgData = cfgMonster[tostring(realTmplId)] or cfgMonster[tonumber(realTmplId)]
+                        if cfgData then
+                            local realName = cfgData.Name or cfgData.name or monster.Name
+                            if tmplId then
+                                MonsterNameCache[tmplId] = realName
+                            else
+                                MonsterNameCache[realTmplId] = realName
+                            end
+                            return realName
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- 3. Fallback: ReplicatedStorage
+    if tmplId then
+        local MonsterConfigFolder = ReplicatedStorage:FindFirstChild("CommonConfig") 
+            and ReplicatedStorage.CommonConfig:FindFirstChild("Monster")
+        if MonsterConfigFolder then
+            local configFile = MonsterConfigFolder:FindFirstChild("Monster" .. tostring(tmplId))
+            if configFile then
+                local success, configData = pcall(require, configFile)
+                if success and type(configData) == "table" then
+                    local realName = configData.Name or monster.Name or "Unknown"
+                    MonsterNameCache[tmplId] = realName
+                    return realName
+                end
+            end
+        end
+    end
+
+    return monster.Name or "Unknown"
+end
+
+-- ==========================================
+-- HÀM QUÉT TẤT CẢ TÊN QUÁI TRÊN MAP
+-- ==========================================
+function Utils.GetAllMonsterNames()
+    local monsterNames = {}
+    local nameDict = {}
+    local foldersToScan = {"Monsters", "ClientMonsters"}
+    
+    for _, folderName in ipairs(foldersToScan) do
+        local folder = Workspace:FindFirstChild(folderName)
+        if folder then
+            for _, monster in pairs(folder:GetChildren()) do
+                if monster:IsA("Model") then
+                    local realName = Utils.GetMonsterRealName(monster)
+                    if realName and realName ~= "" and realName ~= "Unknown" and not nameDict[realName] then
+                        nameDict[realName] = true
+                        table.insert(monsterNames, realName)
+                    end
+                end
+            end
+        end
+    end
+    
+    table.sort(monsterNames)
+    return monsterNames
+end
 
 -- Trả về bảng Utils
 return Utils
