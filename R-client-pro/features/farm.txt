@@ -321,7 +321,13 @@ return function(Window, Utils, Controller)
                 if monstersFolder then
                     for _, monster in pairs(monstersFolder:GetChildren()) do
                         if monster:IsA("Model") or monster:IsA("BasePart") then
-                            local root = monster.PrimaryPart or monster:FindFirstChild("HumanoidRootPart") or monster:FindFirstChild("Root") or (monster:IsA("BasePart") and monster)
+                            local root = nil
+
+                            if monster:IsA("Model") then
+                                root = monster.PrimaryPart or monster:FindFirstChild("HumanoidRootPart") or monster:FindFirstChild("Root")
+                            elseif monster:IsA("BasePart") then
+                                root = monster
+                            end
                             
                             if root and root:IsA("BasePart") and monster:GetAttribute("CatchEndTick") == nil then
                                 local distance = (root.Position - centerPos).Magnitude
