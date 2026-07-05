@@ -944,19 +944,14 @@ function Utils.HopServer(reason)
     end)
 end
 
--- ==========================================
--- HÀM LẤY TÊN THẬT CỦA QUÁI (ĐÃ TÍCH HỢP UPVALUES TỪ AUTO FARM)
--- ==========================================
-local MonsterNameCache = {}
 local InternalMonsterTable = nil
 
--- Hàm khởi tạo đường hầm đọc trộm RAM
-local function InitMonsterMemory()
+-- Khởi tạo đường hầm đọc RAM (Chỉ chạy 1 lần cho nhẹ máy)
+function Utils.InitMonsterMemory()
     if InternalMonsterTable then return end
     pcall(function()
         local env = getrenv and getrenv()._G and getrenv()._G.PathTool
         if env and env.MgrMonsterClient then
-            -- Móc túi bảng dữ liệu ẩn đằng sau hàm GetMonsterInfo
             local upvalues = debug.getupvalues(env.MgrMonsterClient.GetMonsterInfo)
             if upvalues and type(upvalues[1]) == "table" then
                 InternalMonsterTable = upvalues[1]
@@ -965,64 +960,81 @@ local function InitMonsterMemory()
     end)
 end
 
-function Utils.GetMonsterRealName(monster)
-    if not monster then return "Unknown" end
+-- Hàm Scan vạn năng: Truyền keywords vào để lọc, bỏ trống để lấy TẤT CẢ
+function Utils.ScanMonsters(keywords)
+    Utils.InitMonsterMemory()
+    local results = {}
     
-    local rawName = monster.Name
+    local env = getrenv and getrenv()._G and getrenv()._G.PathTool
+    if not env or not env.CfgMonster then return results end
     
-    -- 1. Bóc tách UID (VD: "Monster_123" -> 123)
-    local uidStr = string.match(rawName, "Monster_(%d+)")
-    local uidNum = uidStr and tonumber(uidStr) or nil
-    
-    -- Nếu không có định dạng Monster_UID thì trả về tên gốc luôn
-    if not uidNum then return rawName end
-    
-    -- Kiểm tra Cache trước cho nhẹ máy
-    if MonsterNameCache[uidNum] then return MonsterNameCache[uidNum] end
-    
-    -- 2. Đọc trộm RAM qua Upvalues (Cơ chế bá đạo từ Auto Farm)
-    InitMonsterMemory()
-    
-    if InternalMonsterTable and type(InternalMonsterTable) == "table" then
-        local rawData = InternalMonsterTable[uidNum]
-        if type(rawData) == "table" then
-            local tmplId = rawData.TmplId or rawData.tmplId or rawData.cfgId
-            if tmplId then
-                local env = getrenv()._G.PathTool
-                if env and env.CfgMonster and env.CfgMonster.Tmpls then
-                    local tmpls = env.CfgMonster.Tmpls
-                    local cfg = tmpls[tostring(tmplId)] or tmpls[tonumber(tmplId)]
-                    if cfg then
-                        local realName = cfg.Name or cfg.name or cfg.Title
-                        if realName then
-                            MonsterNameCache[uidNum] = realName
-                            return realName
+    -- Quét đa thư mục tránh bị Dev giấu quái
+    local Workspace = game:GetService("Workspace")
+    local folders = {
+        Workspace:FindFirstChild("ClientMonsters"),
+        Workspace:FindFirstChild("Monsters")
+    }
+
+    for _, folder in ipairs(folders) do
+        if folder then
+            for _, obj in pairs(folder:GetChildren()) do
+                local uidStr = string.match(obj.Name, "Monster_(%d+)")
+                if uidStr then
+                    local uidNum = tonumber(uidStr)
+                    local realName = "Unknown"
+                    
+                    -- 1. Giải mã tên thật từ RAM
+                    if InternalMonsterTable and InternalMonsterTable[uidNum] then
+                        local rawData = InternalMonsterTable[uidNum]
+                        local tmplId = rawData.TmplId or rawData.tmplId or rawData.cfgId
+                        if tmplId then
+                            local cfg = env.CfgMonster.Tmpls[tostring(tmplId)] or env.CfgMonster.Tmpls[tonumber(tmplId)]
+                            if cfg then
+                                realName = cfg.Name or cfg.name or cfg.Title or "Unknown"
+                            end
+                        end
+                    end
+                    
+                    -- 2. Bộ lọc Keywords (So khớp chuẩn xác)
+                    local isMatch = false
+                    if type(keywords) ~= "table" or #keywords == 0 then
+                        isMatch = true -- Không truyền keyword -> Lấy tất cả
+                    else
+                        local lowerName = string.lower(realName)
+                        for _, kw in ipairs(keywords) do
+                            if string.find(lowerName, string.lower(kw)) then
+                                isMatch = true
+                                break
+                            end
+                        end
+                    end
+                    
+                    -- 3. Xử lý tọa độ Anti-Crash an toàn tuyệt đối
+                    if isMatch then
+                        local root = nil
+                        if obj:IsA("Model") then
+                            root = obj.PrimaryPart or obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildWhichIsA("BasePart")
+                        elseif obj:IsA("BasePart") then
+                            root = obj
+                        end
+                        
+                        -- Chỉ đưa vào danh sách nếu có thể xác định được tọa độ
+                        if root then
+                            table.insert(results, {
+                                Id = uidNum,
+                                Name = realName,
+                                Position = root.Position,
+                                Object = obj,
+                                RootPart = root
+                            })
                         end
                     end
                 end
             end
         end
     end
-
-    -- 3. Fallback: Nếu RAM lỗi, ráng đọc ReplicatedStorage
-    local tmplIdFallback = monster:GetAttribute("TmplId")
-    if tmplIdFallback then
-        local MonsterConfigFolder = ReplicatedStorage:FindFirstChild("CommonConfig") 
-            and ReplicatedStorage.CommonConfig:FindFirstChild("Monster")
-        if MonsterConfigFolder then
-            local configFile = MonsterConfigFolder:FindFirstChild("Monster" .. tostring(tmplIdFallback))
-            if configFile then
-                local success, configData = pcall(require, configFile)
-                if success and type(configData) == "table" then
-                    local realName = configData.Name or "Unknown"
-                    MonsterNameCache[uidNum] = realName
-                    return realName
-                end
-            end
-        end
-    end
-
-    return rawName
+    
+    return results
 end
 
 -- Trả về bảng Utils
