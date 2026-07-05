@@ -1,6 +1,6 @@
 -- ====================================================================
 -- MODULE: TỔNG LÃNH BỘ SĂN BOSS (WORLD BOSS & SPECIAL BOSS HỢP NHẤT)
--- BẢN CẬP NHẬT: FIX LỖI UI, THÊM END, SỬ DỤNG UTILS.GETMONSTERREALNAME
+-- BẢN CẬP NHẬT: CHUNG UI TAB, CHUNG SENSOR UI, CHIA ƯU TIÊN LUỒNG CHẠY
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -52,7 +52,6 @@ return function(Window, Utils)
         if Utils and Utils.LoadSelectedAreas then
             local savedWorlds = Utils.LoadSelectedAreas("R_SelectedBossWorlds.json")
             if type(savedWorlds) == "table" and #savedWorlds > 0 then worldSettings.selectedWorlds = savedWorlds end
-
             local savedSpWorlds = Utils.LoadSelectedAreas("R_SelectedSpBossWorlds.json")
             if type(savedSpWorlds) == "table" and #savedSpWorlds > 0 then specialSettings.selectedWorlds = savedSpWorlds end
         end
@@ -83,13 +82,15 @@ return function(Window, Utils)
     end
 
     -- ==========================================
-    -- 3. GIAO DIỆN UI TỔNG HỢP (CHUNG 1 TAB)
+    -- FIX BUG 1: BossTab khai báo TRƯỚC khi dùng
     -- ==========================================
     local BossTab = Window:CreateTab("Săn Boss", 4483345998)
 
     -- --- PHẦN 1: SPECIAL BOSS ---
     BossTab:CreateSection("🌟 AUTO SPECIAL BOSS (ƯU TIÊN CAO)")
     local SpStatusLabel = BossTab:CreateLabel("🔴 Trạng thái: Đang ngủ đông (Chờ thông báo)")
+
+    -- SpTargetLabel giờ khai báo SAU BossTab — đúng thứ tự
     local SpTargetLabel = BossTab:CreateLabel("🎯 Đã chọn " .. #specialSettings.selectedWorlds .. " world")
 
     BossTab:CreateToggle({
@@ -206,11 +207,11 @@ return function(Window, Utils)
                         else
                             print("⏩ [SPECIAL] Bỏ qua " .. bossName .. " ở Đảo " .. worldId .. " vì không nằm trong danh sách chọn!")
                         end
-                    end -- ✅ ĐÃ BỔ SUNG CHỮ END BỊ THIẾU Ở ĐÂY
+                    end
                 end
-            end
+            end -- FIX BUG 2: end đóng đúng cho block "if specialSettings.enabled"
             
-            -- Lọc World Boss Thường
+            -- Lọc World Boss Thường (giờ nằm NGOÀI block Special Boss)
             if worldSettings.enabled and (string.find(descTxt, " appear at ") or string.find(descTxt, " spawned")) then
                 local currentTime = os.time()
                 if currentTime - lastWorldBossAlertTime >= 60 then
@@ -269,7 +270,7 @@ return function(Window, Utils)
     pcall(function() DataPullFunc = ReplicatedStorage:WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc") end)
 
     -- ==========================================
-    -- 5. LUỒNG CHẠY: SPECIAL BOSS (SỬ DỤNG UTILS MỚI)
+    -- 5. LUỒNG CHẠY: SPECIAL BOSS
     -- ==========================================
     task.spawn(function()
         while task.wait(0.2) do
@@ -303,25 +304,30 @@ return function(Window, Utils)
 
             local clientMonsters = Workspace:FindFirstChild("ClientMonsters")
             local bestTarget = nil; local closestDist = math.huge
-            
             if clientMonsters then
-                -- ✅ Áp dụng Utils.GetMonsterRealName để code sạch và mạnh hơn
+                local env = getrenv()._G.PathTool
+                local mgrMonster = env.MgrMonsterClient
+                local cfgMonster = env.CfgMonster.Tmpls
+                
                 for _, obj in pairs(clientMonsters:GetChildren()) do
                     if obj:IsA("Model") then
-                        local realName = Utils.GetMonsterRealName(obj)
-                        if realName and realName ~= "Unknown" then
-                            local targetLower = string.lower(spHuntState.targetBoss)
-                            local rNameLower = string.lower(realName)
+                        local idStr = string.match(obj.Name, "Monster_(%d+)")
+                        if idStr then
+                            local uid = tonumber(idStr)
+                            local success, info = pcall(function() return mgrMonster:GetMonsterInfo(uid) end)
+                            if not success or not info then success, info = pcall(function() return mgrMonster.GetMonsterInfo(uid) end) end
                             
-                            if string.find(rNameLower, targetLower) or string.find(targetLower, rNameLower) then
-                                local root = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
-                                if root then
-                                    local dist = (hrp.Position - root.Position).Magnitude
-                                    if dist < closestDist then 
-                                        closestDist = dist
-                                        local uidStr = string.match(obj.Name, "Monster_(%d+)")
-                                        if uidStr then
-                                            bestTarget = {id = tonumber(uidStr), root = root} 
+                            if success and type(info) == "table" and (info.tmplId or info.TmplId or info.cfgId or info.id) then
+                                local tmplId = info.tmplId or info.TmplId or info.cfgId or info.id
+                                local cfgData = cfgMonster[tostring(tmplId)] or cfgMonster[tonumber(tmplId)]
+                                if cfgData then
+                                    local realName = string.lower(cfgData.Name or cfgData.name or "")
+                                    local targetLower = string.lower(spHuntState.targetBoss)
+                                    if string.find(realName, targetLower) or string.find(targetLower, realName) then
+                                        local root = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+                                        if root then
+                                            local dist = (hrp.Position - root.Position).Magnitude
+                                            if dist < closestDist then closestDist = dist; bestTarget = {id = uid, root = root} end
                                         end
                                     end
                                 end
@@ -360,7 +366,7 @@ return function(Window, Utils)
     end)
 
     -- ==========================================
-    -- 6. LUỒNG CHẠY: WORLD BOSS THƯỜNG (SỬ DỤNG UTILS MỚI)
+    -- 6. LUỒNG CHẠY: WORLD BOSS THƯỜNG
     -- ==========================================
     local function ScanWorldBoss()
         local currentWorldId = _G.BossStatus.currentWorldId
@@ -368,21 +374,30 @@ return function(Window, Utils)
         local keywords = WorldBossMapping[currentWorldId] or {}
         if #keywords == 0 then return nil, nil, nil end
 
+        local env = getrenv()._G.PathTool
+        if not env or not env.MgrMonsterClient or not env.CfgMonster then return nil, nil, nil end
+        local mgrMonster = env.MgrMonsterClient; local cfgMonster = env.CfgMonster.Tmpls
         local clientMonsters = Workspace:FindFirstChild("ClientMonsters")
         if not clientMonsters then return nil, nil, nil end
 
-        -- ✅ Áp dụng Utils.GetMonsterRealName
         for _, obj in pairs(clientMonsters:GetChildren()) do
             if obj:IsA("Model") then
-                local realName = Utils.GetMonsterRealName(obj)
-                if realName and realName ~= "Unknown" then
-                    local lowerName = string.lower(realName)
-                    for _, kw in pairs(keywords) do
-                        if string.find(lowerName, string.lower(kw)) then
-                            local root = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
-                            local idStr = string.match(obj.Name, "Monster_(%d+)")
-                            if idStr then
-                                return tonumber(idStr), realName, (root and root.Position or obj.Position)
+                local idStr = string.match(obj.Name, "Monster_(%d+)")
+                if idStr then
+                    local uid = tonumber(idStr)
+                    local success, info = pcall(function() return mgrMonster:GetMonsterInfo(uid) end)
+                    if not success or not info then success, info = pcall(function() return mgrMonster.GetMonsterInfo(uid) end) end
+                    
+                    if success and type(info) == "table" and (info.tmplId or info.TmplId or info.cfgId or info.id) then
+                        local tmplId = info.tmplId or info.TmplId or info.cfgId or info.id
+                        local cfgData = cfgMonster[tostring(tmplId)] or cfgMonster[tonumber(tmplId)]
+                        if cfgData then
+                            local lowerName = string.lower(cfgData.Name or cfgData.name or "")
+                            for _, kw in pairs(keywords) do
+                                if string.find(lowerName, kw) then
+                                    local root = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+                                    return uid, (cfgData.Name or cfgData.name), (root and root.Position or obj.Position)
+                                end
                             end
                         end
                     end
