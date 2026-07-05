@@ -256,6 +256,7 @@ return function(Window, Utils, Controller)
 
     CamTab:CreateSection("FARM")
     CamTab:CreateToggle({ Name = "Tự Động Đánh Quái", CurrentValue = false, Flag = "FarmAutoAttack", Callback = function(V) camSettings.autoAttack = V end })
+    CamTab:CreateToggle({
     Name = "Tấn công dịch chuyển", 
     CurrentValue = false, 
     Flag = "AutoFarmTeleportToggle",
@@ -268,7 +269,6 @@ return function(Window, Utils, Controller)
 })
     CamTab:CreateSlider({ Name = "Bán kính Farm", Range = {10, 2000}, Increment = 10, Suffix = " studs", CurrentValue = 200, Flag = "FarmRadiusSlider", Callback = function(V) camSettings.attackRadius = V end })
     CamTab:CreateToggle({ Name = "Tự Động Bắt Quái", CurrentValue = false, Flag = "FarmAutoCatch", Callback = function(V) camSettings.autoCatch = V end })
-    CamTab:CreateToggle({
 
     CamTab:CreateSection("HỒI MÁU")
     CamTab:CreateToggle({ 
