@@ -8,6 +8,12 @@ return function(Window, Utils, Controller)
     local HttpService = game:GetService("HttpService")
     local LocalPlayer = Players.LocalPlayer
 
+    local tpFarmSettings = {
+    enabled = false,
+    attackDelay = 0.2, -- Tốc độ vung chiêu (tránh bị server kick vì spam)
+    distanceOffset = Vector3.new(0, 7, 0) -- Teleport lên trên đầu quái 7 studs để né đòn
+}
+
     -- ==========================================
     -- 1. CẤU HÌNH STATE & ĐĂNG KÝ HỆ THỐNG
     -- ==========================================
@@ -24,6 +30,7 @@ return function(Window, Utils, Controller)
         attackRadius = 200
     }
 
+    
     if _G.SystemController and type(_G.SystemController.registerModule) == "function" then
         _G.SystemController:registerModule("AutoFarm", function(paused)
             camSettings.autoAttack = not paused
@@ -271,7 +278,17 @@ return function(Window, Utils, Controller)
             if V and savedFarmPosition then task.spawn(function() task.wait(1) SafeTeleport(savedFarmPosition, 5) end) end
         end
     })
-
+FarmTab:CreateToggle({
+    Name = "Bật Auto Farm (Dịch Chuyển Tốc Độ Cao)", 
+    CurrentValue = false, 
+    Flag = "AutoFarmTeleportToggle",
+    Callback = function(Value)
+        tpFarmSettings.enabled = Value
+        if Value then
+            game.StarterGui:SetCore("SendNotification", { Title = "🚀 Teleport Farm", Text = "Đã kích hoạt chế độ diệt quái không gian!", Duration = 3 })
+        end
+    end
+})
     CamTab:CreateSection("TỌA ĐỘ FARM")
     local initText = savedFarmPosition and string.format("📍 %d, %d, %d", math.floor(savedFarmPosition.Position.X), math.floor(savedFarmPosition.Position.Y), math.floor(savedFarmPosition.Position.Z)) or "📍 Chưa cấu hình"
     local FarmPosLabel = CamTab:CreateLabel("Tọa độ hiện tại: " .. initText)
@@ -303,10 +320,18 @@ return function(Window, Utils, Controller)
     -- 4. HỆ THỐNG CÁC VÒNG LẶP LIÊN TỤC (LOOPS)
     -- ==========================================
     
-    -- LUỒNG TỰ ĐỘNG ĐÁNH QUÁI
+    -- ==========================================
+    -- LUỒNG TỰ ĐỘNG ĐÁNH QUÁI (ĐÁNH THƯỜNG)
+    -- ==========================================
     task.spawn(function()
         while task.wait(0.2) do
-            if _G.SystemController and _G.SystemController.IsPaused then continue end
+            local controller = _G.SystemController
+            if controller and controller.IsPaused then continue end
+            if controller and controller.CurrentLock ~= nil then continue end
+            
+            -- ✅ BẢO VỆ XUNG ĐỘT: Nếu đang bật Teleport Farm, luồng này tự động nghỉ
+            if tpFarmSettings.enabled then continue end
+            
             if not camSettings.autoAttack or camSettings.isHealing then continue end
             if camSettings.yieldForBoss and _G.BossStatus and _G.BossStatus.bossFound then continue end
             
@@ -322,7 +347,6 @@ return function(Window, Utils, Controller)
                     for _, monster in pairs(monstersFolder:GetChildren()) do
                         if monster:IsA("Model") or monster:IsA("BasePart") then
                             local root = nil
-
                             if monster:IsA("Model") then
                                 root = monster.PrimaryPart or monster:FindFirstChild("HumanoidRootPart") or monster:FindFirstChild("Root")
                             elseif monster:IsA("BasePart") then
@@ -528,11 +552,136 @@ return function(Window, Utils, Controller)
         end
     end)
 
-    -- LUỒNG TỰ VỀ BÃI FARM
+-- ==========================================
+    -- LUỒNG CHẠY NỀN: AUTO FARM DỊCH CHUYỂN
+    -- ==========================================
     task.spawn(function()
-        task.wait(3)
-        if camSettings.autoReturnToFarm and savedFarmPosition then
-            SafeTeleport(savedFarmPosition, 5)
+        local function GetAttackRemote()
+            local success, remote = pcall(function()
+                return ReplicatedStorage:FindFirstChild("CommonLibrary")
+                    and ReplicatedStorage.CommonLibrary:FindFirstChild("Tool")
+                    and ReplicatedStorage.CommonLibrary.Tool:FindFirstChild("RemoteManager")
+                    and ReplicatedStorage.CommonLibrary.Tool.RemoteManager:FindFirstChild("Funcs")
+                    and ReplicatedStorage.CommonLibrary.Tool.RemoteManager.Funcs:FindFirstChild("DataPullFunc")
+            end)
+            return success and remote or nil
+        end
+
+        while task.wait(0.1) do
+            if not tpFarmSettings.enabled then continue end
+            
+            local controller = _G.SystemController
+            if controller and (controller.IsPaused or controller.CurrentLock ~= nil) then
+                task.wait(0.5)
+                continue
+            end
+            
+            if camSettings.yieldForBoss and _G.BossStatus and _G.BossStatus.bossFound then continue end
+
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local hum = char and char:FindFirstChild("Humanoid")
+            
+            if not (hrp and hum and hum.Health > 0) then 
+                task.wait(1); continue 
+            end
+
+            -- ✅ XÁC ĐỊNH PHẠM VI: Tâm bãi farm
+            local centerPos = savedFarmPosition and savedFarmPosition.Position or hrp.Position
+
+            -- ✅ LỌC QUÁI: Xử lý bộ lọc cho Utils.ScanMonsters
+            local scanKeywords = camSettings.targetMonsterNames
+            if #scanKeywords == 1 and scanKeywords[1] == "Tất cả quái" then 
+                scanKeywords = {} -- Gửi mảng rỗng để quét tất cả
+            end
+
+            -- Quét danh sách quái
+            local allMonsters = Utils.ScanMonsters(scanKeywords)
+            if #allMonsters == 0 then 
+                task.wait(0.5); continue 
+            end
+
+            -- ✅ LOGIC TÌM KIẾM QUÁI TỐI ƯU
+            local closestMonster = nil
+            local minDist = math.huge
+            
+            for _, m in ipairs(allMonsters) do
+                local mHum = m.Object:FindFirstChildOfClass("Humanoid")
+                -- Quái phải còn sống và chưa bị bắt
+                if mHum and mHum.Health > 0 and m.Object:GetAttribute("CatchEndTick") == nil then
+                    -- 1. Kiểm tra xem quái có nằm trong bán kính Farm (attackRadius) không
+                    local distFromCenter = (centerPos - m.Position).Magnitude
+                    if distFromCenter <= camSettings.attackRadius then
+                        -- 2. Ưu tiên bay tới con quái gần nhân vật nhất trong vòng đó
+                        local distFromPlayer = (hrp.Position - m.Position).Magnitude
+                        if distFromPlayer < minDist then
+                            minDist = distFromPlayer
+                            closestMonster = m
+                        end
+                    end
+                end
+            end
+
+            -- Thực thi tấn công
+            if closestMonster then
+                local remote = GetAttackRemote()
+                if remote then
+                    -- Dịch chuyển lên trên đỉnh đầu quái
+                    hrp.CFrame = CFrame.new(closestMonster.Position + tpFarmSettings.distanceOffset)
+                    hrp.CFrame = CFrame.lookAt(hrp.Position, closestMonster.Position)
+
+                    pcall(function() 
+                        remote:InvokeServer("MonsterAttackChannel", closestMonster.Id) 
+                    end)
+                    
+                    task.wait(tpFarmSettings.attackDelay)
+                end
+            end
+        end
+    end)
+
+    -- ==========================================
+    -- LUỒNG CHẠY NỀN: TỰ ĐỘNG BÁM BÃI FARM (SMART RETURN)
+    -- ==========================================
+    task.spawn(function()
+        while task.wait(1) do
+            local controller = _G.SystemController
+            
+            -- 1. Nếu hệ thống đang dừng, hoặc đang bị chiếm quyền (Boss, Dungeon...) -> Ngoan ngoãn đứng yên
+            if controller and (controller.IsPaused or controller.CurrentLock ~= nil) then 
+                continue 
+            end
+            
+            -- 2. Nếu đang đi hồi máu Pet -> Nhường luồng hồi máu làm xong việc
+            if camSettings.isHealing then continue end
+
+            -- 3. Chỉ kích hoạt khi đã lưu tọa độ và bật công tắc "Tự động về farm"
+            if not camSettings.autoReturnToFarm or not savedFarmPosition then continue end
+
+            -- 4. Phải có ít nhất 1 chế độ Farm đang chạy thì mới cần bám bãi
+            if not (camSettings.autoAttack or camSettings.autoCatch or tpFarmSettings.enabled) then continue end
+
+            local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if not hrp then continue end
+
+            -- 5. Đo khoảng cách từ chỗ đang đứng đến tâm bãi Farm
+            local dist = (hrp.Position - savedFarmPosition.Position).Magnitude
+            
+            -- Tính khoảng cách trôi dạt cho phép (Vượt ra khỏi bán kính farm 20 studs là xác định đi lạc)
+            local maxAllowedDistance = camSettings.attackRadius + 20
+            
+            -- 6. Đi lạc -> Bế về!
+            if dist > maxAllowedDistance then
+                -- Bắn một thông báo cho ngầu (Bạn có thể xóa dòng Notification này nếu thấy phiền)
+                pcall(function()
+                    game.StarterGui:SetCore("SendNotification", { Title = "📍 Smart Return", Text = "Hệ thống rảnh rỗi. Đang quay về bãi Farm...", Duration = 3 })
+                end)
+                
+                SafeTeleport(savedFarmPosition, 5)
+                
+                -- Nghỉ 2 giây để map load kịp rồi mới farm tiếp, tránh rơi xuyên map
+                task.wait(2)
+            end
         end
     end)
 
