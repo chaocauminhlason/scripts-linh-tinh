@@ -483,9 +483,21 @@ return function(Window, Utils, Controller)
 
     task.spawn(function()
         while task.wait(1) do
-            if _G.SystemController and _G.SystemController.IsPaused then continue end
+            local controller = _G.SystemController
+            
+            -- Kiểm tra Dừng toàn hệ thống
+            if controller and controller.IsPaused then continue end
+
+            -- ✅ THÊM ĐOẠN NÀY: Nếu hệ thống đang bận việc khác (Boss Hunt, Dungeon...), Pet tạm thời "nhịn" không đi hồi máu
+            if controller and controller.CurrentLock ~= nil then 
+                continue 
+            end
+
+            -- Tiếp tục logic cũ...
             if not camSettings.autoHeal or camSettings.isHealing then continue end
             if LocalPlayer:GetAttribute("RidePetId") ~= nil then continue end
+            
+            -- ... [Phần code phía dưới giữ nguyên] ...
             
             local deadCount, totalPets = CheckDeadPetsFromUI()
             if totalPets > 0 and deadCount >= camSettings.healThreshold then
