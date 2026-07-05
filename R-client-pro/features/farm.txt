@@ -396,10 +396,17 @@ return function(Window, Utils, Controller)
         end
         return bestPos
     end
+-- ==========================================
     -- LUỒNG TỰ ĐỘNG BẮT QUÁI
+    -- ==========================================
     task.spawn(function()
         while task.wait(0.5) do
-            if _G.SystemController and _G.SystemController.IsPaused then continue end
+            local controller = _G.SystemController
+            
+            -- ✅ CHẶN NGAY NẾU ĐANG CÓ LỆNH HOẶC BẬN BOSS
+            if controller and (controller.IsPaused or controller.CurrentLock ~= nil) then continue end
+            if _G.PendingBossHunt or _G.PendingSpecialBoss then continue end
+            
             if not camSettings.autoCatch or camSettings.isHealing then continue end
             
             local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -418,11 +425,11 @@ return function(Window, Utils, Controller)
                             local catchTaken = monster:GetAttribute("CatchTakenPlayerId")
                             if catchTaken and catchTaken == playerId then
                                 local root = nil
-if monster:IsA("Model") then
-    root = monster.PrimaryPart or monster:FindFirstChild("HumanoidRootPart") or monster:FindFirstChild("Root")
-elseif monster:IsA("BasePart") then
-    root = monster
-end
+                                if monster:IsA("Model") then
+                                    root = monster.PrimaryPart or monster:FindFirstChild("HumanoidRootPart") or monster:FindFirstChild("Root")
+                                elseif monster:IsA("BasePart") then
+                                    root = monster
+                                end
                                 if root and root:IsA("BasePart") then
                                     local distFromCenter = (root.Position - centerPos).Magnitude
                                     if distFromCenter <= camSettings.attackRadius then
@@ -442,11 +449,11 @@ end
             if targetCatch and MonsterSystem then
                 local targetId = tonumber(targetCatch.Name:match("Monster_(%d+)"))
                 local root = nil
-if targetCatch:IsA("Model") then
-    root = targetCatch.PrimaryPart or targetCatch:FindFirstChild("HumanoidRootPart") or targetCatch:FindFirstChild("Root")
-elseif targetCatch:IsA("BasePart") then
-    root = targetCatch
-end
+                if targetCatch:IsA("Model") then
+                    root = targetCatch.PrimaryPart or targetCatch:FindFirstChild("HumanoidRootPart") or targetCatch:FindFirstChild("Root")
+                elseif targetCatch:IsA("BasePart") then
+                    root = targetCatch
+                end
                 
                 if root and root:IsA("BasePart") then SafeTeleport(CFrame.new(root.Position), 5) end
                 
@@ -461,7 +468,6 @@ end
                 end)
             end
         end
-    end)
         -- 3. LUỒNG HỒI MÁU PET
     local function CheckDeadPetsFromUI()
         local deadCount = 0
@@ -566,8 +572,6 @@ end
                 task.wait(0.5)
                 continue
             end
-            
-           
 
             local char = LocalPlayer.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -586,7 +590,13 @@ end
                 scanKeywords = {} -- Gửi mảng rỗng để quét tất cả
             end
 
-            -- Quét danh sách quái
+            -- ✅ FIX LỖI 1: THÊM LẠI DÒNG QUÉT QUÁI BỊ MẤT
+            local allMonsters = Utils.ScanMonsters(scanKeywords)
+            if not allMonsters or #allMonsters == 0 then 
+                task.wait(0.5)
+                continue 
+            end
+
             -- 4. Tìm con quái gần nhất để Teleport
             local closestMonster = nil
             local minDist = math.huge
@@ -602,11 +612,11 @@ end
                 
                 -- BƯỚC 2: MÁY ĐỌC MÁU (Chống lừa đảo từ Game)
                 local isAlive = false
-                local hum = obj:FindFirstChildOfClass("Humanoid")
+                local hum_monster = obj:FindFirstChildOfClass("Humanoid")
                 
-                if hum then
+                if hum_monster then
                     -- Xử lý Quái thường
-                    if hum.Health >= 1 then isAlive = true end
+                    if hum_monster.Health >= 1 then isAlive = true end
                 else
                     -- Xử lý Quái dùng StringValue
                     local hpVal = obj:FindFirstChild("Health")
@@ -626,7 +636,6 @@ end
                                 local base = tonumber(parts[1])
                                 local exp = tonumber(parts[2])
                                 if base and exp then
-                                    -- Tính toán máu thực tế: Base * 10^Exp
                                     hpNum = base * (10 ^ exp)
                                 end
                             end
@@ -649,34 +658,33 @@ end
                     end
                 end
             end
+            
             -- 5. Thực thi: Bay tới và vả
--- 5. Thực thi: Bay tới và vả
-                if closestMonster then
-                    local remote = GetAttackRemote()
-                    if remote then
-                        -- Vị trí lý tưởng trên đầu quái
-                        local targetPos = closestMonster.Position + tpFarmSettings.distanceOffset
-                        local currentDist = (hrp.Position - targetPos).Magnitude
+            if closestMonster then
+                local remote = GetAttackRemote()
+                if remote then
+                    -- Vị trí lý tưởng trên đầu quái
+                    local targetPos = closestMonster.Position + tpFarmSettings.distanceOffset
+                    local currentDist = (hrp.Position - targetPos).Magnitude
 
-                        -- ✅ BỘ LỌC CHỐNG GIẬT: Chỉ Teleport khi nhân vật ở cách xa hơn 3 studs. 
-                        -- Nếu đã ở sẵn trên đầu quái rồi thì CHỈ VUNG CHIÊU, không Teleport đè lên nữa!
-                        if currentDist > 3 then
-                            hrp.CFrame = CFrame.new(targetPos)
-                            hrp.CFrame = CFrame.lookAt(hrp.Position, closestMonster.Position)
-                        end
-
-                        -- Gửi lệnh tấn công
-                        pcall(function() 
-                            remote:InvokeServer("MonsterAttackChannel", closestMonster.Id) 
-                        end)
-                        
-                        -- Tăng Delay lên một chút để chờ server cập nhật máu
-                        task.wait(tpFarmSettings.attackDelay + 0.1)
+                    -- BỘ LỌC CHỐNG GIẬT
+                    if currentDist > 3 then
+                        hrp.CFrame = CFrame.new(targetPos)
+                        hrp.CFrame = CFrame.lookAt(hrp.Position, closestMonster.Position)
                     end
+
+                    -- Gửi lệnh tấn công
+                    pcall(function() 
+                        remote:InvokeServer("MonsterAttackChannel", closestMonster.Id) 
+                    end)
+                    
+                    -- Tăng Delay lên một chút để chờ server cập nhật máu
+                    task.wait(tpFarmSettings.attackDelay + 0.1)
                 end
             end
-        end
-    end)
+            
+        end -- Kết thúc while task.wait(0.1)
+    end) -- Kết thúc task.spawn ✅ ĐÃ FIX LỖI 2: Xóa bớt chữ 'end' dư thừa
 
     -- ==========================================
     -- LUỒNG CHẠY NỀN: TỰ ĐỘNG BÁM BÃI FARM (SMART RETURN)
