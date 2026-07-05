@@ -346,6 +346,10 @@ return function(Window, Utils, Controller)
                 if monstersFolder then
                     for _, monster in pairs(monstersFolder:GetChildren()) do
                         if monster:IsA("Model") or monster:IsA("BasePart") then
+-- ✅ THÊM 2 DÒNG NÀY VÀO ĐÂY: Nếu máu bé hơn 1 (đang hấp hối chờ bắt) -> Bỏ qua ngay!
+                            local hum = monster:FindFirstChildOfClass("Humanoid")
+                            if hum and hum.Health < 1 then continue end
+
                             local root = nil
                             if monster:IsA("Model") then
                                 root = monster.PrimaryPart or monster:FindFirstChild("HumanoidRootPart") or monster:FindFirstChild("Root")
@@ -595,7 +599,7 @@ end
             for _, m in ipairs(allMonsters) do
                 local mHum = m.Object:FindFirstChildOfClass("Humanoid")
                 -- Quái phải còn sống và chưa bị bắt
-                if mHum and mHum.Health > 0 and m.Object:GetAttribute("CatchEndTick") == nil then
+                if mHum and mHum.Health > 1 and m.Object:GetAttribute("CatchEndTick") == nil then
                     -- 1. Kiểm tra xem quái có nằm trong bán kính Farm (attackRadius) không
                     local distFromCenter = (centerPos - m.Position).Magnitude
                     if distFromCenter <= camSettings.attackRadius then
