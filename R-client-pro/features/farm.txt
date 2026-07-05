@@ -568,10 +568,13 @@ return function(Window, Utils, Controller)
             if not tpFarmSettings.enabled then continue end
             
             local controller = _G.SystemController
+            
+            -- ✅ CHẶN NGAY NẾU HỆ THỐNG ĐANG BẬN HOẶC BOSS CHUẨN BỊ RA
             if controller and (controller.IsPaused or controller.CurrentLock ~= nil) then
                 task.wait(0.5)
                 continue
             end
+            if _G.PendingBossHunt or _G.PendingSpecialBoss then continue end
 
             local char = LocalPlayer.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -590,7 +593,6 @@ return function(Window, Utils, Controller)
                 scanKeywords = {} -- Gửi mảng rỗng để quét tất cả
             end
 
-            -- ✅ FIX LỖI 1: THÊM LẠI DÒNG QUÉT QUÁI BỊ MẤT
             local allMonsters = Utils.ScanMonsters(scanKeywords)
             if not allMonsters or #allMonsters == 0 then 
                 task.wait(0.5)
@@ -683,8 +685,8 @@ return function(Window, Utils, Controller)
                 end
             end
             
-        end -- Kết thúc while task.wait(0.1)
-    end) -- Kết thúc task.spawn ✅ ĐÃ FIX LỖI 2: Xóa bớt chữ 'end' dư thừa
+        end
+    end)
 
     -- ==========================================
     -- LUỒNG CHẠY NỀN: TỰ ĐỘNG BÁM BÃI FARM (SMART RETURN)
@@ -693,10 +695,9 @@ return function(Window, Utils, Controller)
         while task.wait(1) do
             local controller = _G.SystemController
             
-            -- 1. Nếu hệ thống đang dừng, hoặc đang bị chiếm quyền (Boss, Dungeon...) -> Ngoan ngoãn đứng yên
-            if controller and (controller.IsPaused or controller.CurrentLock ~= nil) then 
-                continue 
-            end
+            -- ✅ 1. CHẶN TOÀN TẬP: Nếu hệ thống bận, hoặc CÓ TÍN HIỆU BOSS CHUẨN BỊ XUẤT HIỆN
+            if controller and (controller.IsPaused or controller.CurrentLock ~= nil) then continue end
+            if _G.PendingBossHunt or _G.PendingSpecialBoss then continue end
             
             -- 2. Nếu đang đi hồi máu Pet -> Nhường luồng hồi máu làm xong việc
             if camSettings.isHealing then continue end
@@ -718,17 +719,19 @@ return function(Window, Utils, Controller)
             
             -- 6. Đi lạc -> Bế về!
             if dist > maxAllowedDistance then
-                -- Bắn một thông báo cho ngầu (Bạn có thể xóa dòng Notification này nếu thấy phiền)
+                -- Check lại lần cuối ngay trước khi Teleport để đề phòng Boss vừa mới vạch đích ra
+                if _G.PendingBossHunt or _G.PendingSpecialBoss or (controller and controller.CurrentLock ~= nil) then
+                    continue
+                end
+
                 pcall(function()
                     game.StarterGui:SetCore("SendNotification", { Title = "📍 Smart Return", Text = "Hệ thống rảnh rỗi. Đang quay về bãi Farm...", Duration = 3 })
                 end)
                 
                 SafeTeleport(savedFarmPosition, 5)
-                
-                -- Nghỉ 2 giây để map load kịp rồi mới farm tiếp, tránh rơi xuyên map
                 task.wait(2)
             end
         end
     end)
 
- 
+end
