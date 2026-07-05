@@ -1,6 +1,6 @@
 -- ====================================================================
 -- MODULE: TỔNG LÃNH BỘ SĂN BOSS (WORLD BOSS & SPECIAL BOSS HỢP NHẤT)
--- BẢN CẬP NHẬT: CHUNG UI TAB, CHUNG SENSOR UI, CHIA ƯU TIÊN LUỒNG CHẠY
+-- BẢN CẬP NHẬT: FIX LỖI THƯ MỤC, ANTI-CRASH PART, TỐI ƯU REMOTE
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -52,10 +52,25 @@ return function(Window, Utils)
         if Utils and Utils.LoadSelectedAreas then
             local savedWorlds = Utils.LoadSelectedAreas("R_SelectedBossWorlds.json")
             if type(savedWorlds) == "table" and #savedWorlds > 0 then worldSettings.selectedWorlds = savedWorlds end
+
             local savedSpWorlds = Utils.LoadSelectedAreas("R_SelectedSpBossWorlds.json")
             if type(savedSpWorlds) == "table" and #savedSpWorlds > 0 then specialSettings.selectedWorlds = savedSpWorlds end
         end
     end)
+
+    -- ==========================================
+    -- HÀM LẤY REMOTE AN TOÀN (Không gây treo tool)
+    -- ==========================================
+    local function GetAttackRemote()
+        local success, remote = pcall(function()
+            return ReplicatedStorage:FindFirstChild("CommonLibrary")
+                and ReplicatedStorage.CommonLibrary:FindFirstChild("Tool")
+                and ReplicatedStorage.CommonLibrary.Tool:FindFirstChild("RemoteManager")
+                and ReplicatedStorage.CommonLibrary.Tool.RemoteManager:FindFirstChild("Funcs")
+                and ReplicatedStorage.CommonLibrary.Tool.RemoteManager.Funcs:FindFirstChild("DataPullFunc")
+        end)
+        return success and remote or nil
+    end
 
     -- ==========================================
     -- 2. ĐĂNG KÝ VỚI MAIN CONTROLLER
@@ -82,15 +97,12 @@ return function(Window, Utils)
     end
 
     -- ==========================================
-    -- FIX BUG 1: BossTab khai báo TRƯỚC khi dùng
+    -- 3. GIAO DIỆN UI TỔNG HỢP (CHUNG 1 TAB)
     -- ==========================================
     local BossTab = Window:CreateTab("Săn Boss", 4483345998)
 
-    -- --- PHẦN 1: SPECIAL BOSS ---
     BossTab:CreateSection("🌟 AUTO SPECIAL BOSS (ƯU TIÊN CAO)")
     local SpStatusLabel = BossTab:CreateLabel("🔴 Trạng thái: Đang ngủ đông (Chờ thông báo)")
-
-    -- SpTargetLabel giờ khai báo SAU BossTab — đúng thứ tự
     local SpTargetLabel = BossTab:CreateLabel("🎯 Đã chọn " .. #specialSettings.selectedWorlds .. " world")
 
     BossTab:CreateToggle({
@@ -113,7 +125,6 @@ return function(Window, Utils)
         end
     })
 
-    -- --- PHẦN 2: WORLD BOSS ---
     BossTab:CreateSection("🌍 AUTO WORLD BOSS (THƯỜNG)")
     local TargetLabel = BossTab:CreateLabel("🎯 Đã chọn " .. #worldSettings.selectedWorlds .. " world có boss")
     
@@ -178,7 +189,6 @@ return function(Window, Utils)
             if not labDesc then return end
             local descTxt = string.lower(labDesc.Text)
             
-            -- Lọc Special Boss
             if specialSettings.enabled and not spTriggered and string.find(descTxt, "a special ") then
                 local labName = bubbleUI:FindFirstChild("LabName", true)
                 if labName then
@@ -189,10 +199,7 @@ return function(Window, Utils)
                     if worldId then
                         local isWorldAllowed = false
                         for _, allowedId in pairs(specialSettings.selectedWorlds) do
-                            if tonumber(allowedId) == tonumber(worldId) then
-                                isWorldAllowed = true
-                                break
-                            end
+                            if tonumber(allowedId) == tonumber(worldId) then isWorldAllowed = true break end
                         end
 
                         if isWorldAllowed then
@@ -207,11 +214,10 @@ return function(Window, Utils)
                         else
                             print("⏩ [SPECIAL] Bỏ qua " .. bossName .. " ở Đảo " .. worldId .. " vì không nằm trong danh sách chọn!")
                         end
-                    end
+                    end 
                 end
-            end -- FIX BUG 2: end đóng đúng cho block "if specialSettings.enabled"
+            end
             
-            -- Lọc World Boss Thường (giờ nằm NGOÀI block Special Boss)
             if worldSettings.enabled and (string.find(descTxt, " appear at ") or string.find(descTxt, " spawned")) then
                 local currentTime = os.time()
                 if currentTime - lastWorldBossAlertTime >= 60 then
@@ -266,9 +272,6 @@ return function(Window, Utils)
         end
     end)
 
-    local DataPullFunc = nil
-    pcall(function() DataPullFunc = ReplicatedStorage:WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc") end)
-
     -- ==========================================
     -- 5. LUỒNG CHẠY: SPECIAL BOSS
     -- ==========================================
@@ -302,32 +305,36 @@ return function(Window, Utils)
                 task.wait(3); continue
             end
 
-            local clientMonsters = Workspace:FindFirstChild("ClientMonsters")
             local bestTarget = nil; local closestDist = math.huge
-            if clientMonsters then
-                local env = getrenv()._G.PathTool
-                local mgrMonster = env.MgrMonsterClient
-                local cfgMonster = env.CfgMonster.Tmpls
-                
-                for _, obj in pairs(clientMonsters:GetChildren()) do
-                    if obj:IsA("Model") then
-                        local idStr = string.match(obj.Name, "Monster_(%d+)")
-                        if idStr then
-                            local uid = tonumber(idStr)
-                            local success, info = pcall(function() return mgrMonster:GetMonsterInfo(uid) end)
-                            if not success or not info then success, info = pcall(function() return mgrMonster.GetMonsterInfo(uid) end) end
-                            
-                            if success and type(info) == "table" and (info.tmplId or info.TmplId or info.cfgId or info.id) then
-                                local tmplId = info.tmplId or info.TmplId or info.cfgId or info.id
-                                local cfgData = cfgMonster[tostring(tmplId)] or cfgMonster[tonumber(tmplId)]
-                                if cfgData then
-                                    local realName = string.lower(cfgData.Name or cfgData.name or "")
-                                    local targetLower = string.lower(spHuntState.targetBoss)
-                                    if string.find(realName, targetLower) or string.find(targetLower, realName) then
-                                        local root = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
-                                        if root then
-                                            local dist = (hrp.Position - root.Position).Magnitude
-                                            if dist < closestDist then closestDist = dist; bestTarget = {id = uid, root = root} end
+            -- Quét đa thư mục để chống thủ đoạn giấu Boss của Dev
+            local folders = {Workspace:FindFirstChild("ClientMonsters"), Workspace:FindFirstChild("Monsters")}
+            
+            for _, folder in ipairs(folders) do
+                if folder then
+                    for _, obj in pairs(folder:GetChildren()) do
+                        if obj:IsA("Model") or obj:IsA("BasePart") then
+                            local realName = Utils.GetMonsterRealName(obj)
+                            if realName and realName ~= "Unknown" then
+                                local targetLower = string.lower(spHuntState.targetBoss)
+                                local rNameLower = string.lower(realName)
+                                
+                                if string.find(rNameLower, targetLower) or string.find(targetLower, rNameLower) then
+                                    -- Anti-Crash: Kiểm tra Model hay Part
+                                    local root = nil
+                                    if obj:IsA("Model") then
+                                        root = obj.PrimaryPart or obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildWhichIsA("BasePart")
+                                    else
+                                        root = obj
+                                    end
+                                    
+                                    if root then
+                                        local dist = (hrp.Position - root.Position).Magnitude
+                                        if dist < closestDist then 
+                                            closestDist = dist
+                                            local uidStr = string.match(obj.Name, "Monster_(%d+)")
+                                            if uidStr then
+                                                bestTarget = {id = tonumber(uidStr), root = root} 
+                                            end
                                         end
                                     end
                                 end
@@ -352,7 +359,8 @@ return function(Window, Utils)
                 if closestDist <= 15 then
                     pcall(function() Utils.SmartDismount() end)
                     humanoid:MoveTo(hrp.Position)
-                    pcall(function() DataPullFunc:InvokeServer("MonsterAttackChannel", bestTarget.id) end)
+                    local remote = GetAttackRemote()
+                    if remote then pcall(function() remote:InvokeServer("MonsterAttackChannel", bestTarget.id) end) end
                 end
             else
                 spHuntState.stuckTimer = spHuntState.stuckTimer + 0.2
@@ -374,29 +382,32 @@ return function(Window, Utils)
         local keywords = WorldBossMapping[currentWorldId] or {}
         if #keywords == 0 then return nil, nil, nil end
 
-        local env = getrenv()._G.PathTool
-        if not env or not env.MgrMonsterClient or not env.CfgMonster then return nil, nil, nil end
-        local mgrMonster = env.MgrMonsterClient; local cfgMonster = env.CfgMonster.Tmpls
-        local clientMonsters = Workspace:FindFirstChild("ClientMonsters")
-        if not clientMonsters then return nil, nil, nil end
-
-        for _, obj in pairs(clientMonsters:GetChildren()) do
-            if obj:IsA("Model") then
-                local idStr = string.match(obj.Name, "Monster_(%d+)")
-                if idStr then
-                    local uid = tonumber(idStr)
-                    local success, info = pcall(function() return mgrMonster:GetMonsterInfo(uid) end)
-                    if not success or not info then success, info = pcall(function() return mgrMonster.GetMonsterInfo(uid) end) end
-                    
-                    if success and type(info) == "table" and (info.tmplId or info.TmplId or info.cfgId or info.id) then
-                        local tmplId = info.tmplId or info.TmplId or info.cfgId or info.id
-                        local cfgData = cfgMonster[tostring(tmplId)] or cfgMonster[tonumber(tmplId)]
-                        if cfgData then
-                            local lowerName = string.lower(cfgData.Name or cfgData.name or "")
+        -- Quét đa thư mục
+        local folders = {Workspace:FindFirstChild("ClientMonsters"), Workspace:FindFirstChild("Monsters")}
+        
+        for _, folder in ipairs(folders) do
+            if folder then
+                for _, obj in pairs(folder:GetChildren()) do
+                    if obj:IsA("Model") or obj:IsA("BasePart") then
+                        local realName = Utils.GetMonsterRealName(obj)
+                        if realName and realName ~= "Unknown" then
+                            local lowerName = string.lower(realName)
                             for _, kw in pairs(keywords) do
-                                if string.find(lowerName, kw) then
-                                    local root = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
-                                    return uid, (cfgData.Name or cfgData.name), (root and root.Position or obj.Position)
+                                if string.find(lowerName, string.lower(kw)) then
+                                    -- Anti-Crash
+                                    local root = nil
+                                    if obj:IsA("Model") then
+                                        root = obj.PrimaryPart or obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildWhichIsA("BasePart")
+                                    else
+                                        root = obj
+                                    end
+                                    
+                                    if root then
+                                        local idStr = string.match(obj.Name, "Monster_(%d+)")
+                                        if idStr then
+                                            return tonumber(idStr), realName, root.Position
+                                        end
+                                    end
                                 end
                             end
                         end
@@ -425,7 +436,7 @@ return function(Window, Utils)
                     WbStatusLabel:Set("🔄 Đã xong 1 vòng. Đang xếp hàng nhảy server...")
                     table.insert(controller.TaskQueue, { Name = "BossRoundHop", Func = function() if controller.RequestLock("BossHunt") then Utils.HopServer("Hoàn tất 1 vòng quét Boss") controller.ReleaseLock("BossHunt") end end })
                     task.wait(5)
-                else WbStatusLabel:Set("💤 Đã xong 1 vòng. Đang ngủ đông chờ sóng mới...") end
+                else WbStatusLabel:Set("💤 Đã xong 1 vòng") end
                 task.wait(1); continue
             end
 
@@ -433,8 +444,9 @@ return function(Window, Utils)
             if bossCheckCooldown >= 5 then 
                 bossCheckCooldown = 0
                 local bossId, bossName, bossPos = ScanWorldBoss()
+                local remote = GetAttackRemote()
 
-                if bossId and DataPullFunc then
+                if bossId and remote then
                     _G.BossStatus.scanAttempts = 0 
                     if controller then controller.RequestLock("BossHunt") end
                     _G.BossStatus.bossFound = true; _G.BossStatus.bossId = bossId; _G.BossStatus.bossName = bossName; _G.BossStatus.bossPosition = bossPos
@@ -448,14 +460,14 @@ return function(Window, Utils)
                             if distance > 20 then hrp.CFrame = CFrame.new(bossPos + Vector3.new(0, 8, 0)) end
                         end
                     end
-                    pcall(function() DataPullFunc:InvokeServer("MonsterAttackChannel", bossId) end)
+                    pcall(function() remote:InvokeServer("MonsterAttackChannel", bossId) end)
                 else
                     local timeSinceAlert = os.time() - lastWorldBossAlertTime
                     local maxRetries = (timeSinceAlert < 30) and 8 or 0 
 
                     _G.BossStatus.scanAttempts = (_G.BossStatus.scanAttempts or 0) + 1
                     if _G.BossStatus.scanAttempts <= maxRetries then
-                        WbStatusLabel:Set("⏳ Đang chờ Server load Boss... (" .. _G.BossStatus.scanAttempts .. "/" .. maxRetries .. ")")
+                        WbStatusLabel:Set("⏳ Đang chờ load Boss... (" .. _G.BossStatus.scanAttempts .. "/" .. maxRetries .. ")")
                     else
                         _G.BossStatus.scanAttempts = 0 
                         if _G.BossStatus.bossFound then
@@ -469,7 +481,7 @@ return function(Window, Utils)
                         else
                             _G.BossStatus.currentWorldIndex = nextIndex
                             _G.BossStatus.currentWorldId = worldSettings.selectedWorlds[nextIndex]
-                            WbStatusLabel:Set("🔄 Trạng thái: Di chuyển đến world tiếp theo...")
+                            WbStatusLabel:Set("🔄 Di chuyển đến world tiếp theo...")
                             pcall(function() Utils.TeleportToArea(_G.BossStatus.currentWorldId) end)
                             task.wait(3)
                         end
