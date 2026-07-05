@@ -945,74 +945,84 @@ function Utils.HopServer(reason)
 end
 
 -- ==========================================
--- HÀM LẤY TÊN THẬT CỦA QUÁI (ĐÃ FIX LOGIC UID & CACHE)
+-- HÀM LẤY TÊN THẬT CỦA QUÁI (ĐÃ TÍCH HỢP UPVALUES TỪ AUTO FARM)
 -- ==========================================
 local MonsterNameCache = {}
+local InternalMonsterTable = nil
+
+-- Hàm khởi tạo đường hầm đọc trộm RAM
+local function InitMonsterMemory()
+    if InternalMonsterTable then return end
+    pcall(function()
+        local env = getrenv and getrenv()._G and getrenv()._G.PathTool
+        if env and env.MgrMonsterClient then
+            -- Móc túi bảng dữ liệu ẩn đằng sau hàm GetMonsterInfo
+            local upvalues = debug.getupvalues(env.MgrMonsterClient.GetMonsterInfo)
+            if upvalues and type(upvalues[1]) == "table" then
+                InternalMonsterTable = upvalues[1]
+            end
+        end
+    end)
+end
 
 function Utils.GetMonsterRealName(monster)
     if not monster then return "Unknown" end
-
-    -- 1. Bóc tách UID (Định danh trên map)
-    local uidStr = string.match(monster.Name, "Monster_(%d+)")
-    local uid = uidStr and tonumber(uidStr) or nil
     
-    -- 2. Lấy TmplId (Mã khuôn mẫu chuẩn)
-    local tmplId = monster:GetAttribute("TmplId")
+    local rawName = monster.Name
     
-    -- Kiểm tra Cache siêu tốc (Ưu tiên check bằng UID trước)
-    if uid and MonsterNameCache["UID_" .. uid] then
-        return MonsterNameCache["UID_" .. uid]
-    end
-    if tmplId and MonsterNameCache["TMPL_" .. tmplId] then
-        return MonsterNameCache["TMPL_" .. tmplId]
-    end
-
-    local realName = nil
-    local env = getrenv and getrenv()._G and getrenv()._G.PathTool
-
-    -- 3. Trích xuất từ RAM (MgrMonsterClient)
-    if env and env.MgrMonsterClient and uid then
-        local mgrMonster = env.MgrMonsterClient
-        local success, info = pcall(function() return mgrMonster:GetMonsterInfo(uid) end)
-        if not success then 
-            success, info = pcall(function() return mgrMonster.GetMonsterInfo(uid) end) 
-        end
-        
-        if success and type(info) == "table" then
-            local realTmplId = info.tmplId or info.TmplId or info.cfgId or info.id
-            tmplId = realTmplId or tmplId -- Nắm đầu được TmplId thật sự
-            
-            if tmplId and env.CfgMonster and env.CfgMonster.Tmpls then
-                local cfgData = env.CfgMonster.Tmpls[tostring(tmplId)] or env.CfgMonster.Tmpls[tonumber(tmplId)]
-                if cfgData then
-                    realName = cfgData.Name or cfgData.name
+    -- 1. Bóc tách UID (VD: "Monster_123" -> 123)
+    local uidStr = string.match(rawName, "Monster_(%d+)")
+    local uidNum = uidStr and tonumber(uidStr) or nil
+    
+    -- Nếu không có định dạng Monster_UID thì trả về tên gốc luôn
+    if not uidNum then return rawName end
+    
+    -- Kiểm tra Cache trước cho nhẹ máy
+    if MonsterNameCache[uidNum] then return MonsterNameCache[uidNum] end
+    
+    -- 2. Đọc trộm RAM qua Upvalues (Cơ chế bá đạo từ Auto Farm)
+    InitMonsterMemory()
+    
+    if InternalMonsterTable and type(InternalMonsterTable) == "table" then
+        local rawData = InternalMonsterTable[uidNum]
+        if type(rawData) == "table" then
+            local tmplId = rawData.TmplId or rawData.tmplId or rawData.cfgId
+            if tmplId then
+                local env = getrenv()._G.PathTool
+                if env and env.CfgMonster and env.CfgMonster.Tmpls then
+                    local tmpls = env.CfgMonster.Tmpls
+                    local cfg = tmpls[tostring(tmplId)] or tmpls[tonumber(tmplId)]
+                    if cfg then
+                        local realName = cfg.Name or cfg.name or cfg.Title
+                        if realName then
+                            MonsterNameCache[uidNum] = realName
+                            return realName
+                        end
+                    end
                 end
             end
         end
     end
 
-    -- 4. Fallback: Lục tung ReplicatedStorage nếu RAM không có
-    if not realName and tmplId then
+    -- 3. Fallback: Nếu RAM lỗi, ráng đọc ReplicatedStorage
+    local tmplIdFallback = monster:GetAttribute("TmplId")
+    if tmplIdFallback then
         local MonsterConfigFolder = ReplicatedStorage:FindFirstChild("CommonConfig") 
             and ReplicatedStorage.CommonConfig:FindFirstChild("Monster")
         if MonsterConfigFolder then
-            local configFile = MonsterConfigFolder:FindFirstChild("Monster" .. tostring(tmplId))
+            local configFile = MonsterConfigFolder:FindFirstChild("Monster" .. tostring(tmplIdFallback))
             if configFile then
                 local success, configData = pcall(require, configFile)
                 if success and type(configData) == "table" then
-                    realName = configData.Name
+                    local realName = configData.Name or "Unknown"
+                    MonsterNameCache[uidNum] = realName
+                    return realName
                 end
             end
         end
     end
 
-    -- 5. Chốt tên và Lưu Cache
-    realName = realName or monster.Name or "Unknown"
-
-    if uid then MonsterNameCache["UID_" .. uid] = realName end
-    if tmplId then MonsterNameCache["TMPL_" .. tmplId] = realName end
-
-    return realName
+    return rawName
 end
 
 -- Trả về bảng Utils
