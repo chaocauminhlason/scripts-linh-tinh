@@ -613,21 +613,41 @@ end
                 end
             end
 
-            -- Thực thi tấn công
-            if closestMonster then
-                local remote = GetAttackRemote()
-                if remote then
-                    -- Dịch chuyển lên trên đỉnh đầu quái
-                    hrp.CFrame = CFrame.new(closestMonster.Position + tpFarmSettings.distanceOffset)
-                    hrp.CFrame = CFrame.lookAt(hrp.Position, closestMonster.Position)
+            -- 5. Thực thi: Bay tới và vả
+        if closestMonster then
+            local remote = GetAttackRemote()
+            if remote then
+                -- Vị trí lý tưởng trên đầu quái
+                local targetPos = closestMonster.Position + tpFarmSettings.distanceOffset
+                local currentDist = (hrp.Position - targetPos).Magnitude
 
-                    pcall(function() 
-                        remote:InvokeServer("MonsterAttackChannel", closestMonster.Id) 
-                    end)
-                    
-                    task.wait(tpFarmSettings.attackDelay)
+                -- ==========================================
+                -- 🔍 ĐOẠN TEST: IN THÔNG TIN LỖI RA CONSOLE F9
+                -- ==========================================
+                local mHum = closestMonster.Object:FindFirstChildOfClass("Humanoid")
+                local hp = mHum and mHum.Health or "Không có Humanoid"
+                local isCatchable = closestMonster.Object:GetAttribute("CatchEndTick") and "Có" or "Không"
+                
+                print(string.format("🎯 Nhắm: %s | Máu: %s | Có nhãn bắt: %s | Cách xa: %.1f", 
+                    closestMonster.Object.Name, tostring(hp), isCatchable, currentDist))
+                -- ==========================================
+
+                -- ✅ BỘ LỌC CHỐNG GIẬT: Chỉ Teleport khi nhân vật ở cách xa hơn 3 studs. 
+                -- Nếu đã ở sẵn trên đầu quái rồi thì CHỈ VUNG CHIÊU, không Teleport đè lên nữa!
+                if currentDist > 3 then
+                    hrp.CFrame = CFrame.new(targetPos)
+                    hrp.CFrame = CFrame.lookAt(hrp.Position, closestMonster.Position)
                 end
+
+                -- Gửi lệnh tấn công
+                pcall(function() 
+                    remote:InvokeServer("MonsterAttackChannel", closestMonster.Id) 
+                end)
+                
+                -- Tăng Delay lên một chút để chờ server cập nhật máu
+                task.wait(tpFarmSettings.attackDelay + 0.1)
             end
+        end
         end
     end)
 
