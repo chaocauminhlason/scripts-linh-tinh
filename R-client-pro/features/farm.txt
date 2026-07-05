@@ -731,5 +731,4 @@ return function(Window, Utils, Controller)
         end
     end)
 
-    
-end
+ 
