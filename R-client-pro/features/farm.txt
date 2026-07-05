@@ -413,7 +413,12 @@ return function(Window, Utils, Controller)
                         if (monster:IsA("Model") or monster:IsA("BasePart")) and IsMonsterInFilter(monster) then
                             local catchTaken = monster:GetAttribute("CatchTakenPlayerId")
                             if catchTaken and catchTaken == playerId then
-                                local root = monster.PrimaryPart or monster:FindFirstChild("HumanoidRootPart") or monster:FindFirstChild("Root") or (monster:IsA("BasePart") and monster)
+                                local root = nil
+if monster:IsA("Model") then
+    root = monster.PrimaryPart or monster:FindFirstChild("HumanoidRootPart") or monster:FindFirstChild("Root")
+elseif monster:IsA("BasePart") then
+    root = monster
+end
                                 if root and root:IsA("BasePart") then
                                     local distFromCenter = (root.Position - centerPos).Magnitude
                                     if distFromCenter <= camSettings.attackRadius then
@@ -432,7 +437,12 @@ return function(Window, Utils, Controller)
 
             if targetCatch and MonsterSystem then
                 local targetId = tonumber(targetCatch.Name:match("Monster_(%d+)"))
-                local root = targetCatch.PrimaryPart or targetCatch:FindFirstChild("HumanoidRootPart") or targetCatch:FindFirstChild("Root") or (targetCatch:IsA("BasePart") and targetCatch)
+                local root = nil
+if targetCatch:IsA("Model") then
+    root = targetCatch.PrimaryPart or targetCatch:FindFirstChild("HumanoidRootPart") or targetCatch:FindFirstChild("Root")
+elseif targetCatch:IsA("BasePart") then
+    root = targetCatch
+end
                 
                 if root and root:IsA("BasePart") then SafeTeleport(CFrame.new(root.Position), 5) end
                 
