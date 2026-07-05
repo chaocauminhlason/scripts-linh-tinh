@@ -444,6 +444,12 @@ return function(Window, Utils)
                 task.wait(1); continue
             end
 
+            if controller and controller.CurrentLock == "AutoDungeon" then 
+                WbStatusLabel:Set("⏳ Đang bận đi Dungeon...")
+                task.wait(1)
+                continue 
+            end
+
             if _G.PendingSpecialBoss or (controller and controller.CurrentLock == "SpecialBoss") then
                 WbStatusLabel:Set("🛑 Đang nhường đường cho Special Boss...")
                 if controller and controller.CurrentLock == "BossHunt" then controller.ReleaseLock("BossHunt") end
