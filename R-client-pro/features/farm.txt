@@ -599,7 +599,7 @@ end
             for _, m in ipairs(allMonsters) do
                 local mHum = m.Object:FindFirstChildOfClass("Humanoid")
                 -- Quái phải còn sống và chưa bị bắt
-                if mHum and mHum.Health > 1 and m.Object:GetAttribute("CatchEndTick") == nil then
+                if  m.Object:GetAttribute("CatchEndTick") == nil then
                     -- 1. Kiểm tra xem quái có nằm trong bán kính Farm (attackRadius) không
                     local distFromCenter = (centerPos - m.Position).Magnitude
                     if distFromCenter <= camSettings.attackRadius then
