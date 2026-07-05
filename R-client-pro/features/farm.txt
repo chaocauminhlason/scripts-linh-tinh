@@ -24,7 +24,7 @@ return function(Window, Utils, Controller)
         isHealing = false,
         savedPosition = nil,
         targetMonsterNames = {},
-        yieldForBoss = true,
+        
         autoReturnToFarm = false,
         healThreshold = 1,
         attackRadius = 200
@@ -256,9 +256,19 @@ return function(Window, Utils, Controller)
 
     CamTab:CreateSection("FARM")
     CamTab:CreateToggle({ Name = "Tự Động Đánh Quái", CurrentValue = false, Flag = "FarmAutoAttack", Callback = function(V) camSettings.autoAttack = V end })
+    Name = "Tấn công dịch chuyển", 
+    CurrentValue = false, 
+    Flag = "AutoFarmTeleportToggle",
+    Callback = function(Value)
+        tpFarmSettings.enabled = Value
+        if Value then
+            game.StarterGui:SetCore("SendNotification", { Title = "🚀 Teleport Farm", Text = "Đã kích hoạt chế độ diệt quái không gian!", Duration = 3 })
+        end
+    end
+})
     CamTab:CreateSlider({ Name = "Bán kính Farm", Range = {10, 2000}, Increment = 10, Suffix = " studs", CurrentValue = 200, Flag = "FarmRadiusSlider", Callback = function(V) camSettings.attackRadius = V end })
     CamTab:CreateToggle({ Name = "Tự Động Bắt Quái", CurrentValue = false, Flag = "FarmAutoCatch", Callback = function(V) camSettings.autoCatch = V end })
-    CamTab:CreateToggle({ Name = "Tạm dừng khi có Boss", CurrentValue = true, Flag = "FarmYieldForBoss", Callback = function(V) camSettings.yieldForBoss = V end })
+    CamTab:CreateToggle({
 
     CamTab:CreateSection("HỒI MÁU")
     CamTab:CreateToggle({ 
@@ -278,17 +288,7 @@ return function(Window, Utils, Controller)
             if V and savedFarmPosition then task.spawn(function() task.wait(1) SafeTeleport(savedFarmPosition, 5) end) end
         end
     })
-CamTab:CreateToggle({
-    Name = "Bật Auto Farm (Dịch Chuyển Tốc Độ Cao)", 
-    CurrentValue = false, 
-    Flag = "AutoFarmTeleportToggle",
-    Callback = function(Value)
-        tpFarmSettings.enabled = Value
-        if Value then
-            game.StarterGui:SetCore("SendNotification", { Title = "🚀 Teleport Farm", Text = "Đã kích hoạt chế độ diệt quái không gian!", Duration = 3 })
-        end
-    end
-})
+
     CamTab:CreateSection("TỌA ĐỘ FARM")
     local initText = savedFarmPosition and string.format("📍 %d, %d, %d", math.floor(savedFarmPosition.Position.X), math.floor(savedFarmPosition.Position.Y), math.floor(savedFarmPosition.Position.Z)) or "📍 Chưa cấu hình"
     local FarmPosLabel = CamTab:CreateLabel("Tọa độ hiện tại: " .. initText)
@@ -333,7 +333,7 @@ CamTab:CreateToggle({
             if tpFarmSettings.enabled then continue end
             
             if not camSettings.autoAttack or camSettings.isHealing then continue end
-            if camSettings.yieldForBoss and _G.BossStatus and _G.BossStatus.bossFound then continue end
+         
             
             local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
             if not hrp then continue end
@@ -397,7 +397,6 @@ CamTab:CreateToggle({
         while task.wait(0.5) do
             if _G.SystemController and _G.SystemController.IsPaused then continue end
             if not camSettings.autoCatch or camSettings.isHealing then continue end
-            if camSettings.yieldForBoss and _G.BossStatus and _G.BossStatus.bossFound then continue end
             
             local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
             if not hrp then continue end
@@ -554,7 +553,7 @@ CamTab:CreateToggle({
                 continue
             end
             
-            if camSettings.yieldForBoss and _G.BossStatus and _G.BossStatus.bossFound then continue end
+           
 
             local char = LocalPlayer.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
