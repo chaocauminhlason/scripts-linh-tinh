@@ -131,21 +131,21 @@ return function(Window, Utils)
         return false
     end
 
-    local function SafeTeleport(targetCFrame, offsetY)
-        offsetY = offsetY or 5
-        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if not hrp then return false end
-        local targetPos = targetCFrame.Position + Vector3.new(0, offsetY, 0)
-        local rayOrigin = targetPos + Vector3.new(0, 20, 0)
-        local rayDirection = Vector3.new(0, -20, 0)
-        local raycastParams = RaycastParams.new()
-        raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
-        raycastParams.FilterDescendantsInstances = {LocalPlayer.Character}
-        local rayResult = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
-        if rayResult then targetPos = Vector3.new(targetPos.X, rayResult.Position.Y + 3, targetPos.Z) end
-        hrp.CFrame = CFrame.new(targetPos)
-        return true
-    end
+    -- local function SafeTeleport(targetCFrame, offsetY)
+    --     offsetY = offsetY or 5
+    --     local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    --     if not hrp then return false end
+    --     local targetPos = targetCFrame.Position + Vector3.new(0, offsetY, 0)
+    --     local rayOrigin = targetPos + Vector3.new(0, 20, 0)
+    --     local rayDirection = Vector3.new(0, -20, 0)
+    --     local raycastParams = RaycastParams.new()
+    --     raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+    --     raycastParams.FilterDescendantsInstances = {LocalPlayer.Character}
+    --     local rayResult = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+    --     if rayResult then targetPos = Vector3.new(targetPos.X, rayResult.Position.Y + 3, targetPos.Z) end
+    --     hrp.CFrame = CFrame.new(targetPos)
+    --     return true
+    -- end
 
     local function LoadSavedPosition()
         if isfile and isfile(posFileName) and readfile then
@@ -285,7 +285,7 @@ return function(Window, Utils)
         Name = "Tự động về vị trí farm khi vào game", CurrentValue = false, Flag = "AutoReturnToFarm",
         Callback = function(V)
             camSettings.autoReturnToFarm = V
-            if V and savedFarmPosition then task.spawn(function() task.wait(1) SafeTeleport(savedFarmPosition, 5) end) end
+            if V and savedFarmPosition then task.spawn(function() task.wait(1) Utils.SafeTeleport(savedFarmPosition, 5) end) end
         end
     })
 
@@ -310,7 +310,7 @@ return function(Window, Utils)
         Name = "🚀 Dịch chuyển về tọa độ Farm",
         Callback = function()
             if savedFarmPosition then
-                SafeTeleport(savedFarmPosition, 5)
+                Utils.SafeTeleport(savedFarmPosition, 5)
                 game.StarterGui:SetCore("SendNotification", { Title = "🚀 Teleport", Text = "Đã quay trở về tâm bãi farm", Duration = 3 })
             end
         end
@@ -375,7 +375,7 @@ return function(Window, Utils)
             end
 
             if targetCatch and MonsterSystem then
-                SafeTeleport(CFrame.new(targetCatch.Position), 5)
+                Utils.SafeTeleport(CFrame.new(targetCatch.Position), 5)
                 
                 task.spawn(function()
                     local success, isStarted = pcall(function() return MonsterSystem:ClientCatchMonsterStart(targetCatch.Id) end)
@@ -512,12 +512,12 @@ return function(Window, Utils)
                         plat.Size = Vector3.new(20, 1, 20); plat.Position = recoverPos - Vector3.new(0, 3, 0)
                         plat.Anchored = true; plat.Transparency = 1; plat.CanCollide = true; plat.Parent = Workspace
                         
-                        SafeTeleport(CFrame.new(recoverPos), 5)
+                        Utils.SafeTeleport(CFrame.new(recoverPos), 5)
                         task.wait(10)
                         plat:Destroy()
                         
                         if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                            SafeTeleport(camSettings.savedPosition, 5)
+                            Utils.SafeTeleport(camSettings.savedPosition, 5)
                         end
                         game.StarterGui:SetCore("SendNotification", { Title = "✅ Hoàn Tất", Text = "Đã khôi phục sinh lực Pet và về bãi farm!", Duration = 3 })
                     end
@@ -707,7 +707,7 @@ return function(Window, Utils)
                     game.StarterGui:SetCore("SendNotification", { Title = "📍 Smart Return", Text = "Hệ thống rảnh rỗi. Đang quay về bãi Farm...", Duration = 3 })
                 end)
                 
-                SafeTeleport(savedFarmPosition, 5)
+                Utils.SafeTeleport(savedFarmPosition, 5)
                 task.wait(2)
             end
         end
