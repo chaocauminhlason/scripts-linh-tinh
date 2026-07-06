@@ -320,154 +320,133 @@ return function(Window, Utils, Controller)
     -- 4. HỆ THỐNG CÁC VÒNG LẶP LIÊN TỤC (LOOPS)
     -- ==========================================
     
-    -- ==========================================
-    -- LUỒNG TỰ ĐỘNG ĐÁNH QUÁI (ĐÁNH THƯỜNG)
+-- ==========================================
+    -- 1. LUỒNG TỰ ĐỘNG ĐÁNH QUÁI (ĐÁNH THƯỜNG)
     -- ==========================================
     task.spawn(function()
         while task.wait(0.2) do
             local controller = _G.SystemController
-            if controller and controller.IsPaused then continue end
-            if controller and controller.CurrentLock ~= nil then continue end
-            
-            -- ✅ BẢO VỆ XUNG ĐỘT: Nếu đang bật Teleport Farm, luồng này tự động nghỉ
-            if tpFarmSettings.enabled then continue end
-            
-            if not camSettings.autoAttack or camSettings.isHealing then continue end
-         
-            
+            if controller and (controller.IsPaused or controller.CurrentLock ~= nil) then continue end
+            if _G.PendingBossHunt or _G.PendingSpecialBoss then continue end
+            if tpFarmSettings.enabled or camSettings.isHealing or not camSettings.autoAttack then continue end
+
             local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
             if not hrp then continue end
             
             local centerPos = savedFarmPosition and savedFarmPosition.Position or hrp.Position
             
-            local foldersToScan = {"ClientMonsters", "Monsters"}
-            for _, folderName in ipairs(foldersToScan) do
-                local monstersFolder = Workspace:FindFirstChild(folderName)
-                if monstersFolder then
-                    for _, monster in pairs(monstersFolder:GetChildren()) do
-                        if monster:IsA("Model") or monster:IsA("BasePart") then
--- ✅ THÊM 2 DÒNG NÀY VÀO ĐÂY: Nếu máu bé hơn 1 (đang hấp hối chờ bắt) -> Bỏ qua ngay!
-                            local hum = monster:FindFirstChildOfClass("Humanoid")
-                            if hum and hum.Health < 1 then continue end
+            -- Gọi 1 dòng duy nhất là ra quái
+            local validMonsters = Utils.SmartScanMonsters(centerPos, camSettings.attackRadius, "Attack")
 
-                            local root = nil
-                            if monster:IsA("Model") then
-                                root = monster.PrimaryPart or monster:FindFirstChild("HumanoidRootPart") or monster:FindFirstChild("Root")
-                            elseif monster:IsA("BasePart") then
-                                root = monster
-                            end
-                            
-                            if root and root:IsA("BasePart") and monster:GetAttribute("CatchEndTick") == nil then
-                                local distance = (root.Position - centerPos).Magnitude
-                                if distance <= camSettings.attackRadius and IsMonsterInFilter(monster) then
-                                    local idStr = monster.Name:match("Monster_(%d+)")
-                                    if idStr and MonsterSystem then 
-                                        pcall(function() MonsterSystem:ClientAttackMonster(tonumber(idStr)) end)
-                                    end
-                                end
-                            end
-                        end
-                    end
+            for _, mData in ipairs(validMonsters) do
+                if mData.Id and MonsterSystem then 
+                    pcall(function() MonsterSystem:ClientAttackMonster(mData.Id) end)
                 end
             end
         end
     end)
 
-        local function FindRecoverPosition()
-        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if not hrp then return nil end
-        local bestPos, minDist = nil, math.huge
-        local areaFolder = Workspace:FindFirstChild("Area")
-        if areaFolder then
-            for _, mapFolder in ipairs(areaFolder:GetChildren()) do
-                local recFolder = mapFolder:FindFirstChild("ServerZone") and mapFolder.ServerZone:FindFirstChild("Recover")
-                if recFolder then
-                    for _, recPart in ipairs(recFolder:GetDescendants()) do
-                        if recPart:IsA("BasePart") then
-                            local dist = (hrp.Position - recPart.Position).Magnitude
-                            if dist < minDist then 
-                                minDist = dist
-                                bestPos = recPart.Position 
-                            end
-                        end
-                    end
-                end
-            end
-        end
-        return bestPos
-    end
--- ==========================================
-    -- LUỒNG TỰ ĐỘNG BẮT QUÁI
+    -- ==========================================
+    -- 2. LUỒNG TỰ ĐỘNG BẮT QUÁI
     -- ==========================================
     task.spawn(function()
         while task.wait(0.5) do
             local controller = _G.SystemController
-            
-            -- ✅ CHẶN NGAY NẾU ĐANG CÓ LỆNH HOẶC BẬN BOSS
             if controller and (controller.IsPaused or controller.CurrentLock ~= nil) then continue end
             if _G.PendingBossHunt or _G.PendingSpecialBoss then continue end
-            
             if not camSettings.autoCatch or camSettings.isHealing then continue end
             
             local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
             if not hrp then continue end
 
             local centerPos = savedFarmPosition and savedFarmPosition.Position or hrp.Position
-            local playerId = LocalPlayer.UserId
-            local targetCatch, closestDist = nil, math.huge
-
-            local foldersToScan = {"ClientMonsters", "Monsters"}
-            for _, folderName in ipairs(foldersToScan) do
-                local monstersFolder = Workspace:FindFirstChild(folderName)
-                if monstersFolder then
-                    for _, monster in pairs(monstersFolder:GetChildren()) do
-                        if (monster:IsA("Model") or monster:IsA("BasePart")) and IsMonsterInFilter(monster) then
-                            local catchTaken = monster:GetAttribute("CatchTakenPlayerId")
-                            if catchTaken and catchTaken == playerId then
-                                local root = nil
-                                if monster:IsA("Model") then
-                                    root = monster.PrimaryPart or monster:FindFirstChild("HumanoidRootPart") or monster:FindFirstChild("Root")
-                                elseif monster:IsA("BasePart") then
-                                    root = monster
-                                end
-                                if root and root:IsA("BasePart") then
-                                    local distFromCenter = (root.Position - centerPos).Magnitude
-                                    if distFromCenter <= camSettings.attackRadius then
-                                        local distFromPlayer = (hrp.Position - root.Position).Magnitude
-                                        if distFromPlayer < closestDist then 
-                                            closestDist = distFromPlayer
-                                            targetCatch = monster 
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                    end
+            
+            -- Quét với mode "Catch"
+            local catchableMonsters = Utils.SmartScanMonsters(centerPos, camSettings.attackRadius, "Catch")
+            
+            -- Tìm con gần nhất
+            local targetCatch = nil
+            local minDist = math.huge
+            for _, mData in ipairs(catchableMonsters) do
+                if mData.Distance < minDist then
+                    minDist = mData.Distance
+                    targetCatch = mData
                 end
             end
 
             if targetCatch and MonsterSystem then
-                local targetId = tonumber(targetCatch.Name:match("Monster_(%d+)"))
-                local root = nil
-                if targetCatch:IsA("Model") then
-                    root = targetCatch.PrimaryPart or targetCatch:FindFirstChild("HumanoidRootPart") or targetCatch:FindFirstChild("Root")
-                elseif targetCatch:IsA("BasePart") then
-                    root = targetCatch
-                end
-                
-                if root and root:IsA("BasePart") then SafeTeleport(CFrame.new(root.Position), 5) end
+                SafeTeleport(CFrame.new(targetCatch.Position), 5)
                 
                 task.spawn(function()
-                    local success, isStarted = pcall(function() return MonsterSystem:ClientCatchMonsterStart(targetId) end)
+                    local success, isStarted = pcall(function() return MonsterSystem:ClientCatchMonsterStart(targetCatch.Id) end)
                     if success then
                         if isStarted == false then task.wait(5) else
                             task.wait(1.5)
-                            pcall(function() MonsterSystem:ClientCatchMonsterComplete(targetId) end)
+                            pcall(function() MonsterSystem:ClientCatchMonsterComplete(targetCatch.Id) end)
                         end
                     end
                 end)
             end
         end
+    end)
+
+    -- ==========================================
+    -- 3. LUỒNG CHẠY NỀN: AUTO FARM DỊCH CHUYỂN
+    -- ==========================================
+    task.spawn(function()
+        local function GetAttackRemote()
+            local s, r = pcall(function()
+                return ReplicatedStorage:FindFirstChild("CommonLibrary")
+                    and ReplicatedStorage.CommonLibrary:FindFirstChild("Tool")
+                    and ReplicatedStorage.CommonLibrary.Tool:FindFirstChild("RemoteManager")
+                    and ReplicatedStorage.CommonLibrary.Tool.RemoteManager:FindFirstChild("Funcs")
+                    and ReplicatedStorage.CommonLibrary.Tool.RemoteManager.Funcs:FindFirstChild("DataPullFunc")
+            end)
+            return s and r or nil
+        end
+
+        while task.wait(0.1) do
+            if not tpFarmSettings.enabled then continue end
+            
+            local controller = _G.SystemController
+            if controller and (controller.IsPaused or controller.CurrentLock ~= nil) then task.wait(0.5) continue end
+            if _G.PendingBossHunt or _G.PendingSpecialBoss or camSettings.isHealing then continue end
+
+            local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
+            if not (hrp and hum and hum.Health > 0) then task.wait(1) continue end
+
+            local centerPos = savedFarmPosition and savedFarmPosition.Position or hrp.Position
+            
+            -- Quét với mode "Attack"
+            local validMonsters = Utils.SmartScanMonsters(centerPos, camSettings.attackRadius, "Attack")
+            
+            local closestMonster = nil
+            local minDist = math.huge
+            for _, mData in ipairs(validMonsters) do
+                if mData.Distance < minDist then
+                    minDist = mData.Distance
+                    closestMonster = mData
+                end
+            end
+
+            if closestMonster then
+                local remote = GetAttackRemote()
+                if remote then
+                    local targetPos = closestMonster.Position + tpFarmSettings.distanceOffset
+                    
+                    -- Chống giật
+                    if closestMonster.Distance > 3 then
+                        hrp.CFrame = CFrame.new(targetPos)
+                        hrp.CFrame = CFrame.lookAt(hrp.Position, closestMonster.Position)
+                    end
+
+                    pcall(function() remote:InvokeServer("MonsterAttackChannel", closestMonster.Id) end)
+                    task.wait(tpFarmSettings.attackDelay + 0.1)
+                end
+            end
+        end
+    end)
         -- 3. LUỒNG HỒI MÁU PET
     local function CheckDeadPetsFromUI()
         local deadCount = 0
