@@ -426,7 +426,7 @@ end
     -- ==========================================
     -- HÀM LÕI: QUÉT & LỌC QUÁI THÔNG MINH
     -- ==========================================
-    local function Utils.SmartScanMonsters(centerPos, maxRadius, scanMode)
+    function Utils.SmartScanMonsters(centerPos, maxRadius, scanMode)
         -- scanMode: "Attack" (Đánh quái) hoặc "Catch" (Bắt quái)
         local validMonsters = {}
         local playerId = LocalPlayer.UserId
