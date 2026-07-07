@@ -389,7 +389,7 @@ end
     -- ==========================================
     -- HÀM LÕI: QUÉT & LỌC QUÁI THÔNG MINH
     -- ==========================================
-    function Utils.SmartScanMonsters(centerPos, maxRadius, scanMode)
+    function Utils.SmartScanMonsters(centerPos, maxRadius, scanMode, filterFunction)
         -- scanMode: "Attack" (Đánh quái) hoặc "Catch" (Bắt quái)
         local validMonsters = {}
         local playerId = LocalPlayer.UserId
@@ -404,7 +404,7 @@ end
                     if monster:IsA("Model") or monster:IsA("BasePart") then
                         
                         -- Lọc theo tên UI
-                        if not IsMonsterInFilter(monster) then continue end
+                        if filterFunction and not filterFunction(monster) then continue end
 
                         -- Tìm Root
                         local root = nil

@@ -167,6 +167,18 @@ return function(Window, Utils)
         return nil
     end
 
+    -- [Validation] Lọc quái theo cài đặt người chơi
+    local function IsMonsterInFilter(monster)
+        if not AppState.targetMonsterNames or #AppState.targetMonsterNames == 0 or AppState.targetMonsterNames[1] == "Tất cả quái" then return true end
+        local realName = ResolveMonsterName(monster)
+        for _, targetName in ipairs(AppState.targetMonsterNames) do
+            if string.find(string.lower(realName), string.lower(targetName)) then
+                return true
+            end
+        end
+        return false
+    end
+
     -- ==========================================
     -- 3. TẦNG LOGIC NGHIỆP VỤ (BUSINESS LOGIC)
     -- ==========================================
@@ -354,7 +366,7 @@ return function(Window, Utils)
             if not charData then continue end
             
             local centerPos = AppState.savedFarmPosition and AppState.savedFarmPosition.Position or charData.Position
-            local validMonsters = Utils.SmartScanMonsters(centerPos, AppState.attackRadius, "Attack")
+            local validMonsters = Utils.SmartScanMonsters(centerPos, AppState.attackRadius, "Attack", IsMonsterInFilter)
 
             if SystemCache.MonsterSystem then
                 for _, mData in ipairs(validMonsters) do
@@ -373,7 +385,7 @@ return function(Window, Utils)
             if not charData then continue end
 
             local centerPos = AppState.savedFarmPosition and AppState.savedFarmPosition.Position or charData.Position
-            local catchableMonsters = Utils.SmartScanMonsters(centerPos, AppState.attackRadius, "Catch")
+            local catchableMonsters = Utils.SmartScanMonsters(centerPos, AppState.attackRadius, "Catch", IsMonsterInFilter)
             
             local targetCatch, minDist = nil, math.huge
             for _, mData in ipairs(catchableMonsters) do
@@ -408,41 +420,15 @@ return function(Window, Utils)
             local centerPos = AppState.savedFarmPosition and AppState.savedFarmPosition.Position or charData.Position
             
             -- Lọc quái thông minh thông qua thư viện Utils bên ngoài
-            local filterArgs = (#AppState.targetMonsterNames == 1 and AppState.targetMonsterNames[1] == "Tất cả quái") and {} or AppState.targetMonsterNames
-            local allMonsters = Utils.ScanMonsters(filterArgs)
+            local allMonsters = Utils.SmartScanMonsters(centerPos, AppState.attackRadius, "Attack", IsMonsterInFilter)
             
             if not allMonsters or #allMonsters == 0 then task.wait(0.5); continue end
 
             local closestMonster, minDist = nil, math.huge
             for _, m in ipairs(allMonsters) do
-                if m.Object:GetAttribute("CatchEndTick") or (m.RootPart and m.RootPart:GetAttribute("CatchEndTick")) then continue end
-                
-                local isAlive = false
-                local hum_monster = m.Object:FindFirstChildOfClass("Humanoid")
-                
-                if hum_monster then
-                    isAlive = hum_monster.Health >= 1
-                else
-                    local hpVal = m.Object:FindFirstChild("Health")
-                    if hpVal and hpVal:IsA("StringValue") then
-                        local rawStr = hpVal.Value
-                        local hpNum = tonumber((string.gsub(rawStr, ",", ".")))
-                        if not hpNum then
-                            local parts = string.split(rawStr, ",")
-                            if #parts == 2 then hpNum = (tonumber(parts[1]) or 0) * (10 ^ (tonumber(parts[2]) or 0)) end
-                        end
-                        isAlive = (hpNum and hpNum >= 1)
-                    end
-                end
-                
-                if isAlive then
-                    local distFromCenter = (centerPos - m.Position).Magnitude
-                    if distFromCenter <= AppState.attackRadius then
-                        local distFromPlayer = (charData.Position - m.Position).Magnitude
-                        if distFromPlayer < minDist then
-                            minDist, closestMonster = distFromPlayer, m
-                        end
-                    end
+                local distFromPlayer = (charData.Position - m.Position).Magnitude
+                if distFromPlayer < minDist then
+                    minDist, closestMonster = distFromPlayer, m
                 end
             end
             
