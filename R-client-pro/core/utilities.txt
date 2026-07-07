@@ -469,22 +469,58 @@ end
 -- ==========================================
 function Utils.ResolveMonsterName(monsterObj)
     if not monsterObj then return "Unknown" end
-    local uidStr = string.match(monsterObj.Name, "Monster_(%d+)")
-    if not uidStr then return monsterObj.Name end
+    local originalName = monsterObj.Name
     
-    local uidNum = tonumber(uidStr)
-    local env = getrenv and getrenv()._G and getrenv()._G.PathTool
-    if env and env.MgrMonsterClient and env.CfgMonster then
-        local success, info = pcall(function() return env.MgrMonsterClient:GetMonsterInfo(uidNum) end)
-        if success and info then
-            local tmplId = info.tmplId or info.TmplId or info.id
-            local cfgData = env.CfgMonster.Tmpls[tostring(tmplId)] or env.CfgMonster.Tmpls[tonumber(tmplId)]
-            if cfgData then
-                return cfgData.Name or cfgData.name or cfgData.Title or monsterObj.Name
+    -- Cách 1: Giải mã qua CfgMonster từ game env
+    local uidStr = string.match(originalName, "Monster_(%d+)")
+    if uidStr then
+        local uidNum = tonumber(uidStr)
+        local env = getrenv and getrenv()._G and getrenv()._G.PathTool
+        if env and env.MgrMonsterClient and env.CfgMonster then
+            local success, info = pcall(function() return env.MgrMonsterClient:GetMonsterInfo(uidNum) end)
+            if success and info then
+                local tmplId = info.tmplId or info.TmplId or info.id
+                local cfgData = env.CfgMonster.Tmpls[tostring(tmplId)] or env.CfgMonster.Tmpls[tonumber(tmplId)]
+                if cfgData then
+                    local name = cfgData.Name or cfgData.name or cfgData.Title
+                    if name then return name end
+                end
             end
         end
     end
-    return monsterObj.Name
+
+    -- Cách 2: Tìm BillboardGui chứa tên hiển thị (UI Name) của quái
+    for _, child in ipairs(monsterObj:GetDescendants()) do
+        if child:IsA("TextLabel") and child.Visible then
+            local text = child.Text
+            if text and text ~= "" and not string.find(text, "/") and not string.find(text, "HP") then
+                -- Xóa phần lv hiển thị (ví dụ: "Walrusk Lv.100" -> "Walrusk")
+                local cleaned = string.gsub(text, "%s*Lv%.%s*%d+", "")
+                cleaned = string.gsub(cleaned, "%s*%[%s*Lv%.%s*%d+%s*%]", "")
+                cleaned = string.gsub(cleaned, "^%s*(.-)%s*$", "%1") -- Trim space
+                if cleaned ~= "" and not tonumber(cleaned) then
+                    return cleaned
+                end
+            end
+        end
+    end
+
+    -- Cách 3: Lấy Humanoid DisplayName
+    local hum = monsterObj:FindFirstChildOfClass("Humanoid")
+    if hum and hum.DisplayName and hum.DisplayName ~= "" then
+        local cleaned = string.gsub(hum.DisplayName, "%s*Lv%.%s*%d+", "")
+        cleaned = string.gsub(cleaned, "%s*%[%s*Lv%.%s*%d+%s*%]", "")
+        cleaned = string.gsub(cleaned, "^%s*(.-)%s*$", "%1")
+        if cleaned ~= "" then return cleaned end
+    end
+
+    -- Cách 4: Cắt bỏ tiền tố "Monster_" nếu có
+    if uidStr then
+        local cleanName = string.gsub(originalName, "Monster_%d+", "")
+        if cleanName ~= "" then return cleanName end
+    end
+
+    return originalName
 end
 
 
@@ -564,6 +600,9 @@ end
                                         end
                                     end
                                     if hpNum >= 1 then isValid = true end
+                                else
+                                    -- Mặc định nếu không tìm thấy thanh máu (đặc biệt là Boss), coi như còn sống
+                                    isValid = true
                                 end
                             end
                         end
