@@ -154,24 +154,69 @@ function Utils.GetCurrentAreaId()
     end)
     if success and areaId then return areaId end
 
-    -- Cách 2: Fallback tìm folder map trong Workspace.Area
+    -- Cách 2: Phân tích khoảng cách vật lý của nhân vật đến các Folder map
     local areaFolder = Workspace:FindFirstChild("Area")
-    if areaFolder then
+    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    
+    if areaFolder and hrp then
+        local closestAreaId = nil
+        local minDist = math.huge
+        
         for _, folder in ipairs(areaFolder:GetChildren()) do
-            local folderName = folder.Name:lower()
-            for id, areaName in pairs(AreaMap) do
-                local cleanName = areaName:lower()
-                    :gsub(" island", "")
-                    :gsub(" isle", "")
-                    :gsub(" grove", "")
-                    :gsub(" shallows", "")
-                    :gsub(" coast", "")
-                    :gsub(" haven", "")
-                if string.find(folderName, cleanName) or string.find(cleanName, folderName) then
-                    return id
+            local idNum = nil
+            
+            -- Thử lấy ID từ số trong tên folder (ví dụ: "island_6" -> 6)
+            local numStr = string.match(folder.Name, "(%d+)")
+            if numStr then
+                idNum = tonumber(numStr)
+            end
+            
+            -- Nếu không có số, so khớp tên với AreaMap
+            if not idNum then
+                local nameLower = folder.Name:lower()
+                if nameLower == "center" then
+                    idNum = 1
+                else
+                    for id, areaName in pairs(AreaMap) do
+                        local cleanName = areaName:lower()
+                            :gsub(" island", "")
+                            :gsub(" isle", "")
+                            :gsub(" grove", "")
+                            :gsub(" shallows", "")
+                            :gsub(" coast", "")
+                            :gsub(" haven", "")
+                        if string.find(nameLower, cleanName) or string.find(cleanName, nameLower) then
+                            idNum = id
+                            break
+                        end
+                    end
+                end
+            end
+            
+            if idNum then
+                -- Lấy vị trí đại diện của folder map
+                local folderPos = nil
+                if folder:IsA("BasePart") then
+                    folderPos = folder.Position
+                else
+                    local zone = folder:FindFirstChild("ServerZone") or folder:FindFirstChild("Area")
+                    local part = zone and zone:FindFirstChildWhichIsA("BasePart", true) or folder:FindFirstChildWhichIsA("BasePart", true)
+                    if part then
+                        folderPos = part.Position
+                    end
+                end
+                
+                if folderPos then
+                    local dist = (hrp.Position - folderPos).Magnitude
+                    if dist < minDist then
+                        minDist = dist
+                        closestAreaId = idNum
+                    end
                 end
             end
         end
+        
+        if closestAreaId then return closestAreaId end
     end
     return nil
 end
