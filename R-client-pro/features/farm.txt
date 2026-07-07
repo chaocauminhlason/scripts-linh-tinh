@@ -38,6 +38,7 @@ return function(Window, Utils)
         attackDelay = 0.2,
         tpDistanceOffset = Vector3.new(0, 7, 0),
         savedFarmPosition = nil,
+        tempFarmPosition = nil, -- Vị trí tạm thời khi bật farm mà không lưu vị trí
         targetMonsterNames = {}
     }
 
@@ -260,6 +261,12 @@ return function(Window, Utils)
         _G.SystemController:registerModule("AutoFarm", function(paused)
             AppState.autoAttack = not paused
             AppState.autoCatch = not paused
+            if not paused then
+                local charData = GetValidCharacterData()
+                if charData then AppState.tempFarmPosition = charData.Position end
+            else
+                AppState.tempFarmPosition = nil
+            end
         end)
     end
 
@@ -329,8 +336,36 @@ return function(Window, Utils)
     end})
 
     CamTab:CreateSection("CẤU HÌNH CHIẾN ĐẤU")
-    CamTab:CreateToggle({ Name = "Tự Động Đánh Quái (Thường)", CurrentValue = false, Callback = function(V) AppState.autoAttack = V end })
-    CamTab:CreateToggle({ Name = "Tấn công dịch chuyển (TP Farm)", CurrentValue = false, Callback = function(V) AppState.tpFarmEnabled = V; if V then SendNotify("🚀 TP Farm", "Đã bật diệt quái không gian!") end end })
+    CamTab:CreateToggle({
+        Name = "Tự Động Đánh Quái",
+        CurrentValue = false,
+        Callback = function(V)
+            AppState.autoAttack = V
+            if V then
+                local charData = GetValidCharacterData()
+                if charData then AppState.tempFarmPosition = charData.Position end
+                if AppState.tpFarmEnabled then
+                    SendNotify("⚔️ Auto Attack", "Đang vận hành chế độ Tấn công dịch chuyển (TP Farm)")
+                end
+            else
+                AppState.tempFarmPosition = nil
+            end
+        end
+    })
+    CamTab:CreateToggle({
+        Name = "Tấn công dịch chuyển (TP Farm)",
+        CurrentValue = false,
+        Callback = function(V)
+            AppState.tpFarmEnabled = V
+            if V then
+                if not AppState.autoAttack then
+                    SendNotify("🚀 TP Farm", "Đã bật diệt quái không gian! (Hãy bật 'Tự Động Đánh Quái' để bắt đầu)")
+                else
+                    SendNotify("🚀 TP Farm", "Đã chuyển sang chế độ diệt quái không gian!")
+                end
+            end
+        end
+    })
     CamTab:CreateSlider({ Name = "Bán kính Farm", Range = {10, 2000}, Increment = 10, Suffix = " studs", CurrentValue = 200, Callback = function(V) AppState.attackRadius = V end })
     CamTab:CreateToggle({ Name = "Tự Động Bắt Quái", CurrentValue = false, Callback = function(V) AppState.autoCatch = V end })
 
@@ -365,7 +400,7 @@ return function(Window, Utils)
             local charData = GetValidCharacterData()
             if not charData then continue end
             
-            local centerPos = AppState.savedFarmPosition and AppState.savedFarmPosition.Position or charData.Position
+            local centerPos = AppState.savedFarmPosition and AppState.savedFarmPosition.Position or AppState.tempFarmPosition or charData.Position
             local validMonsters = Utils.SmartScanMonsters(centerPos, AppState.attackRadius, "Attack", IsMonsterInFilter)
 
             if SystemCache.MonsterSystem then
@@ -384,7 +419,7 @@ return function(Window, Utils)
             local charData = GetValidCharacterData()
             if not charData then continue end
 
-            local centerPos = AppState.savedFarmPosition and AppState.savedFarmPosition.Position or charData.Position
+            local centerPos = AppState.savedFarmPosition and AppState.savedFarmPosition.Position or AppState.tempFarmPosition or charData.Position
             local catchableMonsters = Utils.SmartScanMonsters(centerPos, AppState.attackRadius, "Catch", IsMonsterInFilter)
             
             local targetCatch, minDist = nil, math.huge
@@ -396,10 +431,9 @@ return function(Window, Utils)
 
             if targetCatch and SystemCache.MonsterSystem then
             -- Nếu quá gần (dưới 15 studs) thì không cần Teleport
-            if minDist > 15 then
-            Utils.ToggleMount(true)
+            if minDist > 20 then
+            task.wait(0.25)
                 Utils.SafeTeleport(CFrame.new(targetCatch.Position), 5)
-            Utils.SmartDismount()
             end
             
                 -- Task con xử lý Async việc ném bóng bắt quái
@@ -417,12 +451,12 @@ return function(Window, Utils)
     -- Luồng 3: Teleport Farm (Không gian)
     task.spawn(function()
         while task.wait(0.1) do
-            if not AppState.tpFarmEnabled or IsSystemBusy() or AppState.isHealing then continue end
+            if not AppState.autoAttack or not AppState.tpFarmEnabled or IsSystemBusy() or AppState.isHealing then continue end
 
             local charData = GetValidCharacterData()
             if not charData then task.wait(1); continue end
 
-            local centerPos = AppState.savedFarmPosition and AppState.savedFarmPosition.Position or charData.Position
+            local centerPos = AppState.savedFarmPosition and AppState.savedFarmPosition.Position or AppState.tempFarmPosition or charData.Position
             
             -- Lọc quái thông minh thông qua thư viện Utils bên ngoài
             local allMonsters = Utils.SmartScanMonsters(centerPos, AppState.attackRadius, "Attack", IsMonsterInFilter)
@@ -455,11 +489,12 @@ return function(Window, Utils)
                     targetPos = closestMonster.Position + Vector3.new(0, 0, 5)
                 end
 
-                if (charData.Position - targetPos).Magnitude > 3 then
+                if (charData.Position - targetPos).Magnitude > 8 then
                     charData.RootPart.CFrame = CFrame.lookAt(targetPos, closestMonster.Position)
                 end
-
+                Utils.ToggleMount(true)
                 pcall(function() SystemCache.AttackRemote:InvokeServer("MonsterAttackChannel", closestMonster.Id) end)
+                Utils.ToggleMount(false)
                 task.wait(AppState.attackDelay + 0.1)
             end
         end
@@ -508,18 +543,20 @@ return function(Window, Utils)
     -- Luồng 5: Smart Return (Bám bãi)
     task.spawn(function()
         while task.wait(1) do
-            if IsSystemBusy() or AppState.isHealing or not AppState.autoReturnToFarm or not AppState.savedFarmPosition then continue end
-            if not (AppState.autoAttack or AppState.autoCatch or AppState.tpFarmEnabled) then continue end
+            if IsSystemBusy() or AppState.isHealing or not AppState.autoReturnToFarm then continue end
+            local returnPos = AppState.savedFarmPosition or (AppState.tempFarmPosition and CFrame.new(AppState.tempFarmPosition))
+            if not returnPos then continue end
+            if not (AppState.autoAttack or AppState.autoCatch) then continue end
 
             local charData = GetValidCharacterData()
             if not charData then continue end
 
             local maxAllowedDistance = AppState.attackRadius + 20
-            if (charData.Position - AppState.savedFarmPosition.Position).Magnitude > maxAllowedDistance then
+            if (charData.Position - returnPos.Position).Magnitude > maxAllowedDistance then
                 -- Check Double-lock ngay trước khi bay
                 if not IsSystemBusy() then
                     SendNotify("📍 Smart Return", "Hệ thống rảnh rỗi. Đang quay về tâm bãi Farm...")
-                    Utils.SafeTeleport(AppState.savedFarmPosition, 5)
+                    Utils.SafeTeleport(returnPos, 5)
                     task.wait(2)
                 end
             end
