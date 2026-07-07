@@ -1,6 +1,6 @@
 -- ====================================================================
 -- MODULE: TỔNG LÃNH BỘ SĂN BOSS (WORLD BOSS & SPECIAL BOSS HỢP NHẤT)
--- BẢN CẬP NHẬT: FIX LỖI THƯ MỤC, ANTI-CRASH PART, TỐI ƯU REMOTE
+-- BẢN CẬP NHẬT: FIX LỖI THƯ MỤC, DATA CONTRACT, TỐI ƯU REMOTE BẰNG UTILS
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -65,27 +65,20 @@ return function(Window, Utils)
     }
 
     pcall(function()
-        if Utils and Utils.LoadSelectedAreas then
-            local savedWorlds = Utils.LoadSelectedAreas("R_SelectedBossWorlds.json")
+        if Utils and Utils.LoadJSON then
+            local savedWorlds = Utils.LoadJSON("R_SelectedBossWorlds.json")
             if type(savedWorlds) == "table" and #savedWorlds > 0 then worldSettings.selectedWorlds = savedWorlds end
 
-            local savedSpWorlds = Utils.LoadSelectedAreas("R_SelectedSpBossWorlds.json")
+            local savedSpWorlds = Utils.LoadJSON("R_SelectedSpBossWorlds.json")
             if type(savedSpWorlds) == "table" and #savedSpWorlds > 0 then specialSettings.selectedWorlds = savedSpWorlds end
         end
     end)
 
-    -- ==========================================
-    -- HÀM LẤY REMOTE AN TOÀN (Không gây treo tool)
-    -- ==========================================
-    local function GetAttackRemote()
-        local success, remote = pcall(function()
-            return ReplicatedStorage:FindFirstChild("CommonLibrary")
-                and ReplicatedStorage.CommonLibrary:FindFirstChild("Tool")
-                and ReplicatedStorage.CommonLibrary.Tool:FindFirstChild("RemoteManager")
-                and ReplicatedStorage.CommonLibrary.Tool.RemoteManager:FindFirstChild("Funcs")
-                and ReplicatedStorage.CommonLibrary.Tool.RemoteManager.Funcs:FindFirstChild("DataPullFunc")
-        end)
-        return success and remote or nil
+    -- Hàm lấy tên quái an toàn từ Utils
+    local function GetBossNameSafe(monsterObj)
+        if Utils.GetCachedMonsterName then return Utils.GetCachedMonsterName(monsterObj) end
+        if Utils.ResolveMonsterName then return Utils.ResolveMonsterName(monsterObj) end
+        return monsterObj.Name
     end
 
     -- ==========================================
@@ -113,7 +106,7 @@ return function(Window, Utils)
     end
 
     -- ==========================================
-    -- 3. GIAO DIỆN UI TỔNG HỢP (CHUNG 1 TAB)
+    -- 3. GIAO DIỆN UI TỔNG HỢP
     -- ==========================================
     local BossTab = Window:CreateTab("Săn Boss", 4483345998)
 
@@ -127,8 +120,7 @@ return function(Window, Utils)
         Flag = "AutoSpecialBossToggle",
         Callback = function(Value)
             SpecialBossToggle(Value)
-            if Value then SpStatusLabel:Set("🟢 Trạng thái: Đang túc trực chờ sóng...") else SpStatusLabel:Set(
-                "🔴 Trạng thái: Đã tắt") end
+            if Value then SpStatusLabel:Set("🟢 Trạng thái: Đang túc trực chờ sóng...") else SpStatusLabel:Set("🔴 Trạng thái: Đã tắt") end
         end
     })
 
@@ -139,10 +131,8 @@ return function(Window, Utils)
         callback = function(selectedIds)
             if type(selectedIds) == "table" then
                 specialSettings.selectedWorlds = selectedIds
-                if Utils and Utils.SaveSelectedAreas then Utils.SaveSelectedAreas(selectedIds,
-                        "R_SelectedSpBossWorlds.json") end
-                if #selectedIds == 0 then SpTargetLabel:Set("⚠️ Chưa chọn world nào!") else SpTargetLabel:Set(
-                    "🎯 Đã chọn " .. #selectedIds .. " world") end
+                if Utils and Utils.SaveJSON then Utils.SaveJSON("R_SelectedSpBossWorlds.json", selectedIds) end
+                if #selectedIds == 0 then SpTargetLabel:Set("⚠️ Chưa chọn world nào!") else SpTargetLabel:Set("🎯 Đã chọn " .. #selectedIds .. " world") end
             end
         end
     })
@@ -157,10 +147,8 @@ return function(Window, Utils)
         callback = function(selectedIds)
             if type(selectedIds) == "table" then
                 worldSettings.selectedWorlds = selectedIds
-                if Utils and Utils.SaveSelectedAreas then Utils.SaveSelectedAreas(selectedIds,
-                        "R_SelectedBossWorlds.json") end
-                if #selectedIds == 0 then TargetLabel:Set("⚠️ Chưa chọn world nào!") else TargetLabel:Set("🎯 Đã chọn " ..
-                    #selectedIds .. " world có boss") end
+                if Utils and Utils.SaveJSON then Utils.SaveJSON("R_SelectedBossWorlds.json", selectedIds) end
+                if #selectedIds == 0 then TargetLabel:Set("⚠️ Chưa chọn world nào!") else TargetLabel:Set("🎯 Đã chọn " .. #selectedIds .. " world có boss") end
             end
         end
     })
@@ -176,8 +164,7 @@ return function(Window, Utils)
             WorldBossToggle(Value)
             if Value then
                 if #worldSettings.selectedWorlds == 0 then
-                    game.StarterGui:SetCore("SendNotification",
-                        { Title = "⚠️ Lỗi", Text = "Vui lòng chọn ít nhất 1 world!", Duration = 3 })
+                    game.StarterGui:SetCore("SendNotification", { Title = "⚠️ Lỗi", Text = "Vui lòng chọn ít nhất 1 world!", Duration = 3 })
                     WorldBossToggle(false)
                     return
                 end
@@ -243,11 +230,7 @@ return function(Window, Utils)
                             spHuntState.targetWorldId = worldId
                             spHuntState.timeout = os.time() + 180
                             _G.PendingSpecialBoss = true
-                            game.StarterGui:SetCore("SendNotification",
-                                { Title = "🚨 Special Boss!", Text = bossName .. " xuất hiện ở đảo " .. worldId, Duration = 5 })
-                        else
-                            print("⏩ [SPECIAL] Bỏ qua " ..
-                            bossName .. " ở Đảo " .. worldId .. " vì không nằm trong danh sách chọn!")
+                            game.StarterGui:SetCore("SendNotification", { Title = "🚨 Special Boss!", Text = bossName .. " xuất hiện ở đảo " .. worldId, Duration = 5 })
                         end
                     end
                 end
@@ -267,10 +250,7 @@ return function(Window, Utils)
                         end
                         _G.PendingBossHunt = false
 
-                        if _G.PendingSpecialBoss or (controller and controller.CurrentLock == "SpecialBoss") then
-                            print("⚠️ [WORLD BOSS] Bỏ qua sóng vì Special Boss đang hoạt động!")
-                            return
-                        end
+                        if _G.PendingSpecialBoss or (controller and controller.CurrentLock == "SpecialBoss") then return end
 
                         if controller then controller.RequestLock("BossHunt") end
                         _G.BossStatus.roundCompleted = false; _G.BossStatus.currentWorldIndex = 1; _G.BossStatus.scanAttempts = 0
@@ -281,8 +261,7 @@ return function(Window, Utils)
                         end
 
                         if worldSettings.autoHop and controller then
-                            table.insert(controller.TaskQueue,
-                                { Name = "BossWaveHop", Func = function() Utils.HopServer("Tìm Server bắt sóng Boss") end })
+                            table.insert(controller.TaskQueue, { Name = "BossWaveHop", Func = function() Utils.HopServer("Tìm Server bắt sóng Boss") end })
                         end
                     end)
                 end
@@ -303,16 +282,15 @@ return function(Window, Utils)
             if screenGui then
                 local existing = screenGui:FindFirstChild("FmBubble")
                 if existing then HookCombinedBubble(existing) end
-                screenGui.ChildAdded:Connect(function(child) if child.Name == "FmBubble" then
-                        task.wait(0.5)
-                        HookCombinedBubble(child)
-                    end end)
+                screenGui.ChildAdded:Connect(function(child) 
+                    if child.Name == "FmBubble" then task.wait(0.5); HookCombinedBubble(child) end 
+                end)
             end
         end
     end)
 
     -- ==========================================
-    -- 5. LUỒNG CHẠY: SPECIAL BOSS
+    -- 5. LUỒNG CHẠY: SPECIAL BOSS (ĐÃ FIX)
     -- ==========================================
     task.spawn(function()
         while task.wait(0.2) do
@@ -337,49 +315,41 @@ return function(Window, Utils)
             local humanoid = char and char:FindFirstChild("Humanoid")
             if not (hrp and humanoid and humanoid.Health > 0) then continue end
 
-            local actualAreaId = "Unknown"
-            pcall(function() actualAreaId = getrenv()._G.PathTool.MgrAreaClient.CurAreaId end)
+            local actualAreaId = nil
+            pcall(function() actualAreaId = tonumber(getrenv()._G.PathTool.MgrAreaClient.CurAreaId) end)
 
-            if tonumber(actualAreaId) ~= tonumber(spHuntState.targetWorldId) then
+            if actualAreaId ~= tonumber(spHuntState.targetWorldId) then
                 SpStatusLabel:Set("🚀 Đang bay tới Đảo " .. spHuntState.targetWorldId)
                 pcall(function() Utils.TeleportToArea(spHuntState.targetWorldId) end)
-                task.wait(3); continue
+                task.wait(4) -- Chờ game load map
+                continue
             end
 
             local bestTarget = nil
             local closestDist = math.huge
 
-            -- Sử dụng SmartScanMonsters mới từ utilities
-            local function isTargetBoss(monster)
-                local realName = Utils.ResolveMonsterName(monster)
-                return string.find(string.lower(realName), string.lower(spHuntState.targetBoss)) ~= nil
-            end
-
-            local targets = Utils.SmartScanMonsters(hrp.Position, 999999, "Attack", isTargetBoss)
+            -- FIX DATA CONTRACT: Truyền Bảng Keywords thay vì Function
+            local filterTable = { spHuntState.targetBoss }
+            local targets = Utils.SmartScanMonsters(hrp.Position, 999999, "Attack", filterTable)
+            
             for _, boss in ipairs(targets) do
                 if boss.Distance < closestDist then
                     closestDist = boss.Distance
-                    local obj = boss.Object
-                    local root = nil
-                    if obj:IsA("Model") then
-                        root = obj.PrimaryPart or obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Root")
-                    elseif obj:IsA("BasePart") then
-                        root = obj
-                    end
-                    if root then
-                        bestTarget = { id = boss.Id, root = root }
-                    end
+                    bestTarget = { id = boss.Id, root = boss.RootPart }
                 end
             end
 
             if bestTarget then
                 SpStatusLabel:Set("⚔️ Đang tiêu diệt: " .. spHuntState.targetBoss)
                 local targetPos = bestTarget.root.Position
-                if closestDist > 40 then
+                
+                -- Gom pet và chống giật
+                if closestDist > 30 then
                     pcall(function() Utils.ToggleMount(true) end)
                     hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 5, 5))
                     task.wait(0.2)
                 end
+                
                 humanoid:MoveTo(targetPos)
 
                 if spHuntState.lastPos and (hrp.Position - spHuntState.lastPos).Magnitude < 1 then
@@ -397,8 +367,7 @@ return function(Window, Utils)
                 if closestDist <= 15 then
                     pcall(function() Utils.SmartDismount() end)
                     humanoid:MoveTo(hrp.Position)
-                    local remote = GetAttackRemote()
-                    if remote then pcall(function() remote:InvokeServer("MonsterAttackChannel", bestTarget.id) end) end
+                    pcall(function() Utils.AttackMonster(bestTarget.id) end)
                 end
             else
                 spHuntState.stuckTimer = spHuntState.stuckTimer + 0.2
@@ -414,7 +383,7 @@ return function(Window, Utils)
     end)
 
     -- ==========================================
-    -- 6. LUỒNG CHẠY: WORLD BOSS THƯỜNG
+    -- 6. LUỒNG CHẠY: WORLD BOSS THƯỜNG (ĐÃ FIX)
     -- ==========================================
     local function ScanWorldBoss()
         local currentWorldId = _G.BossStatus.currentWorldId
@@ -426,21 +395,13 @@ return function(Window, Utils)
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
         if not hrp then return nil, nil, nil end
 
-        local function isWorldBoss(monster)
-            local realName = Utils.ResolveMonsterName(monster)
-            for _, kw in ipairs(keywords) do
-                if string.find(string.lower(realName), string.lower(kw)) then
-                    return true
-                end
-            end
-            return false
-        end
-
-        local targets = Utils.SmartScanMonsters(hrp.Position, 999999, "Attack", isWorldBoss)
+        -- FIX DATA CONTRACT: Truyền mảng keywords trực tiếp vào hàm quét
+        local targets = Utils.SmartScanMonsters(hrp.Position, 999999, "Attack", keywords)
+        
         if #targets > 0 then
             table.sort(targets, function(a, b) return a.Distance < b.Distance end)
             local boss = targets[1]
-            local realName = Utils.ResolveMonsterName(boss.Object)
+            local realName = GetBossNameSafe(boss.Object)
             return boss.Id, realName, boss.Position
         end
 
@@ -459,9 +420,7 @@ return function(Window, Utils)
             end
 
             if controller and controller.CurrentLock == "AutoDungeon" then 
-                WbStatusLabel:Set("⏳ Đang bận đi Dungeon...")
-                task.wait(1)
-                continue 
+                WbStatusLabel:Set("⏳ Đang bận đi Dungeon..."); task.wait(1); continue 
             end
 
             if _G.PendingSpecialBoss or (controller and controller.CurrentLock == "SpecialBoss") then
@@ -489,32 +448,32 @@ return function(Window, Utils)
             if bossCheckCooldown >= 5 then
                 bossCheckCooldown = 0
                 local bossId, bossName, bossPos = ScanWorldBoss()
-                local remote = GetAttackRemote()
 
-                if bossId and remote then
+                if bossId then
                     _G.BossStatus.scanAttempts = 0
                     if controller then controller.RequestLock("BossHunt") end
-                    _G.BossStatus.bossFound = true; _G.BossStatus.bossId = bossId; _G.BossStatus.bossName = bossName; _G.BossStatus.bossPosition =
-                    bossPos
+                    _G.BossStatus.bossFound = true; _G.BossStatus.bossId = bossId; _G.BossStatus.bossName = bossName; _G.BossStatus.bossPosition = bossPos
                     BossMapLabel:Set("📊 Boss trên map: ✅ " .. bossName)
                     WbStatusLabel:Set("⚔️ Trạng thái: Đang đánh boss!")
 
-                    if bossPos then
-                        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                        if hrp then
-                            local distance = (hrp.Position - bossPos).Magnitude
-                            if distance > 20 then hrp.CFrame = CFrame.new(bossPos + Vector3.new(0, 8, 0)) end
+                    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                    if bossPos and hrp then
+                        local distance = (hrp.Position - bossPos).Magnitude
+                        -- Combo Lên Thú + Bay để gom Pet
+                        if distance > 20 then 
+                            pcall(function() Utils.ToggleMount(true) end)
+                            hrp.CFrame = CFrame.new(bossPos + Vector3.new(0, 8, 0)) 
+                            pcall(function() Utils.SmartDismount() end)
                         end
                     end
-                    pcall(function() remote:InvokeServer("MonsterAttackChannel", bossId) end)
+                    pcall(function() Utils.AttackMonster(bossId) end)
                 else
                     local timeSinceAlert = os.time() - lastWorldBossAlertTime
                     local maxRetries = (timeSinceAlert < 30) and 8 or 0
 
                     _G.BossStatus.scanAttempts = (_G.BossStatus.scanAttempts or 0) + 1
                     if _G.BossStatus.scanAttempts <= maxRetries then
-                        WbStatusLabel:Set("⏳ Đang chờ load Boss... (" ..
-                        _G.BossStatus.scanAttempts .. "/" .. maxRetries .. ")")
+                        WbStatusLabel:Set("⏳ Đang chờ load Boss... (" .. _G.BossStatus.scanAttempts .. "/" .. maxRetries .. ")")
                     else
                         _G.BossStatus.scanAttempts = 0
                         if _G.BossStatus.bossFound then
@@ -531,7 +490,7 @@ return function(Window, Utils)
                             _G.BossStatus.currentWorldId = worldSettings.selectedWorlds[nextIndex]
                             WbStatusLabel:Set("🔄 Di chuyển đến world tiếp theo...")
                             pcall(function() Utils.TeleportToArea(_G.BossStatus.currentWorldId) end)
-                            task.wait(3)
+                            task.wait(4) -- Đợi map mới
                         end
                     end
                 end
