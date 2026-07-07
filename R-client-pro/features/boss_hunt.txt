@@ -401,7 +401,7 @@ return function(Window, Utils)
         if #targets > 0 then
             table.sort(targets, function(a, b) return a.Distance < b.Distance end)
             local boss = targets[1]
-            local realName = GetBossNameSafe(boss.Object)
+            local realName = Utils.ResolveMonsterName(boss.Object)
             return boss.Id, realName, boss.Position
         end
 

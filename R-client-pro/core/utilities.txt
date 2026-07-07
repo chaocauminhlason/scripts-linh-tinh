@@ -421,6 +421,20 @@ end
         local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if not hrp then return validMonsters end
 
+        -- Hỗ trợ contract truyền mảng keywords hoặc filter function trực tiếp
+        local finalFilter = filterFunction
+        if type(filterFunction) == "table" then
+            finalFilter = function(monster)
+                local realName = Utils.ResolveMonsterName(monster)
+                for _, kw in ipairs(filterFunction) do
+                    if string.find(string.lower(realName), string.lower(kw)) then
+                        return true
+                    end
+                end
+                return false
+            end
+        end
+
         for _, folderName in ipairs(foldersToScan) do
             local monstersFolder = Workspace:FindFirstChild(folderName)
             if monstersFolder then
@@ -428,7 +442,7 @@ end
                     if monster:IsA("Model") or monster:IsA("BasePart") then
                         
                         -- Lọc theo tên UI
-                        if filterFunction and not filterFunction(monster) then continue end
+                        if finalFilter and not finalFilter(monster) then continue end
 
                         -- Tìm Root
                         local root = nil
@@ -485,6 +499,7 @@ end
                                     Object = monster,
                                     Id = idStr and tonumber(idStr) or nil,
                                     Position = root.Position,
+                                    RootPart = root,
                                     Distance = (hrp.Position - root.Position).Magnitude
                                 })
                             end
