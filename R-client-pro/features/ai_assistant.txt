@@ -166,14 +166,15 @@ return function(Window, Utils, WebhookModule)
         end
     end)
 
-    -- Output Area
+    -- Output Area (160px để thấy rõ code, có thanh cuộn)
     local OutputScroll = Instance.new("ScrollingFrame")
-    OutputScroll.Size = UDim2.new(1, -20, 0, 80)
+    OutputScroll.Size = UDim2.new(1, -20, 0, 160)
     OutputScroll.Position = UDim2.new(0, 10, 0, 80)
     OutputScroll.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
     OutputScroll.BorderSizePixel = 0
     OutputScroll.ScrollBarThickness = 4
-    OutputScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    OutputScroll.ScrollingDirection = Enum.ScrollingDirection.Y
+    -- KHÔNG dùng AutomaticCanvasSize — tự cập nhật CanvasSize theo nội dung
     OutputScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
     OutputScroll.Parent = MainFrame
     Instance.new("UICorner", OutputScroll).CornerRadius = UDim.new(0, 4)
@@ -186,7 +187,8 @@ return function(Window, Utils, WebhookModule)
     OutputPadding.Parent = OutputScroll
 
     local OutputLabel = Instance.new("TextLabel")
-    OutputLabel.Size = UDim2.new(1, 0, 0, 0)
+    -- Size chiều Y = 0 nhưng AutomaticSize.Y sẽ đẩy lên, ta dùng AbsoluteSize để set CanvasSize
+    OutputLabel.Size = UDim2.new(1, -12, 0, 0)  -- trừ padding trái/phải
     OutputLabel.AutomaticSize = Enum.AutomaticSize.Y
     OutputLabel.BackgroundTransparency = 1
     OutputLabel.TextColor3 = Color3.fromRGB(150, 255, 150)
@@ -198,10 +200,15 @@ return function(Window, Utils, WebhookModule)
     OutputLabel.Text = "> Hệ thống AI sẵn sàng..."
     OutputLabel.Parent = OutputScroll
 
-    -- Prompt Input
+    -- Khi label thay đổi kích thước → cập nhật CanvasSize để ScrollingFrame cuộn được
+    OutputLabel:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+        OutputScroll.CanvasSize = UDim2.new(0, 0, 0, OutputLabel.AbsoluteSize.Y + 12)
+    end)
+
+    -- Prompt Input (đẩy xuống 80px do OutputScroll cao thêm)
     local PromptInput = Instance.new("TextBox")
     PromptInput.Size = UDim2.new(1, -20, 0, 100)
-    PromptInput.Position = UDim2.new(0, 10, 0, 170)
+    PromptInput.Position = UDim2.new(0, 10, 0, 250)
     PromptInput.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
     PromptInput.TextColor3 = Color3.fromRGB(255, 255, 255)
     PromptInput.Font = Enum.Font.Code

@@ -438,7 +438,13 @@ return function(Window, Utils)
             end
             
             if closestMonster and SystemCache.AttackRemote then
-                local monsterRoot = closestMonster.Object.PrimaryPart or closestMonster.Object:FindFirstChild("HumanoidRootPart") or closestMonster.Object:FindFirstChild("Root")
+                local obj = closestMonster.Object
+                local monsterRoot = nil
+                if obj:IsA("Model") then
+                    monsterRoot = obj.PrimaryPart or obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Root")
+                elseif obj:IsA("BasePart") then
+                    monsterRoot = obj
+                end
                 local targetPos = closestMonster.Position
                 
                 if monsterRoot then

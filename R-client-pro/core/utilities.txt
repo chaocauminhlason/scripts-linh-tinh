@@ -876,7 +876,12 @@ function Utils.ScanBossByKeywords(keywords)
                     local realName = (cfgData.Name or ""):lower()
                     for _, kw in pairs(keywords) do
                         if realName:find(kw:lower()) then
-                            local root = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+                            local root = nil
+                            if obj:IsA("Model") then
+                                root = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+                            elseif obj:IsA("BasePart") then
+                                root = obj
+                            end
                             return {name = realName, pos = root and root.Position or obj.Position, uid = uid}
                         end
                     end
