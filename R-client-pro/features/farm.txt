@@ -438,7 +438,17 @@ return function(Window, Utils)
             end
             
             if closestMonster and SystemCache.AttackRemote then
-                local targetPos = closestMonster.Position + AppState.tpDistanceOffset
+                local monsterRoot = closestMonster.Object.PrimaryPart or closestMonster.Object:FindFirstChild("HumanoidRootPart") or closestMonster.Object:FindFirstChild("Root")
+                local targetPos = closestMonster.Position
+                
+                if monsterRoot then
+                    -- Lấy vị trí phía sau lưng quái 5 studs (trên cùng mặt phẳng Y)
+                    local backPos = (monsterRoot.CFrame * CFrame.new(0, 0, 5)).Position
+                    targetPos = Vector3.new(backPos.X, closestMonster.Position.Y, backPos.Z)
+                else
+                    targetPos = closestMonster.Position + Vector3.new(0, 0, 5)
+                end
+
                 if (charData.Position - targetPos).Magnitude > 3 then
                     charData.RootPart.CFrame = CFrame.lookAt(targetPos, closestMonster.Position)
                 end
