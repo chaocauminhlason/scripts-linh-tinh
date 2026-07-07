@@ -489,7 +489,7 @@ return function(Window, Utils)
                     targetPos = closestMonster.Position + Vector3.new(0, 0, 5)
                 end
 
-                if (charData.Position - targetPos).Magnitude > 8 then
+                if (charData.Position - targetPos).Magnitude > 20 then
                     charData.RootPart.CFrame = CFrame.lookAt(targetPos, closestMonster.Position)
                 end
                 Utils.ToggleMount(true)

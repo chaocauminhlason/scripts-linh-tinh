@@ -385,6 +385,29 @@ function Utils.LeaveMatch(riftId, teamId)
     end
 end
 
+-- ==========================================
+-- DỊCH TÊN QUÁI TỪ DỮ LIỆU GAME (CfgMonster)
+-- ==========================================
+function Utils.ResolveMonsterName(monsterObj)
+    if not monsterObj then return "Unknown" end
+    local uidStr = string.match(monsterObj.Name, "Monster_(%d+)")
+    if not uidStr then return monsterObj.Name end
+    
+    local uidNum = tonumber(uidStr)
+    local env = getrenv and getrenv()._G and getrenv()._G.PathTool
+    if env and env.MgrMonsterClient and env.CfgMonster then
+        local success, info = pcall(function() return env.MgrMonsterClient:GetMonsterInfo(uidNum) end)
+        if success and info then
+            local tmplId = info.tmplId or info.TmplId or info.id
+            local cfgData = env.CfgMonster.Tmpls[tostring(tmplId)] or env.CfgMonster.Tmpls[tonumber(tmplId)]
+            if cfgData then
+                return cfgData.Name or cfgData.name or cfgData.Title or monsterObj.Name
+            end
+        end
+    end
+    return monsterObj.Name
+end
+
 
     -- ==========================================
     -- HÀM LÕI: QUÉT & LỌC QUÁI THÔNG MINH

@@ -346,26 +346,30 @@ return function(Window, Utils)
                 task.wait(3); continue
             end
 
-            local bestTarget = nil;
-            local closestDist = math.huge
-            -- Quét đa thư mục để chống thủ đoạn giấu Boss của Dev
-            local folders = { Workspace:FindFirstChild("ClientMonsters"), Workspace:FindFirstChild("Monsters") }
-
             local bestTarget = nil
             local closestDist = math.huge
 
-            -- Sử dụng hàm Scan vạn năng từ Utils
-            if Utils.ScanMonsters then
-                local targets = Utils.ScanMonsters({ spHuntState.targetBoss })
-                for _, boss in ipairs(targets) do
-                    local dist = (hrp.Position - boss.Position).Magnitude
-                    if dist < closestDist then
-                        closestDist = dist
-                        bestTarget = { id = boss.Id, root = boss.RootPart }
+            -- Sử dụng SmartScanMonsters mới từ utilities
+            local function isTargetBoss(monster)
+                local realName = Utils.ResolveMonsterName(monster)
+                return string.find(string.lower(realName), string.lower(spHuntState.targetBoss)) ~= nil
+            end
+
+            local targets = Utils.SmartScanMonsters(hrp.Position, 999999, "Attack", isTargetBoss)
+            for _, boss in ipairs(targets) do
+                if boss.Distance < closestDist then
+                    closestDist = boss.Distance
+                    local obj = boss.Object
+                    local root = nil
+                    if obj:IsA("Model") then
+                        root = obj.PrimaryPart or obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Root")
+                    elseif obj:IsA("BasePart") then
+                        root = obj
+                    end
+                    if root then
+                        bestTarget = { id = boss.Id, root = root }
                     end
                 end
-            else
-                warn("⚠️ [Lỗi] Chưa cài đặt hàm Utils.ScanMonsters trong utilities.txt!")
             end
 
             if bestTarget then
@@ -418,16 +422,26 @@ return function(Window, Utils)
         local keywords = WorldBossMapping[currentWorldId] or {}
         if #keywords == 0 then return nil, nil, nil end
 
-        -- Gọi Utils phát ăn luôn
-        if Utils.ScanMonsters then
-            local targets = Utils.ScanMonsters(keywords)
-            -- Trả về con Boss đầu tiên nó thấy
-            if #targets > 0 then
-                local boss = targets[1]
-                return boss.Id, boss.Name, boss.Position
+        local char = LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return nil, nil, nil end
+
+        local function isWorldBoss(monster)
+            local realName = Utils.ResolveMonsterName(monster)
+            for _, kw in ipairs(keywords) do
+                if string.find(string.lower(realName), string.lower(kw)) then
+                    return true
+                end
             end
-        else
-            warn("⚠️ [Lỗi] Chưa cài đặt hàm Utils.ScanMonsters trong utilities.txt!")
+            return false
+        end
+
+        local targets = Utils.SmartScanMonsters(hrp.Position, 999999, "Attack", isWorldBoss)
+        if #targets > 0 then
+            table.sort(targets, function(a, b) return a.Distance < b.Distance end)
+            local boss = targets[1]
+            local realName = Utils.ResolveMonsterName(boss.Object)
+            return boss.Id, realName, boss.Position
         end
 
         return nil, nil, nil
