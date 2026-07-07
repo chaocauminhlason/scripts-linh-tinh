@@ -11,6 +11,7 @@ local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
+local HttpService = game:GetService("HttpService")
 
 -- Biến hàng đợi toàn cục
 _G.HopQueue = {
@@ -849,7 +850,6 @@ end
 -- ==========================================
 function Utils.LoadSelectedAreas(fileName)
     fileName = fileName or "R_SelectedAreas.json"
-    local HttpService = game:GetService("HttpService")
     
     pcall(function()
         if isfile and isfile(fileName) then
