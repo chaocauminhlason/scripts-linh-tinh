@@ -395,8 +395,13 @@ return function(Window, Utils)
             end
 
             if targetCatch and SystemCache.MonsterSystem then
+            -- Nếu quá gần (dưới 15 studs) thì không cần Teleport
+            if minDist > 15 then
+            Utils.ToggleMount(true)
                 Utils.SafeTeleport(CFrame.new(targetCatch.Position), 5)
-                
+            Utils.SmartDismount()
+            end
+            
                 -- Task con xử lý Async việc ném bóng bắt quái
                 task.spawn(function()
                     local success, isStarted = pcall(function() return SystemCache.MonsterSystem:ClientCatchMonsterStart(targetCatch.Id) end)
