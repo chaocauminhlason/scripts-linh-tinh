@@ -385,44 +385,7 @@ function Utils.LeaveMatch(riftId, teamId)
     end
 end
 
--- 6. HỆ THỐNG RADAR: Quét, phân loại và tìm quái vật gần nhất
-function Utils.ScanMonsters(monstersFolder, hrp)
-    local hasAlive = false
-    local deadList = {}
-    local bestTarget = nil
-    local closestDist2D = math.huge
 
-    if monstersFolder then
-        for _, m in pairs(monstersFolder:GetChildren()) do
-            if m:IsA("Model") or m:IsA("BasePart") then
-                local hum = m:FindFirstChildOfClass("Humanoid")
-                if hum then
-                    if hum.Health <= 0 then
-                        table.insert(deadList, m)
-                    else
-                        hasAlive = true
-                        local pos = m:IsA("Model") and m.PrimaryPart and m.PrimaryPart.Position or m.Position
-                        local dist2D = math.sqrt((hrp.Position.X - pos.X)^2 + (hrp.Position.Z - pos.Z)^2)
-                        if dist2D < closestDist2D then 
-                            closestDist2D = dist2D
-                            bestTarget = m 
-                        end
-                    end
-                else
-                    hasAlive = true
-                    local pos = m:IsA("Model") and m.PrimaryPart and m.PrimaryPart.Position or m.Position
-                    local dist2D = math.sqrt((hrp.Position.X - pos.X)^2 + (hrp.Position.Z - pos.Z)^2)
-                    if dist2D < closestDist2D then 
-                        closestDist2D = dist2D
-                        bestTarget = m 
-                    end
-                end
-            end
-        end
-    end
-
-    return hasAlive, deadList, bestTarget, closestDist2D
-end
     -- ==========================================
     -- HÀM LÕI: QUÉT & LỌC QUÁI THÔNG MINH
     -- ==========================================
@@ -508,6 +471,43 @@ end
         end
         return validMonsters
     end
+
+-- ==========================================
+-- HÀM KIỂM TRA MÁU QUÁI (HỖ TRỢ BIGNUM & THẬP PHÂN)
+-- ==========================================
+function Utils.IsMonsterAlive(monsterObj)
+    if not monsterObj then return false end
+    
+    -- 1. Ưu tiên kiểm tra Humanoid (Quái thường)
+    local hum = monsterObj:FindFirstChildOfClass("Humanoid")
+    if hum then
+        return hum.Health >= 1
+    end
+    
+    -- 2. Kiểm tra qua StringValue (Quái máu to / Boss)
+    local hpVal = monsterObj:FindFirstChild("Health")
+    if hpVal and hpVal:IsA("StringValue") then
+        local rawStr = hpVal.Value
+        
+        -- Thử parse thập phân thường (VD: "0,5" -> "0.5")
+        local hpNum = tonumber((string.gsub(rawStr, ",", ".")))
+        
+        -- Nếu thất bại, giải mã định dạng khoa học/BigNum của game (VD: "9289000,-3")
+        if not hpNum then
+            local parts = string.split(rawStr, ",")
+            if #parts == 2 then 
+                local base = tonumber(parts[1]) or 0
+                local exp = tonumber(parts[2]) or 0
+                hpNum = base * (10 ^ exp)
+            end
+        end
+        
+        return (hpNum and hpNum >= 1) or false
+    end
+    
+    -- Mặc định trả về false nếu không tìm thấy thanh máu
+    return false
+end
 
 -- ==========================================
 -- HÀM LẤY REMOTE (CHO CÁC MODULE KHÁC DÙNG)
@@ -1045,82 +1045,6 @@ function Utils.InitMonsterMemory()
     end)
 end
 
--- Hàm Scan vạn năng: Truyền keywords vào để lọc, bỏ trống để lấy TẤT CẢ
-function Utils.ScanMonsters(keywords)
-    Utils.InitMonsterMemory()
-    local results = {}
-    
-    local env = getrenv and getrenv()._G and getrenv()._G.PathTool
-    if not env or not env.CfgMonster then return results end
-    
-    -- Quét đa thư mục tránh bị Dev giấu quái
-    local Workspace = game:GetService("Workspace")
-    local folders = {
-        Workspace:FindFirstChild("ClientMonsters"),
-        Workspace:FindFirstChild("Monsters")
-    }
-
-    for _, folder in ipairs(folders) do
-        if folder then
-            for _, obj in pairs(folder:GetChildren()) do
-                local uidStr = string.match(obj.Name, "Monster_(%d+)")
-                if uidStr then
-                    local uidNum = tonumber(uidStr)
-                    local realName = "Unknown"
-                    
-                    -- 1. Giải mã tên thật từ RAM
-                    if InternalMonsterTable and InternalMonsterTable[uidNum] then
-                        local rawData = InternalMonsterTable[uidNum]
-                        local tmplId = rawData.TmplId or rawData.tmplId or rawData.cfgId
-                        if tmplId then
-                            local cfg = env.CfgMonster.Tmpls[tostring(tmplId)] or env.CfgMonster.Tmpls[tonumber(tmplId)]
-                            if cfg then
-                                realName = cfg.Name or cfg.name or cfg.Title or "Unknown"
-                            end
-                        end
-                    end
-                    
-                    -- 2. Bộ lọc Keywords (So khớp chuẩn xác)
-                    local isMatch = false
-                    if type(keywords) ~= "table" or #keywords == 0 then
-                        isMatch = true -- Không truyền keyword -> Lấy tất cả
-                    else
-                        local lowerName = string.lower(realName)
-                        for _, kw in ipairs(keywords) do
-                            if string.find(lowerName, string.lower(kw)) then
-                                isMatch = true
-                                break
-                            end
-                        end
-                    end
-                    
-                    -- 3. Xử lý tọa độ Anti-Crash an toàn tuyệt đối
-                    if isMatch then
-                        local root = nil
-                        if obj:IsA("Model") then
-                            root = obj.PrimaryPart or obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildWhichIsA("BasePart")
-                        elseif obj:IsA("BasePart") then
-                            root = obj
-                        end
-                        
-                        -- Chỉ đưa vào danh sách nếu có thể xác định được tọa độ
-                        if root then
-                            table.insert(results, {
-                                Id = uidNum,
-                                Name = realName,
-                                Position = root.Position,
-                                Object = obj,
-                                RootPart = root
-                            })
-                        end
-                    end
-                end
-            end
-        end
-    end
-    
-    return results
-end
 
 -- Trả về bảng Utils
 return Utils
