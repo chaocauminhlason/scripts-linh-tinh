@@ -447,38 +447,139 @@ return function(Window, Utils)
             end
         end
     end)
-        -- 3. LUỒNG HỒI MÁU PET
-    local function CheckDeadPetsFromUI()
-        local deadCount = 0
-        local totalPets = 0
-        pcall(function()
-            local petListUI = LocalPlayer:FindFirstChild("PlayerGui") 
-                and LocalPlayer.PlayerGui:FindFirstChild("MainGui") 
-                and LocalPlayer.PlayerGui.MainGui:FindFirstChild("ScreenGui") 
-                and LocalPlayer.PlayerGui.MainGui.ScreenGui:FindFirstChild("MainLeftView") 
-                and LocalPlayer.PlayerGui.MainGui.ScreenGui.MainLeftView:FindFirstChild("PetList")
-            if not petListUI then return end
-            for _, cell in pairs(petListUI:GetChildren()) do
-                if cell.Name == "ItemCell" then
-                    local labName = cell:FindFirstChild("LabName", true)
-                    if labName and labName.Text ~= "Label" and labName.Text ~= "" then
-                        totalPets = totalPets + 1
-                        local hp0 = cell:FindFirstChild("hp0", true)
-                        if hp0 then
-                            local bgColor = hp0.BackgroundColor3
-                            if bgColor and (bgColor.R > 0.8 and bgColor.G < 0.3 and bgColor.B < 0.3) then
-                                deadCount = deadCount + 1
+-- ==========================================
+    -- LUỒNG 3: SMART AUTO HEAL (BẢN CHUẨN CỦA USER)
+    -- ==========================================
+    task.spawn(function()
+        while task.wait(1) do
+            local controller = _G.SystemController
+            if controller and (controller.IsPaused or controller.CurrentLock ~= nil) then continue end
+            if _G.PendingBossHunt or _G.PendingSpecialBoss then continue end
+
+            if not camSettings.autoHeal or camSettings.isHealing then continue end
+
+            -- Bỏ qua quét máu nếu đang cưỡi thú (vì game sẽ cất mất Pet)
+            local isRiding = LocalPlayer:GetAttribute("RidePetId") ~= nil
+            if isRiding then continue end
+
+            local triggerHeal = false
+
+            pcall(function()
+                -- Bước 1: Đếm số Pet trên UI (Kỳ vọng)
+                local petListUI = LocalPlayer:FindFirstChild("PlayerGui")
+                    and LocalPlayer.PlayerGui:FindFirstChild("MainGui")
+                    and LocalPlayer.PlayerGui.MainGui:FindFirstChild("ScreenGui")
+                    and LocalPlayer.PlayerGui.MainGui.ScreenGui:FindFirstChild("MainLeftView")
+                    and LocalPlayer.PlayerGui.MainGui.ScreenGui.MainLeftView:FindFirstChild("PetList")
+
+                local totalPetsUI = 0
+                if petListUI then
+                    for _, cell in pairs(petListUI:GetChildren()) do
+                        if cell.Name == "ItemCell" then
+                            local hp0 = cell:FindFirstChild("hp0", true)
+                            local labName = cell:FindFirstChild("LabName", true)
+                            if hp0 and labName and labName.Text ~= "Label" and labName.Text ~= "" then
+                                totalPetsUI = totalPetsUI + 1
                             end
-                        else
-                            deadCount = deadCount + 1
                         end
                     end
                 end
-            end
-        end)
-        return deadCount, totalPets
-    end
 
+                -- Bước 2: Đếm số Pet sống trên Map (Thực tế)
+                local alivePetsMap = 0
+                local petsFolder = Workspace:FindFirstChild("Pets")
+                local myId = tostring(LocalPlayer.UserId)
+                
+                if petsFolder then
+                    for _, pet in pairs(petsFolder:GetChildren()) do
+                        if string.find(pet.Name, myId) then
+                            local hpPart = pet:FindFirstChild("Health")
+                            if hpPart then
+                                local hpStr = tostring(hpPart.Value)
+                                local currentHp = tonumber(string.split(hpStr, ",")[1]) or tonumber((string.gsub(hpStr, ",", ".")))
+                                if currentHp and currentHp > 0 then
+                                    alivePetsMap = alivePetsMap + 1
+                                end
+                            end
+                        end
+                    end
+                end
+
+                -- Bước 3: Tính toán thiệt hại và đối chiếu ngưỡng
+                if totalPetsUI > 0 then
+                    local deadPets = totalPetsUI - alivePetsMap
+                    if deadPets >= camSettings.healThreshold then
+                        triggerHeal = true
+                    end
+                end
+            end)
+
+            -- Xử lý Hồi máu (Dịch chuyển và tạo bệ đỡ)
+            if triggerHeal then
+                camSettings.isHealing = true
+                local char = LocalPlayer.Character
+                local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                
+                if hrp then
+                    pcall(function()
+                        game.StarterGui:SetCore("SendNotification", { Title = "🔄 Auto Heal", Text = "Pet đã kiệt sức. Tiến hành Teleport hồi máu...", Duration = 3 })
+                    end)
+
+                    -- Ưu tiên lưu vị trí farm tự đánh dấu, nếu không có thì lưu vị trí ngay lúc chết
+                    camSettings.savedPosition = savedFarmPosition or hrp.CFrame
+                    
+                    local bestRecoverPos, minDist = nil, math.huge
+                    local areaFolder = Workspace:FindFirstChild("Area")
+                    
+                    if areaFolder then
+                        for _, mapFolder in ipairs(areaFolder:GetChildren()) do
+                            local recFolder = mapFolder:FindFirstChild("ServerZone") and mapFolder.ServerZone:FindFirstChild("Recover")
+                            if recFolder then
+                                for _, recPart in ipairs(recFolder:GetDescendants()) do
+                                    if recPart:IsA("BasePart") then
+                                        local dist = (hrp.Position - recPart.Position).Magnitude
+                                        if dist < minDist then 
+                                            minDist = dist
+                                            bestRecoverPos = recPart.Position 
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+
+                    if bestRecoverPos then
+                        -- Lót một bệ đỡ tàng hình dưới chân
+                        local plat = Instance.new("Part")
+                        plat.Size = Vector3.new(20, 1, 20)
+                        plat.Position = bestRecoverPos - Vector3.new(0, 3, 0)
+                        plat.Anchored = true
+                        plat.Transparency = 1
+                        plat.CanCollide = true
+                        plat.Parent = Workspace
+
+                        -- Dịch chuyển nhân vật ra suối ngâm máu
+                        hrp.CFrame = CFrame.new(bestRecoverPos + Vector3.new(0, 3, 0))
+                        
+                        -- Nghỉ ngơi 9 giây chờ hồi đầy máu
+                        task.wait(9)
+                        
+                        -- Dọn dẹp bệ đỡ và quay về vị trí farm bằng SafeTeleport (Chống kẹt map)
+                        plat:Destroy()
+                        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                            Utils.SafeTeleport(camSettings.savedPosition, 5)
+                        end
+
+                        pcall(function()
+                            game.StarterGui:SetCore("SendNotification", { Title = "✅ Hoàn Tất", Text = "Đã khôi phục sinh lực Pet và về bãi farm!", Duration = 3 })
+                        end)
+                    end
+                end
+                
+                camSettings.isHealing = false
+            end
+        end
+    end)
 
 
     task.spawn(function()
