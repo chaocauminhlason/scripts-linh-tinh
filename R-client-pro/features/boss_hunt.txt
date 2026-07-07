@@ -315,10 +315,9 @@ return function(Window, Utils)
             local humanoid = char and char:FindFirstChild("Humanoid")
             if not (hrp and humanoid and humanoid.Health > 0) then continue end
 
-            local actualAreaId = nil
-            pcall(function() actualAreaId = tonumber(getrenv()._G.PathTool.MgrAreaClient.CurAreaId) end)
+            local actualAreaId = Utils.GetCurrentAreaId()
 
-            if actualAreaId ~= tonumber(spHuntState.targetWorldId) then
+            if not actualAreaId or actualAreaId ~= tonumber(spHuntState.targetWorldId) then
                 SpStatusLabel:Set("🚀 Đang bay tới Đảo " .. spHuntState.targetWorldId)
                 pcall(function() Utils.TeleportToArea(spHuntState.targetWorldId) end)
                 task.wait(4) -- Chờ game load map

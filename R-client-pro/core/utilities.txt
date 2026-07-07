@@ -144,6 +144,39 @@ function Utils.TeleportToAreaByName(areaName)
 end
 
 -- ==========================================
+-- LẤY AREA ID HIỆN TẠI (AN TOÀN / FALLBACK)
+-- ==========================================
+function Utils.GetCurrentAreaId()
+    -- Cách 1: Lấy từ MgrAreaClient của game
+    local success, areaId = pcall(function()
+        local env = getrenv and getrenv()._G and getrenv()._G.PathTool
+        return env and env.MgrAreaClient and tonumber(env.MgrAreaClient.CurAreaId)
+    end)
+    if success and areaId then return areaId end
+
+    -- Cách 2: Fallback tìm folder map trong Workspace.Area
+    local areaFolder = Workspace:FindFirstChild("Area")
+    if areaFolder then
+        for _, folder in ipairs(areaFolder:GetChildren()) do
+            local folderName = folder.Name:lower()
+            for id, areaName in pairs(AreaMap) do
+                local cleanName = areaName:lower()
+                    :gsub(" island", "")
+                    :gsub(" isle", "")
+                    :gsub(" grove", "")
+                    :gsub(" shallows", "")
+                    :gsub(" coast", "")
+                    :gsub(" haven", "")
+                if string.find(folderName, cleanName) or string.find(cleanName, folderName) then
+                    return id
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- ==========================================
 -- 5. LẤY DANH SÁCH CÁC KHU VỰC
 -- ==========================================
 function Utils.GetAreaList()
