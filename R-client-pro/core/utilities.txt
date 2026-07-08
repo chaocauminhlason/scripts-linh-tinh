@@ -525,6 +525,25 @@ end
 
 
     -- ==========================================
+    -- WRAPPER HỖ TRỢ TƯƠNG THÍCH NGƯỢC (SCANMONSTERS)
+    -- ==========================================
+    function Utils.ScanMonsters(keywords)
+        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not hrp then return {} end
+        local rawTargets = Utils.SmartScanMonsters(hrp.Position, 999999, "Attack", keywords)
+        local targets = {}
+        for _, t in ipairs(rawTargets) do
+            table.insert(targets, {
+                Id = t.Id,
+                Name = Utils.ResolveMonsterName(t.Object),
+                Position = t.Position,
+                RootPart = t.RootPart
+            })
+        end
+        return targets
+    end
+
+    -- ==========================================
     -- HÀM LÕI: QUÉT & LỌC QUÁI THÔNG MINH
     -- ==========================================
     function Utils.SmartScanMonsters(centerPos, maxRadius, scanMode, filterFunction)
