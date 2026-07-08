@@ -39,7 +39,7 @@ function Utils.ProcessQueue()
     print("[Dispatcher] 🚀 Đang xử lý hop cho: " .. topRequest.Sender)
     
     -- Gọi hàm Hop cũ
-    Utils.HopServer("Đang chuyển server theo yêu cầu của: " .. topRequest.Sender)
+    Utils.HopServerV2("Đang chuyển server theo yêu cầu của: " .. topRequest.Sender)
     
     task.wait(15) -- Cooldown cứng để đảm bảo server mới load xong
     _G.HopQueue.IsProcessing = false
@@ -523,6 +523,44 @@ function Utils.ResolveMonsterName(monsterObj)
     return originalName
 end
 
+-- 6. HỆ THỐNG RADAR: Quét, phân loại và tìm quái vật gần nhất
+function Utils.ScanMonsters(monstersFolder, hrp)
+    local hasAlive = false
+    local deadList = {}
+    local bestTarget = nil
+    local closestDist2D = math.huge
+
+    if monstersFolder then
+        for _, m in pairs(monstersFolder:GetChildren()) do
+            if m:IsA("Model") or m:IsA("BasePart") then
+                local hum = m:FindFirstChildOfClass("Humanoid")
+                if hum then
+                    if hum.Health <= 0 then
+                        table.insert(deadList, m)
+                    else
+                        hasAlive = true
+                        local pos = m:IsA("Model") and m.PrimaryPart and m.PrimaryPart.Position or m.Position
+                        local dist2D = math.sqrt((hrp.Position.X - pos.X)^2 + (hrp.Position.Z - pos.Z)^2)
+                        if dist2D < closestDist2D then 
+                            closestDist2D = dist2D
+                            bestTarget = m 
+                        end
+                    end
+                else
+                    hasAlive = true
+                    local pos = m:IsA("Model") and m.PrimaryPart and m.PrimaryPart.Position or m.Position
+                    local dist2D = math.sqrt((hrp.Position.X - pos.X)^2 + (hrp.Position.Z - pos.Z)^2)
+                    if dist2D < closestDist2D then 
+                        closestDist2D = dist2D
+                        bestTarget = m 
+                    end
+                end
+            end
+        end
+    end
+
+    return hasAlive, deadList, bestTarget, closestDist2D
+end
 
     -- ==========================================
     -- WRAPPER HỖ TRỢ TƯƠNG THÍCH NGƯỢC (SCANMONSTERS)
@@ -734,7 +772,58 @@ local AreaData = {
     {id = 11, name = "Specter Shallows", category = "Săn Boss"},
     {id = 12, name = "Nova Coast", category = "Săn Boss"}
 }
-
+-- ==========================================
+-- 1.5 TẠO DROPDOWN ĐA CHỌN (BẢN LỌC - VERSION 2)
+-- ==========================================
+function Utils.CreateFilteredAreaMultiSelect(tab, config)
+    config = config or {}
+    local allowedIds = config.allowedIds or {}
+    
+    local options = {}
+    local nameToIdMap = {}
+    
+    -- Lọc AreaData chỉ lấy những đảo có ID nằm trong allowedIds
+    for _, area in ipairs(AreaData) do
+        for _, allowedId in ipairs(allowedIds) do
+            if area.id == allowedId then
+                table.insert(options, area.name)
+                nameToIdMap[area.name] = area.id
+                break
+            end
+        end
+    end
+    
+    local defaultOptions = {}
+    if config.defaultAreas and #config.defaultAreas > 0 then
+        for _, areaName in ipairs(config.defaultAreas) do
+            if nameToIdMap[areaName] then
+                table.insert(defaultOptions, areaName)
+            end
+        end
+    end
+    
+    local dropdown = tab:CreateDropdown({
+        Name = config.name or "Chọn Khu Vực",
+        Options = options,
+        CurrentOption = defaultOptions,
+        MultipleOptions = true,
+        Flag = config.flag or "AreaMultiSelectFiltered",
+        Callback = function(selectedOptions)
+            if config.callback then
+                local selectedIds = {}
+                -- Trả về trực tiếp mảng ID cho script xử lý
+                for _, areaName in ipairs(selectedOptions) do
+                    if nameToIdMap[areaName] then
+                        table.insert(selectedIds, nameToIdMap[areaName])
+                    end
+                end
+                config.callback(selectedIds, selectedOptions)
+            end
+        end
+    })
+    
+    return dropdown
+end
 -- ==========================================
 -- 1. TẠO DROPDOWN ĐA CHỌN KHU VỰC
 -- ==========================================
@@ -1076,6 +1165,80 @@ function Utils.GetCurrentWeather(weatherMap)
     end
     return "Bình Thường", 0
 end
+-- ====================================================================
+-- HÀM SERVER HOP (VERSION 2 - ĐÃ NÂNG CẤP LƯU BLACKLIST BẰNG JSON)
+-- ====================================================================
+function Utils.HopServerV2(reason)
+    local HttpService = game:GetService("HttpService")
+    local TeleportService = game:GetService("TeleportService")
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+    local PlaceId = game.PlaceId
+
+    print("[Hop] 🔄 Bắt đầu tiến trình Hop V2. Lý do: " .. tostring(reason))
+
+    -- Đọc Blacklist trực tiếp từ File JSON
+    local blacklistedServers = Utils.LoadJSON("RClient_HopBlacklist.json")
+    if type(blacklistedServers) ~= "table" then blacklistedServers = {} end
+
+    pcall(function()
+        local api = "https://games.roblox.com/v1/games/"..PlaceId.."/servers/Public?sortOrder=Asc&limit=100"
+        local data = game:HttpGet(api)
+        local json = HttpService:JSONDecode(data)
+        
+        if json and json.data then
+            local validServers = {}
+            for _, v in pairs(json.data) do
+                -- Kiểm tra Blacklist
+                local isBlacklisted = false
+                for _, blackId in ipairs(blacklistedServers) do
+                    if v.id == blackId then isBlacklisted = true break end
+                end
+
+                -- Điều kiện lọc: Không phải server hiện tại, không trong blacklist, server chưa đầy
+                if v.id and v.id ~= game.JobId and not isBlacklisted then
+                    local playing = v.playing or 0
+                    local maxPlayers = v.maxPlayers or 0
+                    if playing < maxPlayers then
+                        table.insert(validServers, {id = v.id, playing = playing})
+                    end
+                end
+            end
+            
+            if #validServers > 0 then
+                -- Ưu tiên server vắng nhất
+                table.sort(validServers, function(a, b) return a.playing < b.playing end)
+                
+                local targetId = validServers[1].id
+                
+                -- Thêm vào Blacklist và Lưu lại bằng JSON ngay lập tức
+                table.insert(blacklistedServers, targetId)
+                
+                -- Giới hạn danh sách đen ở 50 server gần nhất để tránh phình to file
+                if #blacklistedServers > 50 then table.remove(blacklistedServers, 1) end
+                Utils.SaveJSON("RClient_HopBlacklist.json", blacklistedServers)
+                
+                print("[Hop V2] ✅ Chọn được server: " .. tostring(targetId) .. ". Đang Teleport...")
+                
+                -- Thông báo cho người dùng
+                game.StarterGui:SetCore("SendNotification", {
+                    Title = "🚀 Server Hop V2", 
+                    Text = "Đang chuyển: " .. reason,
+                    Duration = 3
+                })
+                
+                TeleportService:TeleportToPlaceInstance(PlaceId, targetId, LocalPlayer)
+            else
+                warn("[Hop V2] ⚠️ Không tìm thấy server hợp lệ! Tiến hành Reset Blacklist.")
+                -- Xóa trắng file JSON nếu hết server để nhảy
+                Utils.SaveJSON("RClient_HopBlacklist.json", {}) 
+                
+                -- Thử nhảy bừa 1 server để thoát kẹt
+                TeleportService:Teleport(PlaceId, LocalPlayer)
+            end
+        end
+    end)
+end
 
 -- ==========================================
 -- HÀM SERVER HOP (CÓ DANH SÁCH ĐEN - BLACKLIST)
@@ -1142,7 +1305,8 @@ function Utils.HopServer(notificationMsg)
             end
         end
     end)
-end-- ====================================================================
+end
+-- ====================================================================
 -- HÀM SERVER HOP (VERSION 3.0 - DÀNH CHO HỆ THỐNG QUEUE)
 -- ====================================================================
 function Utils.HopServer(reason)

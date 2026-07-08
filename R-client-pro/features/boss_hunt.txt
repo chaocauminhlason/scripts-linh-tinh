@@ -1,429 +1,524 @@
+-- ====================================================================
+-- MODULE: SĂN BOSS TỔNG HỢP (SPECIAL & WORLD BOSS)
+-- Gộp luồng, tái sử dụng hàm chung, tối ưu bộ nhớ & UI Sensor
+-- ====================================================================
+
+local SPECIAL_BOSS_MAPPING = {
+    [5]  = { "DustWing" },
+    [6]  = { "Undine", "Walrusk" },
+    [7]  = { "Cobaltwing" },
+    [8]  = { "Ignisraptor" },
+    [9]  = { "Bladetooth" },
+    [10] = { "Stellar Sentinel" },
+    [11] = { "Bull Lord" },
+    [12] = { "Capshark", "Crabblaze" },
+}
+
+local WORLD_BOSS_MAPPING = {
+    [2]  = { "Flaragon" },
+    [3]  = { "Gildron" },
+    [4]  = { "ShadeKnight" },
+    [5]  = { "Mountusk", "Glazadon" },
+    [6]  = { "Tidevex" },
+    [7]  = { "Frostwyrm" },
+    [8]  = { "Dracospike" },
+    [9]  = { "Thunderclaw", "Crystalfae" },
+    [10] = { "Lampyr" },
+    [11] = { "Scareaper" },
+    [12] = { "Beatopus" },
+}
+
+-- Hằng số Special Boss
+local SP_HUNT_TIMEOUT_SECS  = 180
+local SP_ATTACK_EXTEND_SECS = 4
+local SP_SCAN_LOG_INTERVAL  = 20
+local SP_ATTACK_WAIT        = 0.1
+local MAX_ATTACK_DISTANCE   = 20
+
+-- Hằng số World Boss
+local WB_WAVE_TIMER_FILE    = "RClient_BossGlobalTimer.json"
+local WB_WAVE_DURATION_SECS = 300
+local WB_SCAN_TIMEOUT_TICKS = 15
+local WB_WAVE_COOLDOWN_SECS = 60
+local WB_ATTACK_INTERVAL    = 1
+
+local SHARED_TELEPORT_WAIT  = 3
+
 return function(Window, Utils)
-    local BossTab = Window:CreateTab("Săn Boss", 4483345998)
-
     -- ==========================================
-    -- 0. KHAI BÁO BIẾN TOÀN CỤC & TRẠNG THÁI
+    -- TRẠNG THÁI (STATE)
     -- ==========================================
-    _G.BossStatus = _G.BossStatus or {
-        roundCompleted = false,
-        currentWorldIndex = 1,
-        scanAttempts = 0,
-        bossFound = false,
-        currentWorldId = nil,
-        bossId = nil,
-        bossName = "",
-        bossPosition = nil
-    }
-
-    _G.PendingSpecialBoss = false
-    _G.PendingBossHunt = false
-
-    local specialSettings = {
-        enabled = false,
-        selectedWorlds = {}
-    }
-
-    local worldSettings = {
-        enabled = false,
-        autoHop = false,
-        selectedWorlds = {}
-    }
-
+    
+    local spSettings = { enabled = false, selectedWorlds = {} }
     local spHuntState = {
-        isActive = false,
-        targetBoss = "",
+        isActive      = false,
+        targetBoss    = "",
         targetWorldId = nil,
-        timeout = 0
+        hasTeleported = false,
+        engaged       = false,
+        timeoutAt     = 0,
     }
 
-    -- ==========================================
-    -- 1. BẢNG DỮ LIỆU BOSS MAPPING
-    -- ==========================================
-    local WorldBossMapping = {
-        [2] = { "Flaragon" },
-        [3] = { "Gildron" },
-        [4] = { "ShadeKnight" },
-        [5] = { "Mountusk", "Glazadon" },
-        [6] = { "Tidevex" },
-        [7] = { "Frostwyrm" },
-        [8] = { "Dracospike" },
-        [9] = { "Thunderclaw", "Crystalfae" },
-        [10] = { "Lampyr" },
-        [11] = { "Scareaper"},
-        [12] = { "Beatopus" }
+    local wbSettings = { enabled = false, autoHop = false, selectedWorlds = {} }
+    local wbHuntState = {
+        isActive          = false,
+        currentWorldIndex = 1,
+        currentWorldId    = nil,
+        hasTeleported     = false,
+        engaged           = false,
+        scanAttempts      = 0,
     }
+    local wbLastWaveAlertTime = 0
 
-    local SpecialBossMapping = {
-        [2] = { "FlameSpike" },
-        [3] = { "chua_co" },
-        [4] = { "chua_co" },
-        [5] = { "DustWing" },
-        [6] = { "Undine", "Walrusk" },
-        [7] = { "Cobaltwing" },
-        [8] = { "Ignisraptor" },
-        [9] = { "Bladetooth" },
-        [10] = { "Stellar Sentinel" },
-        [11] = { "Bull Lord" },
-        [12] = { "Capshark", "Crabblaze" }
-    }
+    -- Cache tên monster dùng chung
+    local monsterNameCache     = {}
+    local internalMonsterTable = nil 
 
     -- ==========================================
-    -- 2. THIẾT LẬP GIAO DIỆN (UI SETTINGS)
+    -- HÀM DÙNG CHUNG (SHARED HELPERS)
     -- ==========================================
-    BossTab:CreateSection("🌟 AUTO SPECIAL BOSS")
-    local SpStatusLabel = BossTab:CreateLabel("Trạng thái: Đang chờ...")
-    local SpTargetLabel = BossTab:CreateLabel("🎯 Đã chọn " .. #specialSettings.selectedWorlds .. " world")
 
-    BossTab:CreateToggle({
-        Name = "✅ Bật Auto Special Boss",
-        CurrentValue = specialSettings.enabled,
-        Flag = "EnableSpecialBoss",
-        Callback = function(Value) specialSettings.enabled = Value end
-    })
-
-    Utils.CreateAreaMultiSelect(BossTab, {
-        name = "Chọn World Săn Special Boss",
-        flag = "SpBossWorldSelect",
-        defaultAreas = Utils.GetAreaNamesByIds(specialSettings.selectedWorlds),
-        callback = function(selectedIds)
-            if type(selectedIds) == "table" then
-                specialSettings.selectedWorlds = selectedIds
-                if Utils and Utils.SaveSelectedAreas then Utils.SaveSelectedAreas(selectedIds, "R_SelectedSpBossWorlds.json") end
-                if #selectedIds == 0 then SpTargetLabel:Set("⚠️ Chưa chọn world nào!") else SpTargetLabel:Set("🎯 Đã chọn " .. #selectedIds .. " world") end
+    local function EnsureMonsterTableLoaded()
+        if internalMonsterTable then return end
+        pcall(function()
+            local pathTool = getrenv and getrenv()._G and getrenv()._G.PathTool
+            if not (pathTool and pathTool.MgrMonsterClient) then return end
+            local upvalues = debug.getupvalues(pathTool.MgrMonsterClient.GetMonsterInfo)
+            if upvalues and type(upvalues[1]) == "table" then
+                internalMonsterTable = upvalues[1]
             end
+        end)
+    end
+
+    local function LookupMonsterNameFromConfig(uid)
+        EnsureMonsterTableLoaded()
+        if not (internalMonsterTable and type(internalMonsterTable) == "table") then return nil end
+
+        local rawData = internalMonsterTable[uid]
+        if type(rawData) ~= "table" then return nil end
+
+        local tmplId = rawData.TmplId or rawData.tmplId or rawData.cfgId
+        if not tmplId then return nil end
+
+        local ok, result = pcall(function()
+            local pathTool = getrenv()._G.PathTool
+            if not (pathTool.CfgMonster and pathTool.CfgMonster.Tmpls) then return nil end
+            local cfg = pathTool.CfgMonster.Tmpls[tostring(tmplId)] or pathTool.CfgMonster.Tmpls[tonumber(tmplId)]
+            return cfg and (cfg.Name or cfg.name or cfg.Title)
+        end)
+        return ok and result or nil
+    end
+
+    local function GetMonsterDisplayName(monsterObj)
+        if not monsterObj then return "Unknown" end
+        local uidStr = string.match(monsterObj.Name, "Monster_(%d+)")
+        if not uidStr then return monsterObj.Name end
+
+        local uid = tonumber(uidStr)
+        if monsterNameCache[uid] then return monsterNameCache[uid] end
+
+        local resolved = LookupMonsterNameFromConfig(uid)
+        if resolved then
+            monsterNameCache[uid] = resolved
+            return resolved
         end
-    })
+        return monsterObj.Name
+    end
 
-    BossTab:CreateSection("🌍 AUTO WORLD BOSS (THƯỜNG)")
-    local WbStatusLabel = BossTab:CreateLabel("Trạng thái: Đang chờ...")
-    local BossMapLabel = BossTab:CreateLabel("📊 Boss trên map: ❌ Không có")
-    local TargetLabel = BossTab:CreateLabel("🎯 Đã chọn " .. #worldSettings.selectedWorlds .. " world có boss")
-
-    BossTab:CreateToggle({
-        Name = "✅ Bật Auto World Boss",
-        CurrentValue = worldSettings.enabled,
-        Flag = "EnableWorldBoss",
-        Callback = function(Value) worldSettings.enabled = Value end
-    })
-
-    Utils.CreateAreaMultiSelect(BossTab, {
-        name = "Chọn World Có Boss",
-        flag = "BossWorldSelect",
-        defaultAreas = Utils.GetAreaNamesByIds(worldSettings.selectedWorlds),
-        callback = function(selectedIds)
-            if type(selectedIds) == "table" then
-                worldSettings.selectedWorlds = selectedIds
-                if Utils and Utils.SaveSelectedAreas then Utils.SaveSelectedAreas(selectedIds, "R_SelectedBossWorlds.json") end
-                if #selectedIds == 0 then TargetLabel:Set("⚠️ Chưa chọn world nào!") else TargetLabel:Set("🎯 Đã chọn " .. #selectedIds .. " world có boss") end
-            end
-        end
-    })
-
-    BossTab:CreateToggle({
-        Name = "🔄 Auto Hop Server (Khi dẹp xong 1 vòng)",
-        CurrentValue = worldSettings.autoHop or false,
-        Flag = "BossWorldAutoHop",
-        Callback = function(Value) worldSettings.autoHop = Value end
-    })
-
-    -- ==========================================
-    -- 3. BỘ CẢM BIẾN UI CHUNG (HOOK BUBBLE)
-    -- ==========================================
-    local lastWorldBossAlertTime = 0
-
-    local function GetSpecialWorldId(bossName)
-        local lowerName = string.lower(bossName)
-        for worldId, keywords in pairs(SpecialBossMapping) do
-            for _, kw in ipairs(keywords) do if string.find(lowerName, string.lower(kw), 1, true) then return worldId end end
+    local function GetRootPart(obj)
+        if obj:IsA("Model") then
+            return obj.PrimaryPart or obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Root")
+        elseif obj:IsA("BasePart") then
+            return obj
         end
         return nil
     end
 
-    local function HookCombinedBubble(bubbleUI)
-        local labDesc = bubbleUI:FindFirstChild("LabDesc", true)
-        local labName = bubbleUI:FindFirstChild("LabName", true)
-        if not labDesc then return end
-
-        local spTriggered = false
-
-        local function CheckAlerts()
-            local descTxt = string.lower(labDesc.Text)
-
-            -- XỬ LÝ SPECIAL BOSS
-            if specialSettings.enabled and not spTriggered and string.find(descTxt, "a special ", 1, true) then
-                if labName then
-                    spTriggered = true
-                    local bossName = labName.Text
-                    local worldId = GetSpecialWorldId(bossName)
-
-                    if worldId then
-                        local isWorldAllowed = false
-                        for _, allowedId in pairs(specialSettings.selectedWorlds) do
-                            if tonumber(allowedId) == tonumber(worldId) then isWorldAllowed = true break end
-                        end
-
-                        if isWorldAllowed then
-                            print("🚨 [SPECIAL] Chốt hạ: " .. bossName .. " tại Đảo " .. worldId)
-                            SpStatusLabel:Set("⚔️ Phát hiện: " .. bossName .. " (Đảo " .. worldId .. ")")
-                            spHuntState.isActive = true
-                            spHuntState.targetBoss = bossName
-                            spHuntState.targetWorldId = worldId
-                            spHuntState.timeout = os.time() + 180 -- Timeout 3 phút
-                            _G.PendingSpecialBoss = true
-                            game.StarterGui:SetCore("SendNotification", { Title = "🚨 Special Boss!", Text = bossName .. " xuất hiện ở đảo " .. worldId, Duration = 5 })
-                        end
-                    end
-                end
-            end
-
-            -- XỬ LÝ WORLD BOSS
-            if worldSettings.enabled and (string.find(descTxt, " appear at ", 1, true) or string.find(descTxt, " spawned", 1, true)) then
-                local currentTime = os.time()
-                if currentTime - lastWorldBossAlertTime >= 60 then
-                    lastWorldBossAlertTime = currentTime
-                    print("⚔️ [WORLD BOSS] Sóng World Boss xuất hiện!")
-                    _G.PendingBossHunt = true
-
-                    task.spawn(function()
-                        local controller = _G.SystemController
-                        if controller and controller.CurrentLock == "AutoDungeon" then
-                            while controller.CurrentLock == "AutoDungeon" do task.wait(1) end
-                        end
-                        _G.PendingBossHunt = false
-
-                        if _G.PendingSpecialBoss or (controller and controller.CurrentLock == "SpecialBoss") then
-                            print("⚠️ [WORLD BOSS] Bỏ qua sóng vì Special Boss đang hoạt động!")
-                            return
-                        end
-
-                        if controller then controller.RequestLock("BossHunt") end
-                        _G.BossStatus.roundCompleted = false
-                        _G.BossStatus.currentWorldIndex = 1
-                        _G.BossStatus.scanAttempts = 0
-
-                        if #worldSettings.selectedWorlds > 0 then
-                            _G.BossStatus.currentWorldId = worldSettings.selectedWorlds[1]
-                            pcall(function() Utils.TeleportToArea(_G.BossStatus.currentWorldId) end)
-                        end
-                    end)
-                end
-            end
-        end
-
-        labDesc:GetPropertyChangedSignal("Text"):Connect(CheckAlerts)
-        CheckAlerts()
+    local function SharedTeleportToBoss(hrp, bossPosition)
+        Utils.ToggleMount(true)
+        task.wait(0.5)
+        hrp.CFrame = CFrame.new(bossPosition + Vector3.new(0, 8, 0))
+        Utils.SmartDismount()
     end
 
     -- ==========================================
-    -- 4. LUỒNG CHẠY: SPECIAL BOSS (ƯU TIÊN TUẦN TỰ)
+    -- HÀM WORLD BOSS TIMERS
+    -- ==========================================
+    local function SaveWbWaveEndTime()
+        Utils.SaveJSON(WB_WAVE_TIMER_FILE, { EndTime = os.time() + WB_WAVE_DURATION_SECS })
+    end
+
+    local function ReadWbWaveTimer()
+        local data = Utils.LoadJSON(WB_WAVE_TIMER_FILE)
+        if not (data and data.EndTime) then return false, 0 end
+        local timeLeft = data.EndTime - os.time()
+        return timeLeft > 0, math.max(timeLeft, 0)
+    end
+
+    -- ==========================================
+    -- GIAO DIỆN (UI)
+    -- ==========================================
+    local BossTab = Window:CreateTab("Săn Boss", 4483345998)
+
+    -- [UI] SPECIAL BOSS
+    BossTab:CreateSection("🌟 AUTO SPECIAL BOSS")
+    local spStatusLabel = BossTab:CreateLabel("Trạng thái: Đang chờ tín hiệu...")
+
+    BossTab:CreateToggle({
+        Name = "✅ Bật Auto Săn Special Boss",
+        CurrentValue = false,
+        Flag = "EnableSpecialBoss",
+        Callback = function(isEnabled) spSettings.enabled = isEnabled end,
+    })
+
+    local spAllowedWorldIds = {}
+    for worldId in pairs(SPECIAL_BOSS_MAPPING) do table.insert(spAllowedWorldIds, worldId) end
+    Utils.CreateFilteredAreaMultiSelect(BossTab, {
+        name = "Chọn Đảo Săn Special Boss",
+        flag = "SpBossWorldSelect",
+        allowedIds = spAllowedWorldIds,
+        callback = function(selectedIds) spSettings.selectedWorlds = selectedIds end,
+    })
+
+    -- [UI] WORLD BOSS
+    BossTab:CreateSection("🌍 AUTO WORLD BOSS")
+    local wbStatusLabel = BossTab:CreateLabel("Trạng thái: Đang chờ Sóng...")
+
+    -- Khai báo hàm StartWbHunt trước để xài trong UI Toggle
+    local function StartWbHuntFromFirstWorld()
+        wbHuntState.currentWorldIndex = 1
+        wbHuntState.currentWorldId    = tonumber(wbSettings.selectedWorlds[1])
+        wbHuntState.hasTeleported     = false
+        wbHuntState.engaged           = false
+        wbHuntState.scanAttempts      = 0
+        wbHuntState.isActive          = true
+    end
+
+    BossTab:CreateToggle({
+        Name = "✅ Bật Auto Săn World Boss",
+        CurrentValue = false,
+        Flag = "EnableWorldBoss",
+        Callback = function(isEnabled)
+            wbSettings.enabled = isEnabled
+            if isEnabled then
+                if #wbSettings.selectedWorlds > 0 then
+                    print("🌍 [WORLD BOSS] Bắt đầu càn quét 1 vòng đầu tiên...")
+                    StartWbHuntFromFirstWorld()
+                    wbStatusLabel:Set("🚨 Khởi động! Tiến đến đảo đầu tiên...")
+                else
+                    print("⚠️ [WORLD BOSS] Chưa chọn đảo nào!")
+                    wbStatusLabel:Set("⚠️ Vui lòng chọn đảo để bắt đầu...")
+                end
+            else
+                wbHuntState.isActive = false
+                wbStatusLabel:Set("Trạng thái: Đã tắt")
+            end
+        end,
+    })
+
+    local wbAllowedWorldIds = {}
+    for worldId in pairs(WORLD_BOSS_MAPPING) do table.insert(wbAllowedWorldIds, worldId) end
+    Utils.CreateFilteredAreaMultiSelect(BossTab, {
+        name = "Chọn World boss",
+        flag = "WbBossWorldSelect",
+        allowedIds = wbAllowedWorldIds,
+        callback = function(selectedIds) wbSettings.selectedWorlds = selectedIds end,
+    })
+
+    BossTab:CreateToggle({
+        Name = "🔄 Auto Hop Server Săn Boss",
+        CurrentValue = false,
+        Flag = "WbAutoHop",
+        Callback = function(isEnabled) wbSettings.autoHop = isEnabled end,
+    })
+
+    -- ==========================================
+    -- HÀM LOGIC SPECIAL BOSS
+    -- ==========================================
+    local function FindSpWorldByBossName(bossName)
+        local lowerName = string.lower(bossName)
+        for worldId, keywords in pairs(SPECIAL_BOSS_MAPPING) do
+            for _, kw in ipairs(keywords) do
+                if string.find(lowerName, string.lower(kw), 1, true) then return worldId end
+            end
+        end
+        return nil
+    end
+
+    local function IsSpWorldAllowed(worldId)
+        for _, allowedId in pairs(spSettings.selectedWorlds) do
+            if tonumber(allowedId) == tonumber(worldId) then return true end
+        end
+        return false
+    end
+
+    local function ScanSpBossesByName(targetName)
+        local targets, lowerTarget = {}, string.lower(targetName)
+        local folder = workspace:FindFirstChild("Monsters")
+        if not folder then return targets end
+
+        for _, obj in pairs(folder:GetChildren()) do
+            local root = GetRootPart(obj)
+            if root then
+                local displayName = GetMonsterDisplayName(obj)
+                if string.find(string.lower(displayName), lowerTarget, 1, true) then
+                    local uidStr = string.match(obj.Name, "Monster_(%d+)")
+                    table.insert(targets, {
+                        Id = uidStr and tonumber(uidStr) or obj.Name,
+                        Name = displayName,
+                        Position = root.Position,
+                    })
+                end
+            end
+        end
+        return targets
+    end
+
+    local function GetAttackRemote()
+        local ok, remote = pcall(function()
+            return game.ReplicatedStorage:FindFirstChild("CommonLibrary").Tool.RemoteManager.Funcs:FindFirstChild("DataPullFunc")
+        end)
+        return ok and remote or nil
+    end
+
+    -- ==========================================
+    -- HÀM LOGIC WORLD BOSS
+    -- ==========================================
+    local function IdentifyWbWorldByBossName(bossName)
+        local lowerName = string.lower(bossName)
+        for worldId, keywords in pairs(WORLD_BOSS_MAPPING) do
+            for _, kw in ipairs(keywords) do
+                if string.find(lowerName, string.lower(kw), 1, true) then return worldId end
+            end
+        end
+        return nil
+    end
+
+    local function ScanWbBossesOnCurrentWorld(worldId)
+        local targets = {}
+        local keywords = WORLD_BOSS_MAPPING[worldId]
+        if not keywords then return targets end
+
+        local folder = workspace:FindFirstChild("Monsters")
+        if not folder then return targets end
+
+        for _, obj in pairs(folder:GetChildren()) do
+            local root = GetRootPart(obj)
+            if root then
+                local displayName = GetMonsterDisplayName(obj)
+                local lowerName = string.lower(displayName)
+                for _, kw in ipairs(keywords) do
+                    if string.find(lowerName, string.lower(kw), 1, true) then
+                        local uidStr = string.match(obj.Name, "Monster_(%d+)")
+                        table.insert(targets, {
+                            Id = uidStr and tonumber(uidStr) or obj.Name,
+                            Name = displayName,
+                            Position = root.Position,
+                        })
+                        break
+                    end
+                end
+            end
+        end
+        return targets
+    end
+
+    -- ==========================================
+    -- LUỒNG CẢM BIẾN CHUNG (UNIFIED SENSOR)
     -- ==========================================
     task.spawn(function()
-        local Players = game:GetService("Players")
-        local LocalPlayer = Players.LocalPlayer
+        local localPlayer = game:GetService("Players").LocalPlayer
+        local lastProcessedText = ""
 
         while task.wait(0.5) do
-            if not spHuntState.isActive or not specialSettings.enabled then continue end
-            local controller = _G.SystemController
+            pcall(function()
+                local playerGui = localPlayer:FindFirstChild("PlayerGui")
+                if not playerGui then return end
+                local fmBubble = playerGui:FindFirstChild("FmBubble", true)
+                if not fmBubble then return end
+                local labName = fmBubble:FindFirstChild("LabName", true)
+                if not labName then return end
 
-            if os.time() > spHuntState.timeout then
-                print("⏱️ [SPECIAL] Hết giờ săn boss: " .. spHuntState.targetBoss)
+                local currentText = labName.Text
+                if currentText == "" or currentText == "Label" or currentText == lastProcessedText then return end
+                lastProcessedText = currentText
+
+                -- Kiểm tra Special Boss
+                if spSettings.enabled and not spHuntState.isActive then
+                    local spWorldId = FindSpWorldByBossName(currentText)
+                    if spWorldId and IsSpWorldAllowed(spWorldId) then
+                        print("🔔 [CẢM BIẾN] Bắt được Special Boss: '" .. currentText .. "' tại Đảo " .. spWorldId)
+                        spHuntState.targetBoss    = currentText
+                        spHuntState.targetWorldId = tonumber(spWorldId)
+                        spHuntState.hasTeleported = false
+                        spHuntState.engaged       = false
+                        spHuntState.isActive      = true
+                        spHuntState.timeoutAt     = os.time() + SP_HUNT_TIMEOUT_SECS
+                        spStatusLabel:Set("🚨 Bắt được tín hiệu: " .. currentText)
+                        return -- Bắt được Special rồi thì thôi không soi World Boss nữa
+                    end
+                end
+
+                -- Kiểm tra World Boss
+                if wbSettings.enabled and not wbHuntState.isActive then
+                    local wbWorldId = IdentifyWbWorldByBossName(currentText)
+                    if wbWorldId then
+                        if os.time() - wbLastWaveAlertTime >= WB_WAVE_COOLDOWN_SECS then
+                            wbLastWaveAlertTime = os.time()
+                            SaveWbWaveEndTime()
+                            
+                            if #wbSettings.selectedWorlds > 0 then
+                                print("⚔️ [SÓNG WORLD BOSS] Kích hoạt càn quét (Tín hiệu: " .. currentText .. ")")
+                                StartWbHuntFromFirstWorld()
+                                wbStatusLabel:Set("🚨 Bắt đầu Sóng! Tiến đến đảo đầu tiên...")
+                            else
+                                print("⚠️ [SÓNG WORLD BOSS] Có sóng nhưng chưa chọn Đảo!")
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end)
+
+    -- ==========================================
+    -- LUỒNG HUNTER: SPECIAL BOSS
+    -- ==========================================
+    task.spawn(function()
+        local localPlayer = game:GetService("Players").LocalPlayer
+        local scanLogCooldown = 0
+
+        while task.wait(0.1) do
+            if not spSettings.enabled or not spHuntState.isActive then continue end
+
+            if os.time() > spHuntState.timeoutAt then
+                local reason = spHuntState.engaged 
+                    and ("☠️ [KẾT THÚC] Đã tiêu diệt Special Boss: " .. spHuntState.targetBoss) 
+                    or ("⏱️ [KẾT THÚC] Hết giờ! Special Boss không xuất hiện/bị KS.")
                 spHuntState.isActive = false
-                _G.PendingSpecialBoss = false
-                if controller and controller.CurrentLock == "SpecialBoss" then controller.ReleaseLock("SpecialBoss") end
-                SpStatusLabel:Set("Trạng thái: Hết giờ/Boss đã chết")
+                spStatusLabel:Set("Trạng thái: Đang chờ tín hiệu...")
+                print(reason)
                 continue
             end
 
-            if controller then
-                if controller.CurrentLock ~= "SpecialBoss" then
-                    if controller.CurrentLock == "AutoDungeon" then
-                        SpStatusLabel:Set("⏳ Đang đợi Dungeon xong...")
-                        continue
-                    end
-                    
-                    if controller.CurrentLock == "BossHunt" then 
-                        SpStatusLabel:Set("⏳ Đang đợi Boss Thường dọn xong...")
-                        continue 
-                    end
-                    
-                    controller.RequestLock("SpecialBoss")
-                end
-            end
-
-            local targets = Utils.ScanMonsters({spHuntState.targetBoss})
-            local remote = nil
-            if GetAttackRemote then remote = GetAttackRemote() end
+            local targets = ScanSpBossesByName(spHuntState.targetBoss)
+            local remote  = GetAttackRemote()
 
             if #targets > 0 and remote then
                 local boss = targets[1]
-                SpStatusLabel:Set("⚔️ Đang tấn công: " .. boss.Name)
-                local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                
-                if hrp and boss.Position then
-                    local distance = (hrp.Position - boss.Position).Magnitude
-                    if distance > 20 then hrp.CFrame = CFrame.new(boss.Position + Vector3.new(0, 8, 0)) end
+                if not spHuntState.engaged then
+                    print("🎯 [ĐI SĂN] Tìm thấy Special Boss '" .. boss.Name .. "'! Bắt đầu tấn công...")
+                    spHuntState.engaged = true
                 end
+
+                spStatusLabel:Set("⚔️ Đang tấn công: " .. boss.Name)
+                
+                local hrp = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if hrp and boss.Position and (hrp.Position - boss.Position).Magnitude > MAX_ATTACK_DISTANCE then
+                    SharedTeleportToBoss(hrp, boss.Position)
+                end
+
+                task.wait(SP_ATTACK_WAIT)
                 pcall(function() remote:InvokeServer("MonsterAttackChannel", boss.Id) end)
+                spHuntState.timeoutAt = os.time() + SP_ATTACK_EXTEND_SECS -- Extend
             else
-                SpStatusLabel:Set("🚀 Đang bay tới Đảo " .. spHuntState.targetWorldId .. " tìm " .. spHuntState.targetBoss)
-                pcall(function() Utils.TeleportToArea(spHuntState.targetWorldId) end)
-                task.wait(2)
+                if not spHuntState.hasTeleported then
+                    print("🚀 [ĐI SĂN] Bay tới Đảo " .. tostring(spHuntState.targetWorldId) .. " tìm " .. spHuntState.targetBoss)
+                    spStatusLabel:Set("🚀 Bay tới Đảo " .. tostring(spHuntState.targetWorldId))
+                    spHuntState.hasTeleported = true
+                    pcall(function() Utils.TeleportToArea(spHuntState.targetWorldId) end)
+                    task.wait(SHARED_TELEPORT_WAIT)
+                else
+                    scanLogCooldown += 1
+                    if scanLogCooldown >= SP_SCAN_LOG_INTERVAL then
+                        print("🔎 [ĐI SĂN] Vẫn đang tìm Special Boss '" .. spHuntState.targetBoss .. "'... (Chờ Load)")
+                        scanLogCooldown = 0
+                    end
+                    spStatusLabel:Set("⏳ Đang đợi Boss " .. spHuntState.targetBoss .. " xuất hiện...")
+                end
             end
         end
     end)
 
     -- ==========================================
-    -- 5. LUỒNG CHẠY: WORLD BOSS THƯỜNG (XẾP HÀNG)
+    -- LUỒNG HUNTER: WORLD BOSS
     -- ==========================================
-    local function ScanWorldBoss()
-        local currentWorldId = _G.BossStatus.currentWorldId
-        if not currentWorldId then return nil, nil, nil end
-        local keywords = WorldBossMapping[currentWorldId] or {}
-        if #keywords == 0 then return nil, nil, nil end
-
-        if Utils.ScanMonsters then
-            local targets = Utils.ScanMonsters(keywords)
-            if #targets > 0 then return targets[1].Id, targets[1].Name, targets[1].Position end
-        end
-        return nil, nil, nil
-    end
-
     task.spawn(function()
-        local Players = game:GetService("Players")
-        local LocalPlayer = Players.LocalPlayer
-        local bossCheckCooldown = 0
+        local localPlayer = game:GetService("Players").LocalPlayer
 
         while task.wait(0.2) do
-            local controller = _G.SystemController
-            
-            if controller and controller.IsPaused then 
-                WbStatusLabel:Set("⏸️ ĐÃ DỪNG (Main Controller)")
-                task.wait(0.5) 
-                continue 
-            end
-            
-            if not worldSettings.enabled or #worldSettings.selectedWorlds == 0 then 
-                task.wait(1) 
-                continue 
-            end
+            if not wbSettings.enabled or not wbHuntState.isActive then continue end
 
-            if controller and controller.CurrentLock == "AutoDungeon" then 
-                WbStatusLabel:Set("⏳ Đang bận đi Dungeon...")
-                task.wait(1) 
-                continue 
-            end
-            
-            if controller and controller.CurrentLock == "SpecialBoss" then
-                WbStatusLabel:Set("⏳ Đang nhường đường đợi Special Boss xong...")
+            -- [PRIORITY GUARD] Nhường đường cho Special Boss
+            if spHuntState.isActive then
+                wbStatusLabel:Set("⏳ Đang nhường đường cho Special Boss...")
                 task.wait(1)
                 continue
             end
 
-            if _G.BossStatus.roundCompleted then
-                if worldSettings.autoHop and controller then
-                    WbStatusLabel:Set("🔄 Đã xong 1 vòng. Đang gọi Dispatcher đổi server...")
-                    if Utils.RequestHop then
-                        Utils.RequestHop("Boss_AutoHop", 2) 
+            local targets = ScanWbBossesOnCurrentWorld(wbHuntState.currentWorldId)
+
+            if #targets > 0 then
+                local boss = targets[1]
+                if not wbHuntState.engaged then
+                    print("🎯 [CÀN QUÉT] Thấy World Boss '" .. boss.Name .. "' tại đảo " .. wbHuntState.currentWorldId)
+                    wbHuntState.engaged = true
+
+                    local isWaveActive, _ = ReadWbWaveTimer()
+                    if not isWaveActive then
+                        print("💡 [WORLD BOSS] Bắt được Boss lúc đi tuần, tự động cấp quyền Hop 5 phút!")
+                        SaveWbWaveEndTime()
                     end
-                    task.wait(5)
-                else
-                    WbStatusLabel:Set("💤 Đã xong 1 vòng (Tính năng Hop đang tắt)")
                 end
-                task.wait(1)
-                continue
-            end
 
-            bossCheckCooldown = bossCheckCooldown + 1
-            if bossCheckCooldown >= 5 then
-                bossCheckCooldown = 0
-                local bossId, bossName, bossPos = ScanWorldBoss()
-                local remote = nil
-                if GetAttackRemote then remote = GetAttackRemote() end
+                wbStatusLabel:Set("⚔️ Đang dọn dẹp: " .. boss.Name)
+                
+                local hrp = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if hrp and boss.Position and (hrp.Position - boss.Position).Magnitude > MAX_ATTACK_DISTANCE then
+                    SharedTeleportToBoss(hrp, boss.Position)
+                end
 
-                if bossId and remote then
-                    _G.BossStatus.scanAttempts = 0
-                    if controller and controller.CurrentLock ~= "BossHunt" then controller.RequestLock("BossHunt") end
-                    
-                    _G.BossStatus.bossFound = true
-                    _G.BossStatus.bossId = bossId
-                    _G.BossStatus.bossName = bossName
-                    _G.BossStatus.bossPosition = bossPos
-                    
-                    BossMapLabel:Set("📊 Boss trên map: ✅ " .. bossName)
-                    WbStatusLabel:Set("⚔️ Trạng thái: Đang đánh boss!")
-
-                    if bossPos then
-                        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                        if hrp then
-                            local distance = (hrp.Position - bossPos).Magnitude
-                            if distance > 20 then hrp.CFrame = CFrame.new(bossPos + Vector3.new(0, 8, 0)) end
-                        end
-                    end
-                    pcall(function() remote:InvokeServer("MonsterAttackChannel", bossId) end)
+                Utils.AttackMonster(boss.Id)
+                task.wait(WB_ATTACK_INTERVAL)
+                wbHuntState.scanAttempts = 0
+            else
+                if not wbHuntState.hasTeleported then
+                    print("🚀 [CÀN QUÉT] Bay qua Đảo " .. tostring(wbHuntState.currentWorldId))
+                    wbStatusLabel:Set("🚀 Bay qua Đảo " .. tostring(wbHuntState.currentWorldId))
+                    pcall(function() Utils.TeleportToArea(wbHuntState.currentWorldId) end)
+                    wbHuntState.hasTeleported = true
+                    task.wait(SHARED_TELEPORT_WAIT)
                 else
-                    local timeSinceAlert = os.time() - lastWorldBossAlertTime
-                    local maxRetries = (timeSinceAlert < 30) and 8 or 0
-
-                    _G.BossStatus.scanAttempts = (_G.BossStatus.scanAttempts or 0) + 1
-                    if _G.BossStatus.scanAttempts <= maxRetries then
-                        WbStatusLabel:Set("⏳ Đang chờ load Boss... (" .. _G.BossStatus.scanAttempts .. "/" .. maxRetries .. ")")
+                    wbHuntState.scanAttempts += 1
+                    if wbHuntState.scanAttempts <= WB_SCAN_TIMEOUT_TICKS then
+                        wbStatusLabel:Set("🔎 Đang tìm quái trên đảo... (" .. wbHuntState.scanAttempts .. "/" .. WB_SCAN_TIMEOUT_TICKS .. ")")
                     else
-                        _G.BossStatus.scanAttempts = 0
-                        _G.BossStatus.bossFound = false
-                        _G.BossStatus.bossId = nil
-                        _G.BossStatus.bossName = ""
-                        _G.BossStatus.bossPosition = nil
+                        print("✅ [CÀN QUÉT] Xong đảo " .. tostring(wbHuntState.currentWorldId) .. "!")
                         
-                        BossMapLabel:Set("📊 Boss trên map: ❌ Không có")
+                        local nextIndex = wbHuntState.currentWorldIndex + 1
+                        local isWaveActive, timeLeft = ReadWbWaveTimer()
 
-                        local nextIndex = (_G.BossStatus.currentWorldIndex or 1) + 1
-                        if nextIndex > #worldSettings.selectedWorlds then
-                            _G.BossStatus.roundCompleted = true
-                            if controller then 
-                                controller.ReleaseLock("BossHunt") 
-                                print("🏳️ [WORLD BOSS] Nhả cờ BossHunt") 
+                        if nextIndex > #wbSettings.selectedWorlds then
+                            wbHuntState.isActive = false
+                            
+                            if wbSettings.autoHop and isWaveActive then
+                                wbStatusLabel:Set("🔄 Hoàn tất 1 vòng! Còn " .. math.floor(timeLeft) .. "s, đang gọi Dispatcher...")
+                                print("🔄 [WORLD BOSS] Gửi lệnh Hop Server...")
+                                if Utils.RequestHop then Utils.RequestHop("Boss_AutoHop", 2) end
+                            else
+                                wbStatusLabel:Set("💤 Xong vòng (Hoặc sóng tàn). Đang chờ Sóng tiếp theo.")
+                                print("💤 [WORLD BOSS] Chờ Sóng tiếp theo.")
                             end
                         else
-                            _G.BossStatus.currentWorldIndex = nextIndex
-                            _G.BossStatus.currentWorldId = worldSettings.selectedWorlds[nextIndex]
-                            
-                            if controller and controller.CurrentLock ~= "BossHunt" then controller.RequestLock("BossHunt") end
-                            print("🚩 [WORLD BOSS] Giữ cờ - Đang nhảy đảo " .. tostring(_G.BossStatus.currentWorldId))
-                            
-                            WbStatusLabel:Set("🔄 Di chuyển đến world tiếp theo...")
-                            pcall(function() Utils.TeleportToArea(_G.BossStatus.currentWorldId) end)
-                            task.wait(4)
+                            wbHuntState.currentWorldIndex = nextIndex
+                            wbHuntState.currentWorldId    = tonumber(wbSettings.selectedWorlds[nextIndex])
+                            wbHuntState.hasTeleported     = false
+                            wbHuntState.engaged           = false
+                            wbHuntState.scanAttempts      = 0
                         end
                     end
                 end
             end
         end
     end)
-
-    -- ==========================================
-    -- 6. KHỞI CHẠY BỘ CẢM BIẾN (DỰA TRÊN PATH ĐÃ DÒ)
-    -- ==========================================
-    task.spawn(function()
-        local Players = game:GetService("Players")
-        local LocalPlayer = Players.LocalPlayer
-        
-        local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 9e9)
-        local MainGui = PlayerGui:WaitForChild("MainGui", 10)
-        
-        if not MainGui then
-            warn("❌ [HOOK] Không tìm thấy MainGui!")
-            return
-        end
-
-        local ScreenGui = MainGui:WaitForChild("ScreenGui", 10)
-        local fmBubble = ScreenGui:WaitForChild("FmBubble", 10)
-        
-        if fmBubble then
-            print("✅ [HỆ THỐNG] Đã tìm thấy FmBubble, tiến hành gắn Hook Cảm Biến Boss...")
-            HookCombinedBubble(fmBubble)
-        else
-            warn("❌ [HOOK] Không tìm thấy FmBubble!")
-        end
-    end)
-
 end

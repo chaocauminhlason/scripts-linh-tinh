@@ -490,11 +490,11 @@ return function(Window, Utils)
                 end
 
                 if (charData.Position - targetPos).Magnitude > 20 then
+                    Utils.ToggleMount(true)
                     charData.RootPart.CFrame = CFrame.lookAt(targetPos, closestMonster.Position)
+                    Utils.SmartDismount()
                 end
-                Utils.ToggleMount(true)
                 pcall(function() SystemCache.AttackRemote:InvokeServer("MonsterAttackChannel", closestMonster.Id) end)
-                Utils.ToggleMount(false)
                 task.wait(AppState.attackDelay + 0.1)
             end
         end
