@@ -97,6 +97,23 @@ task.spawn(function()
             end)
         end
     end
-end)
+-- ====================================================================
+-- TƯƠNG THÍCH NGƯỢC: Ánh xạ giữa ActiveTask và CurrentLock
+-- ====================================================================
+setmetatable(SystemController, {
+    __index = function(t, k)
+        if k == "CurrentLock" then
+            return rawget(t, "ActiveTask")
+        end
+        return nil
+    end,
+    __newindex = function(t, k, v)
+        if k == "CurrentLock" then
+            rawset(t, "ActiveTask", v)
+        else
+            rawset(t, k, v)
+        end
+    end
+})
 
 return SystemController
