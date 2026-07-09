@@ -92,6 +92,9 @@ return function(Window, Utils)
         -- 1. Chặn trả cờ nếu 1 trong 2 luồng Săn Boss vẫn đang hoạt động
         if spHuntState.isActive or wbHuntState.isActive then return end
         
+        _G.PendingBossHunt = false
+        _G.PendingSpecialBoss = false
+        
         -- 2. Thực hiện trả cờ cực kỳ an toàn
         local ctrl = _G.SystemController
         if ctrl and ctrl.CurrentLock == "BossHunt" then
@@ -169,7 +172,6 @@ return function(Window, Utils)
         Utils.ToggleMount(true)
         task.wait(0.5)
         hrp.CFrame = CFrame.new(bossPosition + Vector3.new(0, 8, 0))
-        Utils.SmartDismount()
     end
 
     local function SaveWbWaveEndTime()
@@ -386,7 +388,12 @@ return function(Window, Utils)
         local scanLogCooldown = 0
 
         while task.wait(0.1) do
-            if not spSettings.enabled or not spHuntState.isActive then continue end
+            if not spSettings.enabled or not spHuntState.isActive then 
+                _G.PendingSpecialBoss = false
+                continue 
+            end
+            _G.PendingSpecialBoss = true
+
             if not TryAcquireLock() then 
                 spStatusLabel:Set("⏳ Đang chờ Hệ thống cấp cờ BossHunt...") 
                 continue 
@@ -420,6 +427,8 @@ return function(Window, Utils)
 
                 task.wait(SP_ATTACK_WAIT)
                 pcall(function() remote:InvokeServer("MonsterAttackChannel", boss.Id) end)
+                Utils.SmartDismount()
+
                 spHuntState.timeoutAt = os.time() + SP_ATTACK_EXTEND_SECS
             else
                 if not spHuntState.hasTeleported then
@@ -443,7 +452,11 @@ return function(Window, Utils)
         local localPlayer = game:GetService("Players").LocalPlayer
 
         while task.wait(0.2) do
-            if not wbSettings.enabled or not wbHuntState.isActive then continue end
+            if not wbSettings.enabled or not wbHuntState.isActive then 
+                _G.PendingBossHunt = false
+                continue 
+            end
+            _G.PendingBossHunt = true
 
             -- NHƯỜNG CỜ NỘI BỘ: Đợi Special đánh xong, mình không nhả cờ ra ngoài Hệ thống
             if spHuntState.isActive then
