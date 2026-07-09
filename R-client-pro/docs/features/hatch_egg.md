@@ -86,7 +86,3 @@ Module phụ thuộc vào các đường dẫn Global (`_G.PathTool`) nội tạ
 
 *(Hết tài liệu)*
 
-```
-
-
-```

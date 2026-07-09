@@ -761,9 +761,9 @@ end)
 local AreaData = {
     {id = 1, name = "Starter Island", category = "Cơ Bản"},
     {id = 2, name = "Volcano", category = "Săn Boss"},
-    {id = 3, name = "Duneveil Isle", category = "Săn Boss"},
+    {id = 3, name = "Frost Isle", category = "Săn Boss"},
     {id = 4, name = "Neverland", category = "Săn Boss"},
-    {id = 5, name = "Frost Isle", category = "Săn Boss"},
+    {id = 5, name = "Duneveil Isle", category = "Săn Boss"},
     {id = 6, name = "Tideland", category = "Săn Boss"},
     {id = 7, name = "Spirit Grove", category = "Săn Boss"},
     {id = 8, name = "Dragon's Breath", category = "Săn Boss"},

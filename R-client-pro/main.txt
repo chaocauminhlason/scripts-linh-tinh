@@ -33,11 +33,11 @@ end
 local repoUrl = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/" .. targetRef .. "/R-client-pro/"
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-
+-- R-Client Pro Tool v2.8
 local Window = Rayfield:CreateWindow({
-    Name = "R-Client Pro Tool v2.8",
+    Name = "Have a good day!",
     LoadingTitle = "Đang tải hệ thống Core... [" .. string.sub(targetRef, 1, 7) .. "]",
-    LoadingSubtitle = "Dev by Sơn",
+    LoadingSubtitle = "Dev by Son",
     ConfigurationSaving = { Enabled = true, FileName = "AutoFarmConfig" },
     KeySystem = false,
     DisableRayfieldPrompts = true,

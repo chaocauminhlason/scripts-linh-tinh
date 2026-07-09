@@ -16,9 +16,9 @@ local SPECIAL_BOSS_MAPPING = {
 
 local WORLD_BOSS_MAPPING = {
     [2]  = { "Flaragon" },
-    [3]  = { "Gildron" },
+    [3]  = { "Mountusk", "Glazadon" },
     [4]  = { "ShadeKnight" },
-    [5]  = { "Mountusk", "Glazadon" },
+    [5]  = { "Gildron" },
     [6]  = { "Tidevex" },
     [7]  = { "Frostwyrm" },
     [8]  = { "Dracospike" },
@@ -195,7 +195,7 @@ return function(Window, Utils)
     local spStatusLabel = BossTab:CreateLabel("Trạng thái: Đang chờ tín hiệu...")
 
     BossTab:CreateToggle({
-        Name = "✅ Bật Auto Săn Special Boss",
+        Name = "Auto Săn Special Boss",
         CurrentValue = false,
         Flag = "EnableSpecialBoss",
         Callback = function(isEnabled) 
@@ -230,7 +230,7 @@ return function(Window, Utils)
     end
 
     BossTab:CreateToggle({
-        Name = "✅ Bật Auto Săn World Boss",
+        Name = "Auto Săn World Boss",
         CurrentValue = false,
         Flag = "EnableWorldBoss",
         Callback = function(isEnabled)

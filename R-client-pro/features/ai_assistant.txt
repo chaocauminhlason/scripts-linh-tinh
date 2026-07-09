@@ -1,13 +1,15 @@
 -- ====================================================================
--- MODULE: R-CLIENT PRO AI ASSISTANT (V4.4 - REFACTOR)
--- Thay đổi chính:
---   1. [SAFETY]   Tách bước Review và Execute - không tự chạy code ngay
---   2. [STABILITY] Thêm debounce + timeout 15s cho API call
---   3. [PERF]     utf8Map khai báo một lần ngoài scope hàm
---   4. [CLEAN]    Tách logic thành các hàm nhỏ rõ ràng
+-- MODULE: Best Script AI ASSISTANT (V4.5)
+-- Thay đổi so với V4.4:
+--   [FIX]  PromptInput scroll khi paste text dài
+--   [FIX]  ResetSubmitButton không reset isProcessing (timeout bug)
+--   [FIX]  CleanCodeResponse strip \r\n Windows line ending
+--   [FIX]  Auto-scroll output xuống cuối sau khi nhận response
+--   [NEW]  Conversation history — AI nhớ context nhiều lượt
+--   [NEW]  Model selector — cycle Gemini Flash / Pro
+--   [NEW]  Prompt history — nhấn nút ↑ để lấy lại prompt cũ
 -- ====================================================================
 
--- utf8Map khai báo ngoài để tránh tạo lại mỗi lần gọi RemoveAccents
 local UTF8_MAP = {
     ["á"]="a",["à"]="a",["ả"]="a",["ã"]="a",["ạ"]="a",["ă"]="a",["ắ"]="a",["ằ"]="a",["ẳ"]="a",["ẵ"]="a",["ặ"]="a",["â"]="a",["ấ"]="a",["ầ"]="a",["ẩ"]="a",["ẫ"]="a",["ậ"]="a",
     ["é"]="e",["è"]="e",["ẻ"]="e",["ẽ"]="e",["ẹ"]="e",["ê"]="e",["ế"]="e",["ề"]="e",["ể"]="e",["ễ"]="e",["ệ"]="e",
@@ -30,12 +32,9 @@ return function(Window, Utils, WebhookModule)
 
     local API_KEY_FILE = "R_ClientPro_AI_Key.txt"
     local GUI_NAME     = "RClientPro_AIAssistantUI"
-    local API_TIMEOUT  = 15  -- giây trước khi coi là timeout
+    local API_TIMEOUT  = 15
 
-    -- Dọn UI cũ nếu còn tồn tại
-    if CoreGui:FindFirstChild(GUI_NAME) then
-        CoreGui[GUI_NAME]:Destroy()
-    end
+    if CoreGui:FindFirstChild(GUI_NAME) then CoreGui[GUI_NAME]:Destroy() end
 
     -- ==========================================
     -- HÀM TIỆN ÍCH
@@ -44,42 +43,54 @@ return function(Window, Utils, WebhookModule)
     local function GetSavedAPIKey()
         if isfile and isfile(API_KEY_FILE) then
             local key = readfile(API_KEY_FILE)
-            if key and key ~= "" then
-                return string.gsub(key, "^%s*(.-)%s*$", "%1")
-            end
+            if key and key ~= "" then return string.gsub(key, "^%s*(.-)%s*$", "%1") end
         end
         return nil
     end
 
     local function SaveAPIKey(key)
-        if writefile then
-            pcall(function() writefile(API_KEY_FILE, key) end)
-        end
+        if writefile then pcall(function() writefile(API_KEY_FILE, key) end) end
     end
 
     local function CopyToClipboard(text)
-        if setclipboard then
-            pcall(function() setclipboard(text) end)
-        end
+        if setclipboard then pcall(function() setclipboard(text) end) end
     end
 
     local function RemoveAccents(str)
         if type(str) ~= "string" then return str end
-        for k, v in pairs(UTF8_MAP) do
-            str = string.gsub(str, k, v)
-        end
+        for k, v in pairs(UTF8_MAP) do str = string.gsub(str, k, v) end
         return str
     end
 
+    -- FIX: strip \r\n Windows line ending
     local function CleanCodeResponse(rawCode)
         rawCode = string.gsub(rawCode, "```lua\n?", "")
         rawCode = string.gsub(rawCode, "```\n?", "")
+        rawCode = string.gsub(rawCode, "\r\n", "\n")
         rawCode = string.gsub(rawCode, "^%s*(.-)%s*$", "%1")
         return rawCode
     end
 
     -- ==========================================
-    -- THIẾT KẾ GIAO DIỆN (UI)
+    -- STATE
+    -- ==========================================
+
+    local isProcessing      = false
+    local pendingCode       = nil
+    local conversationHistory = {}       -- NEW: lịch sử hội thoại
+    local promptHistory     = {}         -- NEW: lịch sử prompt
+    local historyIndex      = 0
+    local useWebhook        = false
+
+    -- NEW: Model selector
+    local MODELS = {
+        { label = "⚡ Flash (Nhanh)", id = "gemini-2.5-flash" },
+        { label = "🧠 Pro (Mạnh)",   id = "gemini-2.5-pro"   },
+    }
+    local currentModelIdx = 1
+
+    -- ==========================================
+    -- UI
     -- ==========================================
 
     local ScreenGui = Instance.new("ScreenGui")
@@ -87,13 +98,12 @@ return function(Window, Utils, WebhookModule)
     ScreenGui.Parent = CoreGui
     ScreenGui.ResetOnSpawn = false
 
-    -- MainFrame tăng cao thêm 40px để chứa nút Execute mới
     local MainFrame = Instance.new("Frame")
-    MainFrame.Size = UDim2.new(0, 450, 0, 420)
+    MainFrame.Size = UDim2.new(0, 450, 0, 490)
     MainFrame.Position = UDim2.new(1, -470, 0, 50)
     MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
     MainFrame.BorderSizePixel = 0
-    MainFrame.ClipsDescendants = true
+    MainFrame.ClipsDescendants = false
     MainFrame.Visible = false
     MainFrame.Parent = ScreenGui
     Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 8)
@@ -103,48 +113,40 @@ return function(Window, Utils, WebhookModule)
     TitleBar.Size = UDim2.new(1, 0, 0, 30)
     TitleBar.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
     TitleBar.Parent = MainFrame
+    Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 8)
 
     local TitleLabel = Instance.new("TextLabel")
     TitleLabel.Size = UDim2.new(1, -40, 1, 0)
     TitleLabel.Position = UDim2.new(0, 10, 0, 0)
     TitleLabel.BackgroundTransparency = 1
-    TitleLabel.Text = "🧠 R-Client Pro | AI (L-Alt để Ẩn/Hiện)"
+    TitleLabel.Text = "🧠 Best Script | AI "--(L-Alt Ẩn/Hiện)
     TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     TitleLabel.Font = Enum.Font.GothamBold
     TitleLabel.TextSize = 13
     TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
     TitleLabel.Parent = TitleBar
 
-    -- Drag logic
+    -- Drag
     local dragging, dragInput, dragStart, startPos
     TitleBar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            dragStart = input.Position
-            startPos = MainFrame.Position
+            dragging = true; dragStart = input.Position; startPos = MainFrame.Position
             input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
             end)
         end
     end)
     TitleBar.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement then
-            dragInput = input
-        end
+        if input.UserInputType == Enum.UserInputType.MouseMovement then dragInput = input end
     end)
     UserInputService.InputChanged:Connect(function(input)
         if input == dragInput and dragging then
             local delta = input.Position - dragStart
-            MainFrame.Position = UDim2.new(
-                startPos.X.Scale, startPos.X.Offset + delta.X,
-                startPos.Y.Scale, startPos.Y.Offset + delta.Y
-            )
+            MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
         end
     end)
 
-    -- API Key Input
+    -- API Key
     local KeyInput = Instance.new("TextBox")
     KeyInput.Size = UDim2.new(1, -20, 0, 30)
     KeyInput.Position = UDim2.new(0, 10, 0, 40)
@@ -152,7 +154,7 @@ return function(Window, Utils, WebhookModule)
     KeyInput.TextColor3 = Color3.fromRGB(200, 200, 200)
     KeyInput.Font = Enum.Font.Gotham
     KeyInput.TextSize = 12
-    KeyInput.PlaceholderText = GetSavedAPIKey() and "✅ Key đã lưu" or "🔑 Nhập Gemini API Key..."
+    KeyInput.PlaceholderText = GetSavedAPIKey() and "Key da luu" or "Nhap Gemini API Key..."
     KeyInput.Text = ""
     KeyInput.ClearTextOnFocus = false
     KeyInput.Parent = MainFrame
@@ -161,34 +163,47 @@ return function(Window, Utils, WebhookModule)
     KeyInput.FocusLost:Connect(function()
         if KeyInput.Text ~= "" then
             SaveAPIKey(KeyInput.Text)
-            KeyInput.PlaceholderText = "✅ Đã cập nhật Key!"
+            KeyInput.PlaceholderText = "Da cap nhat Key!"
             KeyInput.Text = ""
         end
     end)
 
-    -- Output Area (160px để thấy rõ code, có thanh cuộn)
+    -- NEW: Model selector button
+    local ModelBtn = Instance.new("TextButton")
+    ModelBtn.Size = UDim2.new(1, -20, 0, 26)
+    ModelBtn.Position = UDim2.new(0, 10, 0, 78)
+    ModelBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+    ModelBtn.TextColor3 = Color3.fromRGB(180, 220, 255)
+    ModelBtn.Font = Enum.Font.GothamBold
+    ModelBtn.TextSize = 11
+    ModelBtn.Text = "Model: " .. MODELS[currentModelIdx].label
+    ModelBtn.Parent = MainFrame
+    Instance.new("UICorner", ModelBtn).CornerRadius = UDim.new(0, 4)
+
+    ModelBtn.MouseButton1Click:Connect(function()
+        currentModelIdx = (currentModelIdx % #MODELS) + 1
+        ModelBtn.Text = "Model: " .. MODELS[currentModelIdx].label
+    end)
+
+    -- Output ScrollingFrame
     local OutputScroll = Instance.new("ScrollingFrame")
-    OutputScroll.Size = UDim2.new(1, -20, 0, 160)
-    OutputScroll.Position = UDim2.new(0, 10, 0, 80)
+    OutputScroll.Size = UDim2.new(1, -20, 0, 155)
+    OutputScroll.Position = UDim2.new(0, 10, 0, 112)
     OutputScroll.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
     OutputScroll.BorderSizePixel = 0
     OutputScroll.ScrollBarThickness = 4
     OutputScroll.ScrollingDirection = Enum.ScrollingDirection.Y
-    -- KHÔNG dùng AutomaticCanvasSize — tự cập nhật CanvasSize theo nội dung
     OutputScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
     OutputScroll.Parent = MainFrame
     Instance.new("UICorner", OutputScroll).CornerRadius = UDim.new(0, 4)
 
     local OutputPadding = Instance.new("UIPadding")
-    OutputPadding.PaddingLeft   = UDim.new(0, 6)
-    OutputPadding.PaddingRight  = UDim.new(0, 6)
-    OutputPadding.PaddingTop    = UDim.new(0, 6)
-    OutputPadding.PaddingBottom = UDim.new(0, 6)
+    OutputPadding.PaddingLeft = UDim.new(0, 6); OutputPadding.PaddingRight  = UDim.new(0, 6)
+    OutputPadding.PaddingTop  = UDim.new(0, 6); OutputPadding.PaddingBottom = UDim.new(0, 6)
     OutputPadding.Parent = OutputScroll
 
     local OutputLabel = Instance.new("TextLabel")
-    -- Size chiều Y = 0 nhưng AutomaticSize.Y sẽ đẩy lên, ta dùng AbsoluteSize để set CanvasSize
-    OutputLabel.Size = UDim2.new(1, -12, 0, 0)  -- trừ padding trái/phải
+    OutputLabel.Size = UDim2.new(1, -12, 0, 0)
     OutputLabel.AutomaticSize = Enum.AutomaticSize.Y
     OutputLabel.BackgroundTransparency = 1
     OutputLabel.TextColor3 = Color3.fromRGB(150, 255, 150)
@@ -197,168 +212,234 @@ return function(Window, Utils, WebhookModule)
     OutputLabel.TextXAlignment = Enum.TextXAlignment.Left
     OutputLabel.TextYAlignment = Enum.TextYAlignment.Top
     OutputLabel.TextWrapped = true
-    OutputLabel.Text = "> Hệ thống AI sẵn sàng..."
+    OutputLabel.Text = "> He thong AI san sang..."
     OutputLabel.Parent = OutputScroll
 
-    -- Khi label thay đổi kích thước → cập nhật CanvasSize để ScrollingFrame cuộn được
+    -- FIX: auto-scroll output xuống cuối
+    local function ScrollOutputToBottom()
+        task.wait()
+        OutputScroll.CanvasPosition = Vector2.new(0, math.max(0, OutputLabel.AbsoluteSize.Y - OutputScroll.AbsoluteSize.Y + 12))
+    end
+
     OutputLabel:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
         OutputScroll.CanvasSize = UDim2.new(0, 0, 0, OutputLabel.AbsoluteSize.Y + 12)
     end)
 
-    -- Prompt Input (đẩy xuống 80px do OutputScroll cao thêm)
+    -- FIX SCROLL INPUT: ScrollingFrame bọc TextBox — text dài không bị clip
+    local PromptScroll = Instance.new("ScrollingFrame")
+    PromptScroll.Size = UDim2.new(1, -20, 0, 95)
+    PromptScroll.Position = UDim2.new(0, 10, 0, 275)
+    PromptScroll.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+    PromptScroll.BorderSizePixel = 0
+    PromptScroll.ScrollBarThickness = 4
+    PromptScroll.ScrollingDirection = Enum.ScrollingDirection.Y
+    PromptScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    PromptScroll.Parent = MainFrame
+    Instance.new("UICorner", PromptScroll).CornerRadius = UDim.new(0, 4)
+
     local PromptInput = Instance.new("TextBox")
-    PromptInput.Size = UDim2.new(1, -20, 0, 100)
-    PromptInput.Position = UDim2.new(0, 10, 0, 250)
-    PromptInput.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+    PromptInput.Size = UDim2.new(1, -12, 0, 0)
+    PromptInput.Position = UDim2.new(0, 6, 0, 6)
+    PromptInput.AutomaticSize = Enum.AutomaticSize.Y
+    PromptInput.BackgroundTransparency = 1
     PromptInput.TextColor3 = Color3.fromRGB(255, 255, 255)
     PromptInput.Font = Enum.Font.Code
     PromptInput.TextSize = 13
-    PromptInput.PlaceholderText = "Nhập lệnh (hỗ trợ dán code nhiều dòng)..."
+    PromptInput.PlaceholderText = "Nhap lenh (ho tro dan code nhieu dong)..."
+    PromptInput.PlaceholderColor3 = Color3.fromRGB(90, 90, 100)
     PromptInput.TextWrapped = true
     PromptInput.ClearTextOnFocus = false
     PromptInput.MultiLine = true
     PromptInput.TextXAlignment = Enum.TextXAlignment.Left
     PromptInput.TextYAlignment = Enum.TextYAlignment.Top
-    PromptInput.Parent = MainFrame
-    Instance.new("UICorner", PromptInput).CornerRadius = UDim.new(0, 4)
+    PromptInput.Parent = PromptScroll
 
-    local PromptPadding = Instance.new("UIPadding")
-    PromptPadding.PaddingLeft   = UDim.new(0, 6)
-    PromptPadding.PaddingRight  = UDim.new(0, 6)
-    PromptPadding.PaddingTop    = UDim.new(0, 6)
-    PromptPadding.PaddingBottom = UDim.new(0, 6)
-    PromptPadding.Parent = PromptInput
+    PromptInput:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+        local h = PromptInput.AbsoluteSize.Y + 12
+        PromptScroll.CanvasSize = UDim2.new(0, 0, 0, h)
+        if PromptInput:IsFocused() then
+            PromptScroll.CanvasPosition = Vector2.new(0, math.max(0, h - PromptScroll.AbsoluteSize.Y))
+        end
+    end)
+
+    -- NEW: Prompt history button (↑)
+    local HistoryBtn = Instance.new("TextButton")
+    HistoryBtn.Size = UDim2.new(0, 32, 0, 26)
+    HistoryBtn.Position = UDim2.new(1, -42, 0, 275)
+    HistoryBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+    HistoryBtn.TextColor3 = Color3.fromRGB(200, 200, 255)
+    HistoryBtn.Font = Enum.Font.GothamBold
+    HistoryBtn.TextSize = 14
+    HistoryBtn.Text = "↑"
+    HistoryBtn.Parent = MainFrame
+    Instance.new("UICorner", HistoryBtn).CornerRadius = UDim.new(0, 4)
+
+    HistoryBtn.MouseButton1Click:Connect(function()
+        if #promptHistory == 0 then return end
+        historyIndex = math.max(1, historyIndex - 1 == 0 and #promptHistory or historyIndex - 1)
+        PromptInput.Text = promptHistory[historyIndex] or ""
+    end)
 
     -- Webhook Toggle
-    local useWebhook = false
     local WebhookToggleBtn = Instance.new("TextButton")
-    WebhookToggleBtn.Size = UDim2.new(1, -20, 0, 30)
-    WebhookToggleBtn.Position = UDim2.new(0, 10, 0, 280)
+    WebhookToggleBtn.Size = UDim2.new(1, -20, 0, 28)
+    WebhookToggleBtn.Position = UDim2.new(0, 10, 0, 378)
     WebhookToggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
     WebhookToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     WebhookToggleBtn.Font = Enum.Font.GothamBold
-    WebhookToggleBtn.TextSize = 12
-    WebhookToggleBtn.Text = "🔕 Gửi Log qua Webhook: ĐANG TẮT"
+    WebhookToggleBtn.TextSize = 11
+    WebhookToggleBtn.Text = "Webhook Log: TAT"
     WebhookToggleBtn.Parent = MainFrame
     Instance.new("UICorner", WebhookToggleBtn).CornerRadius = UDim.new(0, 4)
 
     WebhookToggleBtn.MouseButton1Click:Connect(function()
-        useWebhook = not useWebhook
-        if useWebhook then
-            WebhookToggleBtn.Text = "🔔 Gửi Log qua Webhook: ĐANG BẬT"
-            WebhookToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
-        else
-            WebhookToggleBtn.Text = "🔕 Gửi Log qua Webhook: ĐANG TẮT"
-            WebhookToggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+        if not WebhookModule or type(WebhookModule.SendNotification) ~= "function" then
+            OutputLabel.Text = OutputLabel.Text .. "\n\n[LOI] WebhookModule khong hop le."
+            ScrollOutputToBottom()
+            return
         end
+        useWebhook = not useWebhook
+        WebhookToggleBtn.Text = useWebhook and "Webhook Log: BAT" or "Webhook Log: TAT"
+        WebhookToggleBtn.BackgroundColor3 = useWebhook and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(40, 40, 45)
     end)
 
-    -- Nút GỬI (lấy code từ AI, không tự chạy)
+    -- NEW: Clear history button
+    local ClearBtn = Instance.new("TextButton")
+    ClearBtn.Size = UDim2.new(1, -20, 0, 28)
+    ClearBtn.Position = UDim2.new(0, 10, 0, 414)
+    ClearBtn.BackgroundColor3 = Color3.fromRGB(80, 30, 30)
+    ClearBtn.TextColor3 = Color3.fromRGB(255, 180, 180)
+    ClearBtn.Font = Enum.Font.GothamBold
+    ClearBtn.TextSize = 11
+    ClearBtn.Text = "🗑 Xoa lich su hoi thoai"
+    ClearBtn.Parent = MainFrame
+    Instance.new("UICorner", ClearBtn).CornerRadius = UDim.new(0, 4)
+
+    ClearBtn.MouseButton1Click:Connect(function()
+        conversationHistory = {}
+        promptHistory = {}
+        historyIndex = 0
+        OutputLabel.Text = "> Lich su da xoa. AI san sang tu dau."
+        ScrollOutputToBottom()
+    end)
+
+    -- Submit Btn
     local SubmitBtn = Instance.new("TextButton")
-    SubmitBtn.Size = UDim2.new(1, -20, 0, 35)
-    SubmitBtn.Position = UDim2.new(0, 10, 0, 320)
+    SubmitBtn.Size = UDim2.new(1, -20, 0, 33)
+    SubmitBtn.Position = UDim2.new(0, 10, 0, 450)
     SubmitBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
     SubmitBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     SubmitBtn.Font = Enum.Font.GothamBold
     SubmitBtn.TextSize = 13
-    SubmitBtn.Text = "🤖 LẤY CODE TỪ AI"
+    SubmitBtn.Text = "LẤY CODE TỪ AI"
     SubmitBtn.Parent = MainFrame
     Instance.new("UICorner", SubmitBtn).CornerRadius = UDim.new(0, 4)
 
-    -- Nút THỰC THI (chạy code sau khi đã review)
+    -- Execute Btn
     local ExecuteBtn = Instance.new("TextButton")
-    ExecuteBtn.Size = UDim2.new(1, -20, 0, 35)
-    ExecuteBtn.Position = UDim2.new(0, 10, 0, 365)
-    ExecuteBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 65)  -- mờ đi khi chưa có code
+    ExecuteBtn.Size = UDim2.new(1, -20, 0, 33)
+    ExecuteBtn.Position = UDim2.new(0, 10, 0, 450)  -- sẽ dời khi có code
+    ExecuteBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 65)
     ExecuteBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
     ExecuteBtn.Font = Enum.Font.GothamBold
     ExecuteBtn.TextSize = 13
-    ExecuteBtn.Text = "▶ THỰC THI CODE (Sau khi đã đọc)"
+    ExecuteBtn.Text = "THUC THI CODE (Sau khi da doc)"
+    ExecuteBtn.Visible = false
     ExecuteBtn.Parent = MainFrame
     Instance.new("UICorner", ExecuteBtn).CornerRadius = UDim.new(0, 4)
 
     -- ==========================================
-    -- STATE
+    -- HÀM RESET UI
     -- ==========================================
 
-    local isProcessing  = false   -- debounce flag
-    local pendingCode   = nil     -- code đang chờ review
-
-    -- ==========================================
-    -- HÀM RESET UI VỀ TRẠNG THÁI BAN ĐẦU
-    -- ==========================================
-
+    -- FIX: ResetSubmitButton phải reset isProcessing
     local function ResetSubmitButton()
-        SubmitBtn.Text = "🤖 LẤY CODE TỪ AI"
-        SubmitBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
         isProcessing = false
+        SubmitBtn.Text = "LAY CODE TU AI"
+        SubmitBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
     end
 
     local function SetExecuteButtonReady(code)
         pendingCode = code
+        ExecuteBtn.Visible = true
         ExecuteBtn.BackgroundColor3 = Color3.fromRGB(180, 80, 0)
         ExecuteBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        ExecuteBtn.Text = "▶ THỰC THI CODE (Sau khi đã đọc)"
+        ExecuteBtn.Text = "THUC THI CODE (Sau khi da doc)"
     end
 
     local function ResetExecuteButton()
         pendingCode = nil
-        ExecuteBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 65)
-        ExecuteBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
-        ExecuteBtn.Text = "▶ THỰC THI CODE (Sau khi đã đọc)"
+        ExecuteBtn.Visible = false
     end
 
     -- ==========================================
-    -- HÀM GỬI WEBHOOK LOG
+    -- WEBHOOK LOG
     -- ==========================================
 
     local function TrySendWebhookLog(prompt, logMsg)
         if not (useWebhook and WebhookModule and type(WebhookModule.SendNotification) == "function") then return end
-        local finalLog = RemoveAccents("[AI Assistant Log]\nUser Prompt: " .. prompt .. "\n" .. logMsg)
+        local finalLog = RemoveAccents("[AI Log]\nPrompt: " .. prompt .. "\n" .. logMsg)
         pcall(function() WebhookModule.SendNotification(finalLog) end)
     end
 
     -- ==========================================
-    -- HÀM GỌI GEMINI API
+    -- GEMINI API — hỗ trợ conversation history
     -- ==========================================
 
     local function RequestAICode(userPrompt)
         local savedKey = GetSavedAPIKey()
-        if not savedKey then
-            return false, "Chưa có API Key."
-        end
+        if not savedKey then return false, "Chua co API Key." end
 
         local reqFunc = request or http_request or (syn and syn.request)
-        if not reqFunc then
-            return false, "Executor không hỗ trợ HTTP Request!"
+        if not reqFunc then return false, "Executor khong ho tro HTTP Request!" end
+
+        local modelId = MODELS[currentModelIdx].id
+        local API_URL = "https://generativelanguage.googleapis.com/v1beta/models/" .. modelId .. ":generateContent?key=" .. savedKey
+
+        -- Thêm prompt mới vào history
+        table.insert(conversationHistory, {
+            role = "user",
+            parts = { { text = userPrompt } }
+        })
+
+        -- System instruction inject vào turn đầu tiên
+        local systemInstruction = "You are a Roblox Lua exploit developer. Only respond with raw, executable Lua code. Do not include markdown blocks, do not include ```lua tags, no explanations."
+        local contents = {}
+        for i, turn in ipairs(conversationHistory) do
+            if i == 1 then
+                table.insert(contents, {
+                    role = turn.role,
+                    parts = { { text = systemInstruction .. "\n\n" .. turn.parts[1].text } }
+                })
+            else
+                table.insert(contents, turn)
+            end
         end
 
-        local API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" .. savedKey
-        local systemInstruction = "You are a Roblox Lua exploit developer. Only respond with raw, executable Lua code. Do not include markdown blocks, do not include ```lua tags, no explanations."
-        local payload = {
-            contents = { { parts = { { text = systemInstruction .. "\nUser Request: " .. userPrompt } } } }
-        }
-
+        local payload = { contents = contents }
         local success, response = pcall(function()
             return reqFunc({
-                Url = API_URL,
-                Method = "POST",
+                Url = API_URL, Method = "POST",
                 Headers = { ["Content-Type"] = "application/json" },
                 Body = HttpService:JSONEncode(payload)
             })
         end)
 
         if not success then
-            return false, "Lỗi kết nối API."
+            -- Rollback history nếu request fail
+            table.remove(conversationHistory)
+            return false, "Loi ket noi API."
         end
 
         if response.StatusCode ~= 200 then
+            table.remove(conversationHistory)
             return false, "HTTP " .. tostring(response.StatusCode)
         end
 
         local ok, data = pcall(function() return HttpService:JSONDecode(response.Body) end)
         if not ok then
-            return false, "Lỗi parse JSON từ API."
+            table.remove(conversationHistory)
+            return false, "Loi parse JSON."
         end
 
         local part = data.candidates
@@ -368,62 +449,69 @@ return function(Window, Utils, WebhookModule)
             and data.candidates[1].content.parts[1]
 
         if not part then
-            return false, "API trả về response rỗng."
+            table.remove(conversationHistory)
+            return false, "API tra ve response rong."
         end
+
+        -- Lưu response của model vào history
+        table.insert(conversationHistory, {
+            role = "model",
+            parts = { { text = part.text } }
+        })
 
         return true, part.text
     end
 
     -- ==========================================
-    -- HÀM THỰC THI CODE (tách riêng để dùng lại)
+    -- EXECUTE CODE
     -- ==========================================
 
     local function ExecuteCode(code, prompt)
         local logMsg = ""
-
         local func, compileError = loadstring(code)
         if not func then
             logMsg = "Compile Error:\n" .. tostring(compileError)
-            OutputLabel.Text = OutputLabel.Text .. "\n\n❌ LỖI CÚ PHÁP:\n" .. tostring(compileError)
+            OutputLabel.Text = OutputLabel.Text .. "\n\nLOI CU PHAP:\n" .. tostring(compileError)
+            ScrollOutputToBottom()
             TrySendWebhookLog(prompt or "", logMsg)
             return
         end
 
         local runSuccess, runtimeError = pcall(func)
         if runSuccess then
-            logMsg = "Code executed successfully:\n" .. code
-            OutputLabel.Text = OutputLabel.Text .. "\n\n✅ THỰC THI THÀNH CÔNG"
+            logMsg = "OK:\n" .. code
+            OutputLabel.Text = OutputLabel.Text .. "\n\nTHUC THI THANH CONG"
         else
             logMsg = "Runtime Error:\n" .. tostring(runtimeError)
-            OutputLabel.Text = OutputLabel.Text .. "\n\n❌ LỖI RUNTIME:\n" .. tostring(runtimeError)
+            OutputLabel.Text = OutputLabel.Text .. "\n\nLOI RUNTIME:\n" .. tostring(runtimeError)
         end
 
+        ScrollOutputToBottom()
         TrySendWebhookLog(prompt or "", logMsg)
         ResetExecuteButton()
     end
 
     -- ==========================================
-    -- SỰ KIỆN: NÚT LẤY CODE
+    -- SUBMIT BUTTON
     -- ==========================================
 
     SubmitBtn.MouseButton1Click:Connect(function()
-        -- Debounce: tránh spam click
         if isProcessing then return end
-
         local prompt = PromptInput.Text
         if prompt == "" then return end
 
         isProcessing = true
         ResetExecuteButton()
-
-        SubmitBtn.Text = "⏳ ĐANG XỬ LÝ..."
+        SubmitBtn.Text = "DANG XU LY..."
         SubmitBtn.BackgroundColor3 = Color3.fromRGB(150, 100, 0)
-        OutputLabel.Text = "> Đang chờ AI..."
+        OutputLabel.Text = "> Dang cho AI..."
+        ScrollOutputToBottom()
 
-        -- Timeout fallback: nếu sau 15s vẫn chưa xong thì reset
-        local timeoutHandle = task.delay(API_TIMEOUT, function()
+        -- Timeout: isProcessing=false bên trong ResetSubmitButton → an toàn
+        task.delay(API_TIMEOUT, function()
             if isProcessing then
-                OutputLabel.Text = "❌ Timeout: API không phản hồi sau " .. API_TIMEOUT .. "s"
+                OutputLabel.Text = "Timeout: API khong phan hoi sau " .. API_TIMEOUT .. "s"
+                ScrollOutputToBottom()
                 ResetSubmitButton()
             end
         end)
@@ -431,33 +519,33 @@ return function(Window, Utils, WebhookModule)
         task.spawn(function()
             local success, rawCode = RequestAICode(prompt)
 
-            -- Hủy hiệu lực timeout nếu đã xong trước 15s
-            -- (task.delay không có cancel API, nhưng isProcessing=false sẽ ngăn nó reset lại)
-
             if success then
                 rawCode = CleanCodeResponse(rawCode)
-
-                OutputLabel.Text = "-- ⚠️ HÃY ĐỌC CODE TRƯỚC KHI CHẠY --\n" .. rawCode
+                OutputLabel.Text = "-- DOC CODE TRUOC KHI CHAY --\n" .. rawCode
                 CopyToClipboard(rawCode)
                 PromptInput.Text = ""
+                ScrollOutputToBottom()
+
+                -- Lưu vào prompt history
+                table.insert(promptHistory, prompt)
+                historyIndex = #promptHistory + 1
 
                 SetExecuteButtonReady(rawCode)
-
-                SubmitBtn.Text = "✅ ĐÃ LẤY CODE"
+                SubmitBtn.Text = "DA LAY CODE"
                 SubmitBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
             else
                 TrySendWebhookLog(prompt, "API Error: " .. tostring(rawCode))
-                OutputLabel.Text = "❌ LỖI:\n" .. tostring(rawCode)
-                SubmitBtn.Text = "❌ LỖI"
+                OutputLabel.Text = "LOI:\n" .. tostring(rawCode)
+                ScrollOutputToBottom()
+                SubmitBtn.Text = "LOI"
                 SubmitBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
             end
 
             isProcessing = false
 
             task.wait(2)
-            -- Chỉ reset text nút nếu không có lỗi (giữ màu xanh lá để user biết có code sẵn)
             if success then
-                SubmitBtn.Text = "🤖 LẤY CODE TỪ AI"
+                SubmitBtn.Text = "LAY CODE TU AI"
                 SubmitBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
             else
                 ResetSubmitButton()
@@ -466,23 +554,19 @@ return function(Window, Utils, WebhookModule)
     end)
 
     -- ==========================================
-    -- SỰ KIỆN: NÚT THỰC THI
+    -- EXECUTE BUTTON
     -- ==========================================
 
     ExecuteBtn.MouseButton1Click:Connect(function()
         if not pendingCode then return end
-
         local codeToRun = pendingCode
-        local lastPrompt = PromptInput.Text  -- có thể đã xóa, không sao
-
-        ExecuteBtn.Text = "⏳ ĐANG CHẠY..."
-        task.spawn(function()
-            ExecuteCode(codeToRun, lastPrompt)
-        end)
+        local lastPrompt = PromptInput.Text
+        ExecuteBtn.Text = "DANG CHAY..."
+        task.spawn(function() ExecuteCode(codeToRun, lastPrompt) end)
     end)
 
     -- ==========================================
-    -- PHÍM TẮT ẨN/HIỆN
+    -- PHÍM TẮT
     -- ==========================================
 
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
@@ -491,5 +575,5 @@ return function(Window, Utils, WebhookModule)
         end
     end)
 
-    print("✅ AI Assistant Module (V4.4) Loaded!")
+    print("AI Assistant Module (V4.5) Loaded!")
 end

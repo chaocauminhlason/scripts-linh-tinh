@@ -514,7 +514,7 @@ return function(Window, Utils)
                 
                 if charData then
                     SendNotify("🔄 Auto Heal", "Pet đã kiệt sức. Tiến hành Teleport hồi máu...")
-                    local safeReturnPos = AppState.savedFarmPosition or charData.RootPart.CFrame
+                    local safeReturnPos = charData.RootPart.CFrame
                     local bestRecoverPos = LocateNearestHealingSpring(charData.Position)
 
                     if bestRecoverPos then
