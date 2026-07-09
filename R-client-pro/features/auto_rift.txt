@@ -158,6 +158,19 @@ return function(Window, Utils)
         return obj:GetPivot().Position 
     end
 
+    local function IsInOpenWorld()
+        local success, result = pcall(function()
+            local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+            local mainGui = playerGui and playerGui:FindFirstChild("MainGui")
+            local screenGui = mainGui and mainGui:FindFirstChild("ScreenGui")
+            local mainRightView = screenGui and screenGui:FindFirstChild("MainRightView")
+            local fmReturn = mainRightView and mainRightView:FindFirstChild("FmReturn")
+            local btReturn = fmReturn and fmReturn:FindFirstChild("BtReturn")
+            return btReturn and btReturn.Visible or false
+        end)
+        return success and result or false
+    end
+
     -- Hàm dọn dẹp danh sách Rift đã đi qua bị hết hạn
     local function CleanExpiredRifts()
         local currentTime = os.time()
@@ -241,7 +254,7 @@ return function(Window, Utils)
             local distFromPortal = (checkHrp.Position - bestPortal.pos).Magnitude
             print("[TEST-LOG] Khoảng cách tới cổng cũ sau khi gửi lệnh: " .. math.floor(distFromPortal) .. " studs")
             
-            if distFromPortal < 150 and game:GetService("Players").LocalPlayer.PlayerGui.MainGui.ScreenGui.MainRightView.FmReturn.BtReturn.Visible then
+            if distFromPortal < 150 and IsInOpenWorld() then
                 print("[TEST-LOG] ⚠️ Vẫn đang ở Open World! Thử gửi Remote lần 2...")
                 task.spawn(SendEnterRemote) 
                 task.wait(2.0)

@@ -59,9 +59,9 @@ return function(Window, Utils)
     -- ==========================================
     -- GIAO DIỆN UI
     -- ==========================================
-    local ServerTab = Window:CreateTab("Quản Lý Server", 4483362458)
+    local ServerTab = Window:CreateTab("Server Manager", 4483362458)
 
-    ServerTab:CreateSection("--- THÔNG TIN SESSION ---")
+    ServerTab:CreateSection("THÔNG TIN SESSION")
     local SessionLabel = ServerTab:CreateLabel("Thời gian treo máy: 00:00:00")
 
     task.spawn(function()
@@ -74,7 +74,7 @@ return function(Window, Utils)
         end
     end)
 
-    ServerTab:CreateSection("--- TÌM KIẾM THỜI TIẾT VIP ---")
+    ServerTab:CreateSection("TÌM KIẾM THỜI TIẾT VIP")
 
     local WeatherMap = {
         ["Ban Ngày (Day)"] = 10001, ["Ban Đêm (Night)"] = 10002, ["Nhiều Mây (Cloudy)"] = 20002,
@@ -168,26 +168,26 @@ return function(Window, Utils)
     -- ==========================================
     -- ĐIỀU KHIỂN THỦ CÔNG & ANTI-KICK
     -- ==========================================
-    ServerTab:CreateSection("--- ĐIỀU KHIỂN THỦ CÔNG ---")
+    ServerTab:CreateSection("ĐIỀU KHIỂN THỦ CÔNG")
 
     ServerTab:CreateButton({ 
-        Name = "👤 JOIN SERVER ÍT NGƯỜI NHẤT", 
+        Name = "👤 Join Server Least", 
         Callback = function() ManualHop("least") end 
     })
     
     ServerTab:CreateButton({ 
-        Name = "🔀 JOIN SERVER KHÁC (RANDOM)", 
+        Name = "🔀 Join Random Server", 
         Callback = function() ManualHop("random") end 
     })
     
     ServerTab:CreateButton({ 
-        Name = "🔄 Rejoin Đúng Server Này", 
+        Name = "🔄 Join Same Server", 
         Callback = function() TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer) end 
     })
 
-    ServerTab:CreateSection("--- ANTI-KICK ---")
+    ServerTab:CreateSection("ANTI-KICK")
     ServerTab:CreateToggle({
-        Name = "Auto Rejoin khi bị Kick",
+        Name = "Auto Rejoin If Kick",
         CurrentValue = autoRejoinEnabled, -- Đồng bộ từ Cache cứu vớt khi chuyển server
         Callback = function(Value) 
             autoRejoinEnabled = Value 
