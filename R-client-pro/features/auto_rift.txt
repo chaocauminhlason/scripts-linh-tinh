@@ -330,8 +330,13 @@ return function(Window, Utils)
             pcall(function() Utils.SmartDismount() end)
             dungeonStuckTimer = 0
             
-            -- Xử lý ID cho cả BasePart và Model
-            local id = tonumber(bestTarget.Parent.Name:match("Monster_(%d+)")) or tonumber(bestTarget.Name:match("Monster_(%d+)"))
+            -- Xử lý ID an toàn cho cả BasePart và Model (chống race condition khi quái biến mất)
+            local parent = bestTarget.Parent
+            local parentName = parent and parent.Name
+            local targetName = bestTarget.Name
+            local id = (parentName and tonumber(parentName:match("Monster_(%d+)"))) 
+                or (targetName and tonumber(targetName:match("Monster_(%d+)")))
+            
             if id then 
                 task.spawn(function() pcall(function() Utils.AttackMonster(id) end) end) 
             end 

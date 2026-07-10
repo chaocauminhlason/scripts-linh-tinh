@@ -42,7 +42,7 @@ end
 function WebhookModule.InitTab(Window, Rayfield)
     local WebhookTab = Window:CreateTab("Webhook", 4483362458)
 
-    WebhookTab:CreateSection("--- THIẾT LẬP DISCORD WEBHOOK ---")
+    WebhookTab:CreateSection(" THIẾT LẬP DISCORD WEBHOOK ")
 
     WebhookTab:CreateToggle({
         Name = "Bật/Tắt Thông Báo Discord",

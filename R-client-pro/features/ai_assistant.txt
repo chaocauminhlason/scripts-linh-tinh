@@ -570,10 +570,9 @@ return function(Window, Utils, WebhookModule)
     -- ==========================================
 
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if not gameProcessed and input.KeyCode == Enum.KeyCode.LeftAlt then
-            MainFrame.Visible = not MainFrame.Visible
-        end
-    end)
-
+    if not gameProcessed and input.KeyCode == Enum.KeyCode.Z and (UserInputService:IsKeyDown(Enum.KeyCode.LeftAlt) or UserInputService:IsKeyDown(Enum.KeyCode.RightAlt)) then
+        MainFrame.Visible = not MainFrame.Visible
+    end
+end)
     print("AI Assistant Module (V4.5) Loaded!")
 end
