@@ -5,7 +5,7 @@ local Localization = {}
 
 local Translations = {
     -- Auto Hatch keys
-    ["auto_hatch_tab"] = { en = "Auto Hatch", vi = "Ấp Trứng" },
+    ["autohatch"] = { en = "Auto Hatch", vi = "Ấp Trứng" },
     ["unlocked_slots"] = { en = "Unlocked Slots", vi = "Số Lò Ấp Mở Khóa" },
     ["unlocked_slots_info"] = { en = "Set the number of incubator slots you have unlocked in-game.", vi = "Chọn số lượng lò ấp bạn đã mở khóa trong game để phân bổ." },
     ["select_eggs"] = { en = "Select Eggs", vi = "Chọn Loại Trứng" },
@@ -26,7 +26,7 @@ local Translations = {
     ["refresh_warning_name"] = { en = "⚠️ Click Refresh to load list!", vi = "⚠️ Bấm Refresh để tải danh sách!" },
 
     -- Optimization keys
-    ["optimization_tab"] = { en = "Optimization", vi = "Tối Ưu Hóa" },
+    ["optimization"] = { en = "Optimization", vi = "Tối Ưu Hóa" },
     ["anti_afk"] = { en = "Anti AFK", vi = "Chống AFK" },
     ["anti_afk_info"] = { en = "Prevents you from being kicked for idling.", vi = "Ngăn bạn bị văng game do treo máy lâu." },
     ["potato_mode"] = { en = "Potato Mode", vi = "Đồ Họa Siêu Thấp (Potato)" },
@@ -46,7 +46,7 @@ local Translations = {
     ["streamer_mode_info"] = { en = "Spoofs your name tags and character display name to match the fake name above.", vi = "Thay đổi nhãn tên nhân vật thành tên giả đã nhập." },
 
     -- Shops & GUIs keys
-    ["gui_tab"] = { en = "Shops & GUIs", vi = "Cửa Hàng & Giao Diện" },
+    ["gui"] = { en = "Shops & GUIs", vi = "Cửa Hàng & Giao Diện" },
     ["gui_open_title"] = { en = "Open UI", vi = "Mở Giao Diện" },
     ["gui_open_success"] = { en = "Opened view: ", vi = "Đã thực thi mở: " },
     ["gui_open_fail"] = { en = "Failed to open view: ", vi = "Không thể mở: " },
@@ -80,7 +80,7 @@ local Translations = {
     ["btn_pet_transform"] = { en = "🔄 Pet Transform", vi = "🔄 Chuyển Hóa Pet" },
 
     -- Server Manager keys
-    ["server_tab"] = { en = "Server Manager", vi = "Quản Lý Server" },
+    ["server"] = { en = "Server Manager", vi = "Quản Lý Server" },
     ["sec_session_info"] = { en = "SESSION INFO", vi = "THÔNG TIN PHIÊN LÀM VIỆC" },
     ["active_time_label"] = { en = "Active Time: ", vi = "Thời gian treo máy: " },
     ["sec_weather_hunt"] = { en = "VIP WEATHER HUNT", vi = "SĂN THỜI TIẾT VIP" },
@@ -101,7 +101,7 @@ local Translations = {
     ["hop_random_msg"] = { en = "Teleporting to a random server...", vi = "Đang nhảy qua server ngẫu nhiên..." },
 
     -- Player Tracker keys
-    ["tracker_tab"] = { en = "Player Tracker", vi = "Theo Dõi" },
+    ["tracker"] = { en = "Player Tracker", vi = "Theo Dõi" },
     ["tracker_idle"] = { en = "Status: Idle", vi = "Trạng thái: Đang nghỉ" },
     ["tracker_selected"] = { en = "Status: Selected ", vi = "Trạng thái: Đã chọn " },
     ["tracker_stopped"] = { en = "Status: Stopped", vi = "Trạng thái: Đã dừng" },
@@ -119,7 +119,7 @@ local Translations = {
     ["tracker_not_found"] = { en = "Target player not found or offline!", vi = "Không tìm thấy người chơi mục tiêu!" },
 
     -- Boss Hunt keys
-    ["boss_tab"] = { en = "Boss Hunt", vi = "Săn Boss" },
+    ["boss"] = { en = "Boss Hunt", vi = "Săn Boss" },
     ["sec_sp_boss"] = { en = "🌟 AUTO SPECIAL BOSS", vi = "🌟 AUTO SPECIAL BOSS" },
     ["sp_boss_idle"] = { en = "Status: Waiting for signal...", vi = "Trạng thái: Đang chờ tín hiệu..." },
     ["auto_sp_boss"] = { en = "Auto Special Boss", vi = "Auto Săn Special Boss" },
@@ -147,7 +147,7 @@ local Translations = {
     ["status_prefix"] = { en = "Status: ", vi = "Trạng thái: " },
 
     -- Auto Rift keys
-    ["rift_tab"] = { en = "Auto Rift", vi = "Auto Rift" },
+    ["rift"] = { en = "Auto Rift", vi = "Auto Rift" },
     ["rift_status_off"] = { en = "STATUS: AUTO RIFT OFF", vi = "TRẠNG THÁI: AUTO RIFT ĐANG TẮT" },
     ["rifts_cleared_prefix"] = { en = "Rifts Cleared: ", vi = "Rift đã dọn: " },
     ["rift_cycle_not_started"] = { en = "🔄 Loop: Not started", vi = "🔄 Vòng lặp: Chưa bắt đầu" },
@@ -182,7 +182,7 @@ local Translations = {
     ["rift_rest_time_info"] = { en = "Set how long to wait before starting the next scan cycle.", vi = "Thời gian chờ trước khi bắt đầu lượt quét tiếp theo." },
 
     -- Auto Dungeon keys
-    ["dungeon_tab"] = { en = "Auto Dungeon", vi = "Hầm Ngục" },
+    ["dungeon"] = { en = "Auto Dungeon", vi = "Hầm Ngục" },
     ["dg_status_off"] = { en = "AUTO DUNGEON IS OFF", vi = "AUTO DUNGEON ĐANG TẮT" },
     ["dg_status_on"] = { en = "AUTO DUNGEON IS ON", vi = "AUTO DUNGEON ĐANG BẬT" },
     ["sec_in_dungeon"] = { en = "INSIDE DUNGEON", vi = "TRONG HẦM NGỤC" },
@@ -223,7 +223,7 @@ local Translations = {
     ["dg_label_lobby_off"] = { en = "Lobby: Auto Join/Create is OFF", vi = "Sảnh: Auto Join/Create đang tắt" },
 
     -- Auto Farm keys
-    ["farm_tab"] = { en = "Auto Farm", vi = "Auto farm" },
+    ["farm"] = { en = "Auto Farm", vi = "Auto farm" },
     ["sec_farm_controls"] = { en = "SYSTEM CONTROLS", vi = "ĐIỀU KHIỂN TỔNG" },
     ["btn_stop_all"] = { en = "🛑 STOP ALL", vi = "🛑 DỪNG TẤT CẢ" },
     ["btn_stop_all_info"] = { en = "Pause all background auto-farming and auto-combat loops.", vi = "Dừng khẩn cấp toàn bộ các luồng auto và chiến đấu." },
@@ -285,7 +285,7 @@ local Translations = {
     ["ai_prompt_placeholder"] = { en = "Enter command (supports multi-line code)...", vi = "Nhập lệnh (hỗ trợ dán code nhiều dòng)..." },
     ["ai_system_ready"] = { en = "> AI System Ready...", vi = "> Hệ thống AI sẵn sàng..." },
     ["toggle_on"] = { en = "ON", vi = "BẬT" },
-    ["toggle_off"] = { en = "OFF", vi = "T T" },
+    ["toggle_off"] = { en = "OFF", vi = "TẮT" },
     ["ai_webhook_log"] = { en = "Webhook Log: ", vi = "Nhật Ký Webhook: " },
     ["ai_clear_history"] = { en = "Clear conversation history", vi = "Xóa lịch sử hội thoại" },
     ["ai_history_cleared"] = { en = "> History cleared. AI reset.", vi = "> Lịch sử đã xóa. AI sẵn sàng từ đầu." },

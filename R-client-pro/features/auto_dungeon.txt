@@ -104,7 +104,7 @@ return function(Window, Utils, WebhookModule)
     -- ==========================================
     -- GIAO DIỆN UI (RAYFIELD TABS)
     -- ==========================================
-    local DungeonTab = Window:CreateTab(Utils.t("dungeon_tab"), "shield")
+    local DungeonTab = Window:CreateTab(Utils.t("dungeon"), "shield")
     local DungeonStatus = DungeonTab:CreateLabel(Utils.t("dg_status_off"))
 
     DungeonTab:CreateToggle({

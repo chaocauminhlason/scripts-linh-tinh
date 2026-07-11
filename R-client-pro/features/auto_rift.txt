@@ -71,7 +71,7 @@ return function(Window, Utils)
     -- ==========================================
     -- GIAO DIỆN UI
     -- ==========================================
-    local RiftTab = Window:CreateTab(Utils.t("rift_tab"), "door-open")
+    local RiftTab = Window:CreateTab(Utils.t("rift"), "door-open")
     local RiftStatus = RiftTab:CreateLabel(Utils.t("rift_status_off"))
     local ClearedLabel = RiftTab:CreateLabel(Utils.t("rifts_cleared_prefix") .. "0")
     local CycleStatus = RiftTab:CreateLabel(Utils.t("rift_cycle_not_started"))

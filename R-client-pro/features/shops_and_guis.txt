@@ -3,7 +3,7 @@
 -- ====================================================================
 return function(Window, Utils)
     -- Tạo một Tab mới trên giao diện Rayfield
-    local GuiTab = Window:CreateTab(Utils.t("gui_tab"), "shopping-cart") 
+    local GuiTab = Window:CreateTab(Utils.t("gui"), "shopping-cart") 
 
     -- ==========================================
     -- HÀM XỬ LÝ CỐT LÕI (BYPASS UI)

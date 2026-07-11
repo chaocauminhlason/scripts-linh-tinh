@@ -24,7 +24,7 @@ return function(Window, Utils)
         end)
     end
 
-    local MainTab = Window:CreateTab(Utils.t("tracker_tab"), "eye")
+    local MainTab = Window:CreateTab(Utils.t("tracker"), "eye")
     local StatusLabel = MainTab:CreateLabel(Utils.t("tracker_idle"))
 
     local function GetPlayerNames()

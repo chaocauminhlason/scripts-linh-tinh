@@ -21,7 +21,7 @@ return function(Window, Utils)
     end)
 
     -- TẠO GIAO DIỆN
-    local OptimizationTab = Window:CreateTab(Utils.t("optimization_tab"), "zap")
+    local OptimizationTab = Window:CreateTab(Utils.t("optimization"), "zap")
 
     OptimizationTab:CreateToggle({ 
         Name = Utils.t("anti_afk"), 

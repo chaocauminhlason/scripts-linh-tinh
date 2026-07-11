@@ -281,7 +281,7 @@ return function(Window, Utils)
     -- ==========================================
     -- 5. XÂY DỰNG GIAO DIỆN (UI BINDING)
     -- ==========================================
-    local CamTab = Window:CreateTab(Utils.t("farm_tab"), "dumbbell")
+    local CamTab = Window:CreateTab(Utils.t("farm"), "dumbbell")
     local MonsterDropdown = nil
 
     CamTab:CreateSection(" " .. Utils.t("sec_farm_controls") .. " ")

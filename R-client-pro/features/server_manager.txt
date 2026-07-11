@@ -60,7 +60,7 @@ return function(Window, Utils)
     -- ==========================================
     -- GIAO DIỆN UI
     -- ==========================================
-    local ServerTab = Window:CreateTab(Utils.t("server_tab"), "server")
+    local ServerTab = Window:CreateTab(Utils.t("server"), "server")
 
     ServerTab:CreateSection(" " .. Utils.t("sec_session_info") .. " ")
     local SessionLabel = ServerTab:CreateLabel(Utils.t("active_time_label") .. "00:00:00")
