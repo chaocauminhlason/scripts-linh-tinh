@@ -4,6 +4,31 @@
 -- ====================================================================
 local HttpService = game:GetService("HttpService")
 
+-- [!] CẤU HÌNH SILENT LOAD & STEALTH MODE (HƯỚNG 2)
+local devMode = false -- Bật true nếu muốn xem log gỡ lỗi ra F9 Console
+
+local function logInfo(message)
+    if devMode then
+        print("[System] " .. tostring(message))
+    end
+end
+
+local function logError(message, details)
+    if devMode then
+        warn("⚠️ [Error] " .. tostring(message) .. "\n" .. tostring(details or ""))
+    else
+        pcall(function()
+            if Rayfield and Rayfield.Notify then
+                Rayfield:Notify({
+                    Title = "Lỗi Hệ Thống",
+                    Content = tostring(message),
+                    Duration = 5
+                })
+            end
+        end)
+    end
+end
+
 -- [!] BIẾN QUẢN LÝ NHÁNH
 local branch = "main"
 
@@ -20,10 +45,10 @@ if successApi then
     -- Nếu lấy thành công, đổi từ "main" sang "a1b2c3d..."
     if successDecode and decoded.sha then
         targetRef = decoded.sha 
-        print("[System] Bypassed Fastly Cache. Current Commit SHA: " .. string.sub(targetRef, 1, 7))
+        logInfo("Bypassed Fastly Cache. Current Commit SHA: " .. string.sub(targetRef, 1, 7))
     end
 else
-    warn("[System] Không lấy được Commit SHA, chuyển về dùng nhánh mặc định.")
+    logInfo("Không lấy được Commit SHA, chuyển về dùng nhánh mặc định.")
 end
 
 -- ==========================================
@@ -57,10 +82,10 @@ local function SafeLoad(filePath)
         if func then 
             return func() 
         else 
-            warn("❌ Lỗi Cú Pháp tại: " .. filePath .. "\n" .. tostring(err)) 
+            logError("Lỗi Cú Pháp tại: " .. filePath, err) 
         end
     else
-        warn("❌ Không kết nối được hoặc sai đường dẫn: " .. fullUrl)
+        logError("Không kết nối được hoặc sai đường dẫn: " .. filePath)
     end
     return nil
 end
