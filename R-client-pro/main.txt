@@ -7,27 +7,32 @@ local HttpService = game:GetService("HttpService")
 -- [!] CẤU HÌNH SILENT LOAD & STEALTH MODE (HƯỚNG 2)
 local devMode = false -- Bật true nếu muốn xem log gỡ lỗi ra F9 Console
 
-local function logInfo(message)
+local scriptEnv = setmetatable({}, { __index = getfenv() })
+scriptEnv.print = function(...)
     if devMode then
-        print("[System] " .. tostring(message))
+        print(...)
     end
 end
-
-local function logError(message, details)
+scriptEnv.warn = function(...)
     if devMode then
-        warn("⚠️ [Error] " .. tostring(message) .. "\n" .. tostring(details or ""))
+        warn(...)
     else
+        local args = {...}
+        local msg = tostring(args[1] or "")
         pcall(function()
             if Rayfield and Rayfield.Notify then
                 Rayfield:Notify({
-                    Title = "Lỗi Hệ Thống",
-                    Content = tostring(message),
+                    Title = "Thông Báo Hệ Thống",
+                    Content = msg,
                     Duration = 5
                 })
             end
         end)
     end
 end
+
+-- Gán môi trường cho main.txt
+setfenv(1, scriptEnv)
 
 -- [!] BIẾN QUẢN LÝ NHÁNH
 local branch = "main"
@@ -45,10 +50,10 @@ if successApi then
     -- Nếu lấy thành công, đổi từ "main" sang "a1b2c3d..."
     if successDecode and decoded.sha then
         targetRef = decoded.sha 
-        logInfo("Bypassed Fastly Cache. Current Commit SHA: " .. string.sub(targetRef, 1, 7))
+        print("Bypassed Fastly Cache. Current Commit SHA: " .. string.sub(targetRef, 1, 7))
     end
 else
-    logInfo("Không lấy được Commit SHA, chuyển về dùng nhánh mặc định.")
+    print("Không lấy được Commit SHA, chuyển về dùng nhánh mặc định.")
 end
 
 -- ==========================================
@@ -80,12 +85,13 @@ local function SafeLoad(filePath)
     if success and not string.find(result, "404: Not Found") then
         local func, err = loadstring(result)
         if func then 
+            setfenv(func, scriptEnv) -- Áp dụng môi trường Stealth Mode cho các file con
             return func() 
         else 
-            logError("Lỗi Cú Pháp tại: " .. filePath, err) 
+            warn("Lỗi Cú Pháp tại: " .. filePath .. "\n" .. tostring(err)) 
         end
     else
-        logError("Không kết nối được hoặc sai đường dẫn: " .. filePath)
+        warn("Không kết nối được hoặc sai đường dẫn: " .. filePath)
     end
     return nil
 end
