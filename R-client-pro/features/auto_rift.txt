@@ -71,45 +71,48 @@ return function(Window, Utils)
     -- ==========================================
     -- GIAO DIỆN UI
     -- ==========================================
-    local RiftTab = Window:CreateTab("Auto Rift", "door-open")
-    local RiftStatus = RiftTab:CreateLabel("STATUS: AUTO RIFT ĐANG TẮT")
-    local ClearedLabel = RiftTab:CreateLabel("Rift đã dọn dẹp: 0")
-    local CycleStatus = RiftTab:CreateLabel("🔄 Vòng lặp: Chưa bắt đầu")
+    local RiftTab = Window:CreateTab(Utils.t("rift_tab"), "door-open")
+    local RiftStatus = RiftTab:CreateLabel(Utils.t("rift_status_off"))
+    local ClearedLabel = RiftTab:CreateLabel(Utils.t("rifts_cleared_prefix") .. "0")
+    local CycleStatus = RiftTab:CreateLabel(Utils.t("rift_cycle_not_started"))
 
-    RiftTab:CreateSection("CÔNG TẮC ĐIỀU KHIỂN ")
+    RiftTab:CreateSection(" " .. Utils.t("sec_rift_controls") .. " ")
     RiftTab:CreateToggle({
-        Name = "Công Tắc Tổng (Bật/Tắt Auto Rift)", CurrentValue = false, Flag = "AutoRiftMasterToggle",
+        Name = Utils.t("rift_master_toggle"), 
+        Info = Utils.t("rift_master_toggle_info"),
+        CurrentValue = false, 
+        Flag = "AutoRiftMasterToggle",
         Callback = function(Value)
             RiftToggle(Value)
             if not Value then 
-                RiftStatus:Set("STATUS: TẮT")
-                CycleStatus:Set("🔄 Vòng lặp: Đã dừng")
+                RiftStatus:Set(Utils.t("tracker_stopped"))
+                CycleStatus:Set(Utils.t("rift_cycle_stopped"))
             else 
-                RiftStatus:Set("STATUS: ĐANG CHUẨN BỊ QUÉT...")
+                RiftStatus:Set(Utils.t("rift_status_prep"))
                 cycleState.currentIndex = 1; cycleState.currentLoadedWorld = nil; cycleState.isResting = false; cycleState.lastDynamicActivityTime = 0
             end
         end
     })
 
-    RiftTab:CreateToggle({ Name = "🔍 Săn Cổng Tự Tạo (Dynamic)", CurrentValue = true, Flag = "ScanDynamicToggle", Callback = function(Value) riftSettings.scanDynamic = Value end })
-    RiftTab:CreateToggle({ Name = "🔍 Săn Cổng Mặc Định (Static)", CurrentValue = true, Flag = "ScanStaticToggle", Callback = function(Value) riftSettings.scanStatic = Value end })
+    RiftTab:CreateToggle({ Name = Utils.t("rift_dynamic_toggle"), Info = Utils.t("rift_dynamic_toggle_info"), CurrentValue = true, Flag = "ScanDynamicToggle", Callback = function(Value) riftSettings.scanDynamic = Value end })
+    RiftTab:CreateToggle({ Name = Utils.t("rift_static_toggle"), Info = Utils.t("rift_static_toggle_info"), CurrentValue = true, Flag = "ScanStaticToggle", Callback = function(Value) riftSettings.scanStatic = Value end })
 
-    RiftTab:CreateSection("CẤU HÌNH BẢN ĐỒ & CYCLE ")
-    local TargetLabel = RiftTab:CreateLabel("🎯 Đã chọn " .. #riftSettings.selectedWorlds .. " world để farm Rift")
+    RiftTab:CreateSection(" " .. Utils.t("sec_rift_config") .. " ")
+    local TargetLabel = RiftTab:CreateLabel(string.format(Utils.t("rift_selected_worlds_label"), #riftSettings.selectedWorlds))
     Utils.CreateAreaMultiSelect(RiftTab, {
-        name = "Chọn World Cày Rift", flag = "RiftWorldSelect",
+        name = Utils.t("rift_select_worlds"), flag = "RiftWorldSelect",
         defaultAreas = Utils.GetAreaNamesByIds(riftSettings.selectedWorlds),
         callback = function(selectedIds)
             if type(selectedIds) == "table" then
                 riftSettings.selectedWorlds = selectedIds
                 if Utils and Utils.SaveSelectedAreas then Utils.SaveSelectedAreas(selectedIds, "R_SelectedRiftWorlds.json") end
-                TargetLabel:Set("🎯 Đã chọn " .. #selectedIds .. " world để farm Rift")
+                TargetLabel:Set(string.format(Utils.t("rift_selected_worlds_label"), #selectedIds))
             end
         end
     })
 
-    RiftTab:CreateToggle({ Name = "Tự Động Nhảy Server (Bỏ qua nghỉ ngơi)", CurrentValue = false, Flag = "RiftAutoHop", Callback = function(Value) riftSettings.autoHop = Value end })
-    RiftTab:CreateSlider({ Name = "Thời gian nghỉ giữa các vòng (Phút)", Range = {1, 60}, Increment = 1, CurrentValue = 5, Flag = "RiftRestTime", Callback = function(Value) riftSettings.restTimeMinutes = Value end })
+    RiftTab:CreateToggle({ Name = Utils.t("rift_auto_hop"), Info = Utils.t("rift_auto_hop_info"), CurrentValue = false, Flag = "RiftAutoHop", Callback = function(Value) riftSettings.autoHop = Value end })
+    RiftTab:CreateSlider({ Name = Utils.t("rift_rest_time"), Info = Utils.t("rift_rest_time_info"), Range = {1, 60}, Increment = 1, CurrentValue = 5, Flag = "RiftRestTime", Callback = function(Value) riftSettings.restTimeMinutes = Value end })
 
 
     -- ==========================================
@@ -252,7 +255,7 @@ return function(Window, Utils)
         end
 
         print("[TEST-LOG] 🎯 Đã chốt mục tiêu: Rift " .. tostring(targetRiftId) .. ". Đang áp sát cổng...")
-        RiftStatus:Set("STATUS: Đã khóa Rift: " .. tostring(targetRiftId) .. ". Đang vào...")
+        RiftStatus:Set(Utils.t("rift_status_lock") .. tostring(targetRiftId) .. Utils.t("rift_status_lock_entering"))
         hrp.CFrame = CFrame.new(bestPortal.pos + Vector3.new(0, 3, 0))
         task.wait(0.5) 
 
@@ -285,7 +288,7 @@ return function(Window, Utils)
                 local distRecheck = (checkHrp.Position - bestPortal.pos).Magnitude
                 if distRecheck < 150 then
                     print("[TEST-LOG] ❌ Lỗi chặn cổng! Bỏ qua và chuyển mục tiêu.")
-                    RiftStatus:Set("STATUS: Không thể vào Rift (Bị chặn/Lỗi). Đổi mục tiêu!")
+                    RiftStatus:Set(Utils.t("rift_status_fail"))
                     completedRifts[targetRiftKey] = os.time() + 60 
                     targetRiftId = nil
                     targetRiftKey = nil
@@ -308,7 +311,7 @@ return function(Window, Utils)
 
     -- Xử lý ném bóng bắt quái khi quái chết
     local function HandleCatching(deadMonsters)
-        RiftStatus:Set("STATUS: Đang ném bóng bắt quái...")
+        RiftStatus:Set(Utils.t("rift_status_catch"))
         for _, m in pairs(deadMonsters) do
             local id = tonumber(m.Name:match("Monster_(%d+)"))
             if id and not catchingMemory[id] then
@@ -321,7 +324,7 @@ return function(Window, Utils)
 
     -- Xử lý chiến đấu, tự động di chuyển và đánh quái
     local function HandleCombat(hrp, humanoid, bestTarget, closestDist2D)
-        RiftStatus:Set("STATUS: Đang trong trận - Chiến đấu!")
+        RiftStatus:Set(Utils.t("rift_status_fight"))
         if not bestTarget then return end
         
         local targetPos = bestTarget.Position
@@ -368,7 +371,7 @@ return function(Window, Utils)
 
     -- Thoát khỏi Rift sau khi hoàn thành nhiệm vụ
     local function ExecuteExitRift(controller)
-        RiftStatus:Set("STATUS: Hoàn thành! Đang ép thoát siêu tốc...")
+        RiftStatus:Set(Utils.t("rift_status_done"))
         print("[TEST-LOG] Gửi lệnh thoát (ArenaLeaveChannel)...")
         
         local exit_id, exit_team = targetRiftId, currentTeamId
@@ -384,7 +387,7 @@ return function(Window, Utils)
         if targetRiftKey then
             completedRifts[targetRiftKey] = os.time() + targetExpireDuration
             riftsClearedCount = riftsClearedCount + 1
-            ClearedLabel:Set("Rift đã dọn dẹp: " .. riftsClearedCount)
+            ClearedLabel:Set(Utils.t("rifts_cleared_prefix") .. riftsClearedCount)
             if string.match(targetRiftKey, "^Dyn_") then
                 cycleState.lastDynamicActivityTime = os.time()
                 print("[TEST-LOG] ⚡ Đã dọn xong cổng Dynamic: " .. tostring(targetRiftKey) .. ". Cập nhật lastDynamicActivityTime.")
@@ -422,7 +425,7 @@ return function(Window, Utils)
             -- Yêu cầu giữ cờ AutoRift khi bắt đầu chu kỳ quét (Chống tranh chấp với AutoFarm)
             if controller and not cycleState.isResting then
                 if not controller.RequestLock("AutoRift") and controller.CurrentLock ~= "AutoRift" then
-                    RiftStatus:Set("STATUS: Chờ hệ thống cấp cờ...")
+                    RiftStatus:Set(Utils.t("rift_status_wait_lock"))
                     task.wait(0.5)
                     continue
                 end
@@ -468,7 +471,7 @@ return function(Window, Utils)
                     else
                         local timeLeft = cycleState.restEndTime - os.time()
                         if timeLeft > 0 then 
-                            CycleStatus:Set(string.format("💤 Đang nghỉ ngơi: %02d:%02d", math.floor(timeLeft/60), timeLeft%60))
+                            CycleStatus:Set(Utils.t("rift_cycle_resting") .. string.format("%02d:%02d", math.floor(timeLeft/60), timeLeft%60))
                             continue
                         else 
                             cycleState.isResting = false
@@ -497,7 +500,7 @@ return function(Window, Utils)
                             print("[TEST-LOG] Đợi load map xong, tiến hành quét cổng!")
                             continue
                         end
-                        CycleStatus:Set("🌍 Đang ở Map: " .. tostring(targetWorldId))
+                        CycleStatus:Set(Utils.t("rift_cycle_map") .. tostring(targetWorldId))
                     else
                         print("[TEST-LOG] Đã chạy hết danh sách World -> Bắt đầu nghỉ ngơi/Chuyển Server")
                         cycleState.isResting = true
@@ -518,9 +521,9 @@ return function(Window, Utils)
                     
                     if hasRecentDynamicActivity then
                         local timeLeft = 30 - (currentTick - cycleState.lastDynamicActivityTime)
-                        CycleStatus:Set(string.format("⚡ Giữ Map (Farm Dynamic): %d giây", math.ceil(timeLeft)))
+                        CycleStatus:Set(string.format(Utils.t("rift_cycle_hold_map"), math.ceil(timeLeft)))
                     else
-                        CycleStatus:Set("🌍 Chỉ quét Dynamic (Đang giữ Map: " .. tostring(currentWorldId) .. ")")
+                        CycleStatus:Set(Utils.t("rift_cycle_scan_dynamic") .. tostring(currentWorldId) .. ")")
                     end
                 end
 
@@ -586,10 +589,10 @@ return function(Window, Utils)
                     -- Đã xử lý xong quái, tiến hành thoát
                     if not hasEncounteredMonsters then
                         print("[TEST-LOG] Combat Mode: Đợi Server spawn con quái duy nhất...")
-                        RiftStatus:Set("STATUS: Đang đợi Server spawn quái (Chờ vô hạn)...")
+                        RiftStatus:Set(Utils.t("rift_status_wait_spawn"))
                     else
                         print("[TEST-LOG] Đã giết/bắt xong con quái duy nhất. Kích hoạt EXIT ngay lập tức!")
-                        RiftStatus:Set("STATUS: Đã xử lý xong con quái duy nhất! Chuẩn bị thoát...")
+                        RiftStatus:Set(Utils.t("rift_status_done_exit"))
                         riftState = "EXITING" 
                     end
                 end

@@ -144,7 +144,42 @@ local Translations = {
     ["wb_scanning"] = { en = "🔎 Scanning area... ", vi = "🔎 Đang tìm quái... " },
     ["wb_loop_done_hop"] = { en = "🔄 Loop done! Time left: ", vi = "🔄 Xong vòng! Còn " },
     ["wb_loop_done_wait"] = { en = "💤 Loop done. Waiting for next wave...", vi = "💤 Xong vòng. Đang chờ Sóng tiếp theo." },
-    ["status_prefix"] = { en = "Status: ", vi = "Trạng thái: " }
+    ["status_prefix"] = { en = "Status: ", vi = "Trạng thái: " },
+
+    -- Auto Rift keys
+    ["rift_tab"] = { en = "Auto Rift", vi = "Auto Rift" },
+    ["rift_status_off"] = { en = "STATUS: AUTO RIFT OFF", vi = "TRẠNG THÁI: AUTO RIFT ĐANG TẮT" },
+    ["rifts_cleared_prefix"] = { en = "Rifts Cleared: ", vi = "Rift đã dọn: " },
+    ["rift_cycle_not_started"] = { en = "🔄 Loop: Not started", vi = "🔄 Vòng lặp: Chưa bắt đầu" },
+    ["rift_cycle_stopped"] = { en = "🔄 Loop: Stopped", vi = "🔄 Vòng lặp: Đã dừng" },
+    ["rift_status_prep"] = { en = "STATUS: PREPARING SCAN...", vi = "STATUS: ĐANG CHUẨN BỊ QUÉT..." },
+    ["rift_status_lock"] = { en = "STATUS: Locked Rift: ", vi = "STATUS: Đã khóa Rift: " },
+    ["rift_status_lock_entering"] = { en = ". Entering...", vi = ". Đang vào..." },
+    ["rift_status_fail"] = { en = "STATUS: Failed to enter Rift. Swapping target!", vi = "STATUS: Không thể vào Rift. Đổi mục tiêu!" },
+    ["rift_status_catch"] = { en = "STATUS: Catching monsters...", vi = "STATUS: Đang ném bóng bắt quái..." },
+    ["rift_status_fight"] = { en = "STATUS: In battle - Fighting!", vi = "STATUS: Đang trong trận - Chiến đấu!" },
+    ["rift_status_done"] = { en = "STATUS: Cleared! Fast exiting...", vi = "STATUS: Hoàn thành! Đang thoát nhanh..." },
+    ["rift_status_wait_lock"] = { en = "STATUS: Waiting for system lock...", vi = "STATUS: Chờ hệ thống cấp cờ..." },
+    ["rift_status_wait_spawn"] = { en = "STATUS: Waiting for monsters to spawn...", vi = "STATUS: Đang đợi spawn quái..." },
+    ["rift_status_done_exit"] = { en = "STATUS: Target cleared! Preparing to exit...", vi = "STATUS: Đã xử lý xong quái! Chuẩn bị thoát..." },
+    ["rift_cycle_resting"] = { en = "💤 Resting: ", vi = "💤 Đang nghỉ ngơi: " },
+    ["rift_cycle_map"] = { en = "🌍 Current Map: ", vi = "🌍 Đang ở Map: " },
+    ["rift_cycle_hold_map"] = { en = "⚡ Holding Map (Farm Dynamic): %d secs", vi = "⚡ Giữ Map (Farm Dynamic): %d giây" },
+    ["rift_cycle_scan_dynamic"] = { en = "🌍 Scanning Dynamic (Holding Map: ", vi = "🌍 Chỉ quét Dynamic (Đang giữ Map: " },
+    ["rift_selected_worlds_label"] = { en = "🎯 Selected %d worlds to farm Rift", vi = "🎯 Đã chọn %d thế giới để farm Rift" },
+    ["sec_rift_controls"] = { en = "CONTROLS", vi = "CÔNG TẮC ĐIỀU KHIỂN" },
+    ["rift_master_toggle"] = { en = "Master Toggle (Auto Rift)", vi = "Công Tắc Tổng (Auto Rift)" },
+    ["rift_master_toggle_info"] = { en = "Enables the auto Rift scanning and farming system.", vi = "Bật hệ thống tự động tìm và quét cổng Rift." },
+    ["rift_dynamic_toggle"] = { en = "🔍 Hunt Spawned Portals (Dynamic)", vi = "🔍 Săn Cổng Tự Tạo (Dynamic)" },
+    ["rift_dynamic_toggle_info"] = { en = "Scans for dynamically spawned Rift portals created in your world.", vi = "Săn các cổng Rift tự sinh ra ngẫu nhiên." },
+    ["rift_static_toggle"] = { en = "🔍 Hunt Static Portals", vi = "🔍 Săn Cổng Mặc Định (Static)" },
+    ["rift_static_toggle_info"] = { en = "Scans for static Rift portal spawn points.", vi = "Săn các cổng Rift cố định ở các đảo." },
+    ["sec_rift_config"] = { en = "CONFIGURATION & CYCLES", vi = "CẤU HÌNH BẢN ĐỒ & VÒNG LẶP" },
+    ["rift_select_worlds"] = { en = "Select Rift Worlds", vi = "Chọn Đảo Farm Rift" },
+    ["rift_auto_hop"] = { en = "Auto Hop Server (Skip Rest)", vi = "Tự Động Nhảy Server (Bỏ qua nghỉ)" },
+    ["rift_auto_hop_info"] = { en = "Automatically hops servers instead of resting when the round is completed.", vi = "Tự động nhảy server thay vì chờ nghỉ ngơi khi hoàn thành vòng quét." },
+    ["rift_rest_time"] = { en = "Rest Time Between Rounds (Mins)", vi = "Thời gian nghỉ giữa các vòng (Phút)" },
+    ["rift_rest_time_info"] = { en = "Set how long to wait before starting the next scan cycle.", vi = "Thời gian chờ trước khi bắt đầu lượt quét tiếp theo." }
 }
 
 local currentLang = "en"
