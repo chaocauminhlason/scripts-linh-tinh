@@ -36,7 +36,7 @@ local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 -- R-Client Pro Tool v2.8
 local Window = Rayfield:CreateWindow({
     Name = "Have a good day!",
-    LoadingTitle = "Đang tải hệ thống Core... [" .. string.sub(targetRef, 1, 7) .. "]",
+    LoadingTitle = "Đang tải hệ thống...",
     LoadingSubtitle = "Dev by Son",
     ConfigurationSaving = { Enabled = true, FileName = "AutoFarmConfig" },
     KeySystem = false,
