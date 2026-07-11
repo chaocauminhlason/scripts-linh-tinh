@@ -98,7 +98,25 @@ local Translations = {
     ["auto_rejoin"] = { en = "Auto Rejoin on Kick", vi = "Tự Động Kết Nối Lại" },
     ["auto_rejoin_info"] = { en = "Automatically reconnects to a new server if disconnected or kicked from the game.", vi = "Tự động kết nối lại vào server mới nếu bị mất kết nối hoặc bị kick." },
     ["hop_least_msg"] = { en = "Teleporting to the emptiest server...", vi = "Đang nhảy qua server vắng nhất..." },
-    ["hop_random_msg"] = { en = "Teleporting to a random server...", vi = "Đang nhảy qua server ngẫu nhiên..." }
+    ["hop_random_msg"] = { en = "Teleporting to a random server...", vi = "Đang nhảy qua server ngẫu nhiên..." },
+
+    -- Player Tracker keys
+    ["tracker_tab"] = { en = "Player Tracker", vi = "Theo Dõi" },
+    ["tracker_idle"] = { en = "Status: Idle", vi = "Trạng thái: Đang nghỉ" },
+    ["tracker_selected"] = { en = "Status: Selected ", vi = "Trạng thái: Đã chọn " },
+    ["tracker_stopped"] = { en = "Status: Stopped", vi = "Trạng thái: Đã dừng" },
+    ["tracker_following"] = { en = "Status: Following ", vi = "Trạng thái: Đang theo dõi " },
+    ["select_player"] = { en = "Select Player", vi = "Chọn người đi theo" },
+    ["select_player_info"] = { en = "Choose a player from the server to track or follow.", vi = "Chọn một người chơi trong server để theo dõi hoặc đi theo." },
+    ["refresh_players"] = { en = "Refresh Player List", vi = "Làm mới danh sách" },
+    ["refresh_players_info"] = { en = "Updates the list of active players in the server.", vi = "Cập nhật danh sách người chơi hiện tại trong server." },
+    ["toggle_follow"] = { en = "Toggle Follow", vi = "Bật/Tắt Theo Dõi" },
+    ["toggle_follow_info"] = { en = "Starts or stops automatically walking/teleporting to the selected player.", vi = "Bắt đầu hoặc dừng tự động đi theo/tốc biến đến người chơi đã chọn." },
+    ["btn_teleport_player"] = { en = "🚀 Teleport to Player", vi = "🚀 Dịch chuyển đến người chơi" },
+    ["btn_teleport_player_info"] = { en = "Teleports you directly to the selected player's current position.", vi = "Tốc biến thẳng đến vị trí người chơi được chọn." },
+    ["listen_chat"] = { en = "Listen to '!f' Chat Command", vi = "Lắng Nghe Chat '!f'" },
+    ["listen_chat_info"] = { en = "Automatically follows players if they chat '!f' in-game.", vi = "Tự động đi theo người chơi nếu họ gõ '!f' trong khung chat." },
+    ["tracker_not_found"] = { en = "Target player not found or offline!", vi = "Không tìm thấy người chơi mục tiêu!" }
 }
 
 local currentLang = "en"

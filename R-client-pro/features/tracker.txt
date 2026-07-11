@@ -24,8 +24,8 @@ return function(Window, Utils)
         end)
     end
 
-    local MainTab = Window:CreateTab("Theo Dõi", "eye")
-    local StatusLabel = MainTab:CreateLabel("Trạng thái: Đang nghỉ")
+    local MainTab = Window:CreateTab(Utils.t("tracker_tab"), "eye")
+    local StatusLabel = MainTab:CreateLabel(Utils.t("tracker_idle"))
 
     local function GetPlayerNames()
         local names = {}
@@ -36,41 +36,53 @@ return function(Window, Utils)
     end
 
     local PlayerDropdown = MainTab:CreateDropdown({ 
-        Name = "Chọn người đi theo", 
+        Name = Utils.t("select_player"), 
+        Info = Utils.t("select_player_info"),
         Options = GetPlayerNames(), 
         CurrentOption = {}, 
         MultipleOptions = false, 
         Callback = function(Option)
             targetPlayer = Players:FindFirstChild(Option[1])
-            if targetPlayer then StatusLabel:Set("Trạng thái: Đã chọn " .. targetPlayer.Name) end 
-        end 
-    })
-
-    MainTab:CreateButton({ Name = "Làm mới danh sách", Callback = function() PlayerDropdown:Refresh(GetPlayerNames()) end })
-    
-    local FollowToggle = MainTab:CreateToggle({ 
-        Name = "Bật/Tắt Theo Dõi", 
-        CurrentValue = false, 
-        Callback = function(Value) 
-            following = Value 
-            if not Value then StatusLabel:Set("Trạng thái: Đã dừng") end 
+            if targetPlayer then StatusLabel:Set(Utils.t("tracker_selected") .. targetPlayer.Name) end 
         end 
     })
 
     MainTab:CreateButton({ 
-        Name = "🚀 Dịch chuyển đến người được chọn", 
+        Name = Utils.t("refresh_players"), 
+        Info = Utils.t("refresh_players_info"), 
+        Callback = function() PlayerDropdown:Refresh(GetPlayerNames()) end 
+    })
+    
+    local FollowToggle = MainTab:CreateToggle({ 
+        Name = Utils.t("toggle_follow"), 
+        Info = Utils.t("toggle_follow_info"), 
+        CurrentValue = false, 
+        Callback = function(Value) 
+            following = Value 
+            if not Value then StatusLabel:Set(Utils.t("tracker_stopped")) end 
+        end 
+    })
+
+    MainTab:CreateButton({ 
+        Name = Utils.t("btn_teleport_player"), 
+        Info = Utils.t("btn_teleport_player_info"), 
         Callback = function()
             if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
                 local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
                 if hrp then hrp.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame end
             else
-                game.StarterGui:SetCore("SendNotification", {Title = "Lỗi", Text = "Không tìm thấy người chơi mục tiêu!", Duration = 3})
+                game.StarterGui:SetCore("SendNotification", {
+                    Title = Utils.t("warning_title"), 
+                    Text = Utils.t("tracker_not_found"), 
+                    Duration = 3
+                })
             end
         end 
     })
 
     MainTab:CreateToggle({
-        Name = "Lắng nghe chat '!f' để theo dõi",
+        Name = Utils.t("listen_chat"),
+        Info = Utils.t("listen_chat_info"),
         CurrentValue = false,
         Callback = function(Value) chatListenerEnabled = Value end
     })
@@ -82,7 +94,7 @@ return function(Window, Utils)
                 targetPlayer = p 
                 following = true 
                 FollowToggle:Set(true)
-                StatusLabel:Set("Trạng thái: Đang theo dõi " .. p.Name) 
+                StatusLabel:Set(Utils.t("tracker_following") .. p.Name) 
             end 
         end) 
     end
