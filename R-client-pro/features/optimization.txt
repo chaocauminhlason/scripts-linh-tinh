@@ -21,17 +21,19 @@ return function(Window, Utils)
     end)
 
     -- TẠO GIAO DIỆN
-    local OptimizationTab = Window:CreateTab("optimization", "zap")
+    local OptimizationTab = Window:CreateTab(Utils.t("optimization_tab"), "zap")
 
     OptimizationTab:CreateToggle({ 
-        Name = "Anti AFK", 
+        Name = Utils.t("anti_afk"), 
+        Info = Utils.t("anti_afk_info"),
         CurrentValue = true, -- Sửa giá trị này thành true
         Flag = "AntiAfk", 
         Callback = function(Value) antiAfkEnabled = Value end 
     })
 
     OptimizationTab:CreateButton({ 
-        Name = "Đồ Họa Siêu Thấp (Potato Mode)", 
+        Name = Utils.t("potato_mode"), 
+        Info = Utils.t("potato_mode_info"),
         Callback = function()
             Lighting.GlobalShadows = false 
             Lighting.FogEnd = 9e9 
@@ -52,12 +54,17 @@ return function(Window, Utils)
             Workspace.Terrain.WaterReflectance = 0 
             Workspace.Terrain.WaterTransparency = 1
             
-            game.StarterGui:SetCore("SendNotification", {Title = "Tối ưu hóa", Text = "Đã chuyển về Potato Mode.", Duration = 3})
+            game.StarterGui:SetCore("SendNotification", {
+                Title = Utils.t("optimization_tab"), 
+                Text = Utils.t("potato_active"), 
+                Duration = 3
+            })
         end 
     })
 
     OptimizationTab:CreateToggle({ 
-        Name = "Giới Hạn 15 FPS", 
+        Name = Utils.t("limit_fps"), 
+        Info = Utils.t("limit_fps_info"),
         CurrentValue = false, 
         Flag = "FpsLimiter", 
         Callback = function(Value) 
@@ -66,7 +73,8 @@ return function(Window, Utils)
     })
 
     OptimizationTab:CreateToggle({ 
-        Name = "Tắt Render 3D (Đen màn hình)", 
+        Name = Utils.t("disable_3d"), 
+        Info = Utils.t("disable_3d_info"),
         CurrentValue = false, 
         Flag = "Disable3D", 
         Callback = function(Value) 
@@ -81,10 +89,11 @@ return function(Window, Utils)
 
     local StreamerTab = OptimizationTab
 
-StreamerTab:CreateSection(" TÙY CHỈNH TÊN ")
+    StreamerTab:CreateSection(" " .. Utils.t("streamer_section") .. " ")
     local NameInput = StreamerTab:CreateInput({
-        Name = "Tên hiển thị (Streamer Mode)",
-        PlaceholderText = "Nhập tên giả...",
+        Name = Utils.t("fake_name"),
+        PlaceholderText = Utils.t("fake_name_placeholder"),
+        Info = Utils.t("fake_name_info"),
         RemoveTextAfterFocusLost = false,
         Callback = function(Text)
             if Text and Text ~= "" then
@@ -94,7 +103,8 @@ StreamerTab:CreateSection(" TÙY CHỈNH TÊN ")
     })
 
     StreamerTab:CreateToggle({
-        Name = "Bật Chế Độ Ẩn Danh (Rename)",
+        Name = Utils.t("streamer_mode"),
+        Info = Utils.t("streamer_mode_info"),
         CurrentValue = false,
         Flag = "StreamerSpoofToggle",
         Callback = function(Value)

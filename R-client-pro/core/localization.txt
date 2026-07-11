@@ -23,7 +23,27 @@ local Translations = {
     ["bag_full_warning"] = { en = "Pet bag is FULL! Auto hatching disabled.", vi = "Túi Pet ĐẦY! Đã tự động ngắt Auto." },
     ["warning_title"] = { en = "WARNING", vi = "CẢNH BÁO" },
     ["egg_fallback_name"] = { en = "Egg ", vi = "Trứng " },
-    ["refresh_warning_name"] = { en = "⚠️ Click Refresh to load list!", vi = "⚠️ Bấm Refresh để tải danh sách!" }
+    ["refresh_warning_name"] = { en = "⚠️ Click Refresh to load list!", vi = "⚠️ Bấm Refresh để tải danh sách!" },
+
+    -- Optimization keys
+    ["optimization_tab"] = { en = "Optimization", vi = "Tối Ưu Hóa" },
+    ["anti_afk"] = { en = "Anti AFK", vi = "Chống AFK" },
+    ["anti_afk_info"] = { en = "Prevents you from being kicked for idling.", vi = "Ngăn bạn bị văng game do treo máy lâu." },
+    ["potato_mode"] = { en = "Potato Mode", vi = "Đồ Họa Siêu Thấp (Potato)" },
+    ["potato_mode_info"] = { en = "Significantly reduces graphics settings to boost FPS.", vi = "Giảm mạnh chất lượng đồ họa để tăng mượt và FPS." },
+    ["potato_active"] = { en = "Potato Mode activated.", vi = "Đã kích hoạt Potato Mode thành công." },
+    ["limit_fps"] = { en = "Limit 15 FPS", vi = "Giới Hạn 15 FPS" },
+    ["limit_fps_info"] = { en = "Caps frame rate at 15 FPS to reduce CPU/GPU usage when background farming.", vi = "Giới hạn FPS ở mức 15 để tiết kiệm CPU/GPU khi treo máy ngầm." },
+    ["disable_3d"] = { en = "Disable 3D Rendering", vi = "Tắt Render 3D" },
+    ["disable_3d_info"] = { en = "Blacks out screen and disables 3D graphics rendering to save maximum computer resources.", vi = "Tắt dựng hình 3D (đen màn hình) để tiết kiệm tối đa tài nguyên máy." },
+    
+    -- Streamer mode keys
+    ["streamer_section"] = { en = "STREAMER MODE", vi = "CHẾ ĐỘ STREAMER" },
+    ["fake_name"] = { en = "Fake Display Name", vi = "Tên Hiển Thị Giả" },
+    ["fake_name_placeholder"] = { en = "Enter fake name...", vi = "Nhập tên giả..." },
+    ["fake_name_info"] = { en = "Set a custom fake name to display on your character.", vi = "Nhập tên giả để ngụy trang hiển thị trên nhân vật." },
+    ["streamer_mode"] = { en = "Streamer Mode (Rename)", vi = "Bật Chế Độ Ẩn Danh" },
+    ["streamer_mode_info"] = { en = "Spoofs your name tags and character display name to match the fake name above.", vi = "Thay đổi nhãn tên nhân vật thành tên giả đã nhập." }
 }
 
 local currentLang = "en"
