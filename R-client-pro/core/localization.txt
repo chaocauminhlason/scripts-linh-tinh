@@ -43,7 +43,41 @@ local Translations = {
     ["fake_name_placeholder"] = { en = "Enter fake name...", vi = "Nhập tên giả..." },
     ["fake_name_info"] = { en = "Set a custom fake name to display on your character.", vi = "Nhập tên giả để ngụy trang hiển thị trên nhân vật." },
     ["streamer_mode"] = { en = "Streamer Mode (Rename)", vi = "Bật Chế Độ Ẩn Danh" },
-    ["streamer_mode_info"] = { en = "Spoofs your name tags and character display name to match the fake name above.", vi = "Thay đổi nhãn tên nhân vật thành tên giả đã nhập." }
+    ["streamer_mode_info"] = { en = "Spoofs your name tags and character display name to match the fake name above.", vi = "Thay đổi nhãn tên nhân vật thành tên giả đã nhập." },
+
+    -- Shops & GUIs keys
+    ["gui_tab"] = { en = "Shops & GUIs", vi = "Cửa Hàng & Giao Diện" },
+    ["gui_open_title"] = { en = "Open UI", vi = "Mở Giao Diện" },
+    ["gui_open_success"] = { en = "Opened view: ", vi = "Đã thực thi mở: " },
+    ["gui_open_fail"] = { en = "Failed to open view: ", vi = "Không thể mở: " },
+    ["open_view_info"] = { en = "Bypasses distance check to open this interface remotely.", vi = "Mở nhanh giao diện này từ xa, bỏ qua khoảng cách." },
+    
+    ["sec_tele_maps"] = { en = "🗺️ TELEPORT & MAPS", vi = "🗺️ DỊCH CHUYỂN & BẢN ĐỒ" },
+    ["sec_bags"] = { en = "BAGS & INVENTORIES", vi = "TÚI ĐỒ & QUẢN LÝ" },
+    ["sec_shops"] = { en = "GAME SHOPS", vi = "CỬA HÀNG (SHOPS)" },
+    ["sec_events"] = { en = "ACTIVITIES & EVENTS", vi = "HOẠT ĐỘNG & SỰ KIỆN" },
+    ["sec_recycle"] = { en = "PET STORAGE & RECYCLING", vi = "KHO TÀNG & TÁI CHẾ PET" },
+    
+    ["btn_area_tele"] = { en = "📍 Area Teleport", vi = "📍 Dịch Chuyển Tức Thời" },
+    ["btn_item_bag"] = { en = "🎒 Item Bag", vi = "🎒 Mở Túi Đồ" },
+    ["btn_pet_bag"] = { en = "🐶 Pet Bag", vi = "🐶 Mở Túi Pet" },
+    ["btn_pet_team"] = { en = "🐾 Pet Team", vi = "🐾 Đội Hình Pet" },
+    ["btn_pet_enhance"] = { en = "✨ Pet Enhance", vi = "✨ Nâng Cấp Pet" },
+    ["btn_store"] = { en = "🛒 Main Store", vi = "🛒 Cửa Hàng Chính" },
+    ["btn_catcher_shop"] = { en = "🎣 Catcher Shop", vi = "🎣 Cửa Hàng Bắt Thú" },
+    ["btn_tower_shop"] = { en = "🗼 Tower Shop", vi = "🗼 Cửa Hàng Tháp" },
+    ["btn_craft"] = { en = "⚒️ Crafting Bench", vi = "⚒️ Xưởng Chế Tạo" },
+    ["btn_abyss_shop"] = { en = "🌌 Abyss Shop", vi = "🌌 Cửa Hàng Vực Thẳm" },
+    ["btn_pet_gear_roll"] = { en = "⚙️ Pet Gear Roll", vi = "⚙️ Cửa Hàng Trang Bị Pet" },
+    ["btn_tasks"] = { en = "📋 Tasks Board", vi = "📋 Bảng Nhiệm Vụ" },
+    ["btn_activity"] = { en = "🎉 Event Center", vi = "🎉 Trung Tâm Sự Kiện" },
+    ["btn_medal"] = { en = "🏅 Collection Medal", vi = "🏅 Nhiệm Vụ Sưu Tập" },
+    ["btn_achieve"] = { en = "🏆 Achievements", vi = "🏆 Thành Tựu" },
+    ["btn_pet_vault"] = { en = "🏦 Pet Vault", vi = "🏦 Kho Lưu Trữ Pet" },
+    ["btn_pet_recycle"] = { en = "♻️ Pet Recycle", vi = "♻️ Tái Chế Pet" },
+    ["btn_pet_collect"] = { en = "📖 Pet Collection Book", vi = "📖 Sưu Tập Pet" },
+    ["btn_pet_ride"] = { en = "🐎 Mounts Management", vi = "🐎 Quản Lý Thú Cưỡi" },
+    ["btn_pet_transform"] = { en = "🔄 Pet Transform", vi = "🔄 Chuyển Hóa Pet" }
 }
 
 local currentLang = "en"

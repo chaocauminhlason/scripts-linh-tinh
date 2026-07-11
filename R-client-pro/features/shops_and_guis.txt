@@ -3,7 +3,7 @@
 -- ====================================================================
 return function(Window, Utils)
     -- Tạo một Tab mới trên giao diện Rayfield
-    local GuiTab = Window:CreateTab("Shops & GUIs", "shopping-cart") 
+    local GuiTab = Window:CreateTab(Utils.t("gui_tab"), "shopping-cart") 
 
     -- ==========================================
     -- HÀM XỬ LÝ CỐT LÕI (BYPASS UI)
@@ -26,14 +26,14 @@ return function(Window, Utils)
         
         if success then
             game.StarterGui:SetCore("SendNotification", {
-                Title = "Mở Giao Diện", 
-                Text = "Đã thực thi lệnh mở: " .. viewName, 
+                Title = Utils.t("gui_open_title"), 
+                Text = Utils.t("gui_open_success") .. viewName, 
                 Duration = 2
             })
         else
             game.StarterGui:SetCore("SendNotification", {
-                Title = "Lỗi", 
-                Text = "Không thể mở " .. viewName, 
+                Title = Utils.t("warning_title"), 
+                Text = Utils.t("gui_open_fail") .. viewName, 
                 Duration = 2
             })
         end
@@ -42,48 +42,37 @@ return function(Window, Utils)
     -- ==========================================
     -- GIAO DIỆN NÚT BẤM (BUTTONS)
     -- ==========================================
-    GuiTab:CreateSection(" 🗺️ DỊCH CHUYỂN & BẢN ĐỒ ")
-    --GuiTab:CreateButton({ Name = "🌍 Chọn Khu Vực (Area Switch)", Callback = function() OpenGameUI("AreaSwitchView") end })
-    GuiTab:CreateButton({ Name = "📍 Dịch Chuyển Tức Thời (Area Teleport)", Callback = function() OpenGameUI("AreaTeleportView") end })
-    --GuiTab:CreateButton({ Name = "🚀 Cổng Dịch Chuyển (Queue Teleport)", Callback = function() OpenGameUI("QueueTeleportView") end })
+    GuiTab:CreateSection(" " .. Utils.t("sec_tele_maps") .. " ")
+    GuiTab:CreateButton({
+        Name = Utils.t("btn_area_tele"),
+        Info = Utils.t("open_view_info"),
+        Callback = function() OpenGameUI("AreaTeleportView") end
+    })
 
-    GuiTab:CreateSection(" TÚI ĐỒ & QUẢN LÝ ")
-    GuiTab:CreateButton({ Name = "🎒 Mở Túi Đồ (Item Bag)", Callback = function() OpenGameUI("ItemBagView") end })
-    GuiTab:CreateButton({ Name = "🐶 Mở Túi Pet (Pet Bag)", Callback = function() OpenGameUI("PetBagView") end })
-    GuiTab:CreateButton({ Name = "🐾 Đội Hình Pet (Pet Team)", Callback = function() OpenGameUI("PetTeamView") end })
-    GuiTab:CreateButton({ Name = "✨ Nâng Cấp Pet (Pet Enhance)", Callback = function() OpenGameUI("PetEvolveView") end })
+    GuiTab:CreateSection(" " .. Utils.t("sec_bags") .. " ")
+    GuiTab:CreateButton({ Name = Utils.t("btn_item_bag"), Info = Utils.t("open_view_info"), Callback = function() OpenGameUI("ItemBagView") end })
+    GuiTab:CreateButton({ Name = Utils.t("btn_pet_bag"), Info = Utils.t("open_view_info"), Callback = function() OpenGameUI("PetBagView") end })
+    GuiTab:CreateButton({ Name = Utils.t("btn_pet_team"), Info = Utils.t("open_view_info"), Callback = function() OpenGameUI("PetTeamView") end })
+    GuiTab:CreateButton({ Name = Utils.t("btn_pet_enhance"), Info = Utils.t("open_view_info"), Callback = function() OpenGameUI("PetEvolveView") end })
 
-    GuiTab:CreateSection(" CỬA HÀNG (SHOPS) ")
-    GuiTab:CreateButton({ Name = "🛒 Mở Cửa Hàng Chính (Store)", Callback = function() OpenGameUI("StoreView") end })
-    GuiTab:CreateButton({ Name = "🎣 Cửa Hàng Bắt Thú (Catcher Shop)", Callback = function() OpenGameUI("CatcherShopView") end })
-    GuiTab:CreateButton({ Name = "🗼 Cửa Hàng Tháp (Tower Shop)", Callback = function() OpenGameUI("TowerShopView") end })
-    GuiTab:CreateButton({ Name = "⚒️ Xưởng Chế Tạo (Craft)", Callback = function() OpenGameUI("SyntheticView") end })
-    GuiTab:CreateButton({ Name = "🌌 Cửa Hàng Vực Thẳm (Abyss Shop)", Callback = function() OpenGameUI("AbyssShopView") end })
-    -- [THÊM MỚI]: Nút bấm Shop Trang bị Pet
-    GuiTab:CreateButton({ Name = "⚙️ Cửa Hàng Trang Bị Pet (Pet Gear Roll)", Callback = function() OpenGameUI("PetGearRollView") end })
+    GuiTab:CreateSection(" " .. Utils.t("sec_shops") .. " ")
+    GuiTab:CreateButton({ Name = Utils.t("btn_store"), Info = Utils.t("open_view_info"), Callback = function() OpenGameUI("StoreView") end })
+    GuiTab:CreateButton({ Name = Utils.t("btn_catcher_shop"), Info = Utils.t("open_view_info"), Callback = function() OpenGameUI("CatcherShopView") end })
+    GuiTab:CreateButton({ Name = Utils.t("btn_tower_shop"), Info = Utils.t("open_view_info"), Callback = function() OpenGameUI("TowerShopView") end })
+    GuiTab:CreateButton({ Name = Utils.t("btn_craft"), Info = Utils.t("open_view_info"), Callback = function() OpenGameUI("SyntheticView") end })
+    GuiTab:CreateButton({ Name = Utils.t("btn_abyss_shop"), Info = Utils.t("open_view_info"), Callback = function() OpenGameUI("AbyssShopView") end })
+    GuiTab:CreateButton({ Name = Utils.t("btn_pet_gear_roll"), Info = Utils.t("open_view_info"), Callback = function() OpenGameUI("PetGearRollView") end })
 
-    GuiTab:CreateSection(" HOẠT ĐỘNG & SỰ KIỆN ")
-    GuiTab:CreateButton({ Name = "📋 Bảng Nhiệm Vụ (Tasks)", Callback = function() OpenGameUI("TaskView") end })
-    GuiTab:CreateButton({ Name = "🎉 Trung Tâm Sự Kiện (Activity)", Callback = function() OpenGameUI("ActivityView") end })
-    
-    -- [THÊM MỚI]: Nút bấm sự kiện Trader Event (Mã sự kiện: 27)
-    --GuiTab:CreateButton({ 
-    --    Name = "🎪 Cửa Hàng Sự Kiện (Trader Event)", 
-    --    Callback = function() OpenGameUI("ActivityPrizePullView", 27) end 
-    --})
-    
-    --GuiTab:CreateButton({ Name = "🎁 Vòng Quay/Gacha (Gamble)", Callback = function() OpenGameUI("GambleRewardView") end })
-    GuiTab:CreateButton({ Name = "🏅 Nhiệm Vụ Sưu Tập (Collection/Medal)", Callback = function() OpenGameUI("MedalView") end })
-    GuiTab:CreateButton({ Name = "🏆 Thành Tựu (Achieve)", Callback = function() OpenGameUI("AchieveView") end })
+    GuiTab:CreateSection(" " .. Utils.t("sec_events") .. " ")
+    GuiTab:CreateButton({ Name = Utils.t("btn_tasks"), Info = Utils.t("open_view_info"), Callback = function() OpenGameUI("TaskView") end })
+    GuiTab:CreateButton({ Name = Utils.t("btn_activity"), Info = Utils.t("open_view_info"), Callback = function() OpenGameUI("ActivityView") end })
+    GuiTab:CreateButton({ Name = Utils.t("btn_medal"), Info = Utils.t("open_view_info"), Callback = function() OpenGameUI("MedalView") end })
+    GuiTab:CreateButton({ Name = Utils.t("btn_achieve"), Info = Utils.t("open_view_info"), Callback = function() OpenGameUI("AchieveView") end })
 
-    --GuiTab:CreateSection(" HỆ THỐNG ")
-    --GuiTab:CreateButton({ Name = "⚙️ Mở Cài Đặt Game (Settings)", Callback = function() OpenGameUI("SettingView") end })
-    --GuiTab:CreateButton({ Name = "🔑 Nhập Code (Code View)", Callback = function() OpenGameUI("CodeView") end })
-
-    GuiTab:CreateSection(" KHO TÀNG & TÁI CHẾ PET ")
-    GuiTab:CreateButton({ Name = "🏦 Kho Lưu Trữ Pet (Pet Vault)", Callback = function() OpenGameUI("PetVaultView") end })
-    GuiTab:CreateButton({ Name = "♻️ Tái Chế Pet (Pet Recycle)", Callback = function() OpenGameUI("PetRecycleView") end })
-    GuiTab:CreateButton({ Name = "📖 Sưu Tập Pet (Pet Collect)", Callback = function() OpenGameUI("PetCollectView") end })
-    GuiTab:CreateButton({ Name = "🐎 Quản Lý Thú Cưỡi (Pet Ride)", Callback = function() OpenGameUI("PetRideView") end })
-    GuiTab:CreateButton({ Name = "🔄 Chuyển Hóa Pet (Pet Transform)", Callback = function() OpenGameUI("PetTransformView") end })
+    GuiTab:CreateSection(" " .. Utils.t("sec_recycle") .. " ")
+    GuiTab:CreateButton({ Name = Utils.t("btn_pet_vault"), Info = Utils.t("open_view_info"), Callback = function() OpenGameUI("PetVaultView") end })
+    GuiTab:CreateButton({ Name = Utils.t("btn_pet_recycle"), Info = Utils.t("open_view_info"), Callback = function() OpenGameUI("PetRecycleView") end })
+    GuiTab:CreateButton({ Name = Utils.t("btn_pet_collect"), Info = Utils.t("open_view_info"), Callback = function() OpenGameUI("PetCollectView") end })
+    GuiTab:CreateButton({ Name = Utils.t("btn_pet_ride"), Info = Utils.t("open_view_info"), Callback = function() OpenGameUI("PetRideView") end })
+    GuiTab:CreateButton({ Name = Utils.t("btn_pet_transform"), Info = Utils.t("open_view_info"), Callback = function() OpenGameUI("PetTransformView") end })
 end
