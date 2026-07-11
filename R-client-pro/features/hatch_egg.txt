@@ -2,7 +2,7 @@
 -- MODULE: SMART AUTO HATCH V9.1 (MULTI-SELECT UPGRADE)
 -- ====================================================================
 return function(Window, Utils)
-    local EggTab = Window:CreateTab("Auto Hatch", "egg")
+    local EggTab = Window:CreateTab(Utils.t("auto_hatch_tab"), "egg")
 
     local hatchSettings = {
         autoStart = false,
@@ -29,7 +29,7 @@ return function(Window, Utils)
             for id, info in pairs(env.CfgEgg.Tmpls) do
                 local eId = tonumber(id)
                 if eId then
-                    local eName = info.Name or info.name or info.EggName or ("Egg " .. tostring(eId))
+                    local eName = info.Name or info.name or info.EggName or (Utils.t("egg_fallback_name") .. tostring(eId))
                     eName = string.gsub(eName, '"', '')
                     eName = string.gsub(eName, '\n', ' ')
                     local displayStr = eName .. " (ID: " .. eId .. ")"
@@ -44,8 +44,8 @@ return function(Window, Utils)
     end
 
     if not LoadEggData() or #eggOptions == 0 then
-        table.insert(eggOptions, "⚠️ Click Refresh to load list!")
-        eggIdMap["⚠️ Click Refresh to load list!"] = 1
+        table.insert(eggOptions, Utils.t("refresh_warning_name"))
+        eggIdMap[Utils.t("refresh_warning_name")] = 1
     end
     
     -- Khởi tạo giá trị mặc định cho mảng chọn
@@ -56,16 +56,16 @@ return function(Window, Utils)
     -- ==========================================
     -- GIAO DIỆN UI
     -- ==========================================
-    EggTab:CreateSection(" PET BAG STATUS ")
-    local BagStatusLabel = EggTab:CreateLabel("Pet Bag: Loading...")
+    EggTab:CreateSection(" " .. string.upper(Utils.t("bag_status")) .. " ")
+    local BagStatusLabel = EggTab:CreateLabel(Utils.t("bag_loading"))
 
-    EggTab:CreateSection(" INCUBATOR SETTINGS ")
+    EggTab:CreateSection(" " .. string.upper(Utils.t("unlocked_slots")) .. " ")
     EggTab:CreateSlider({
-        Name = "Unlocked Slots",
-        Info = "Set the number of incubator slots you have unlocked in-game.",
+        Name = Utils.t("unlocked_slots"),
+        Info = Utils.t("unlocked_slots_info"),
         Range = {1, 5},
         Increment = 1,
-        Suffix = " Slots",
+        Suffix = Utils.getLang() == "vi" and " Lò" or " Slots",
         CurrentValue = 1,
         Flag = "MaxIncubators",
         Callback = function(Value)
@@ -73,10 +73,10 @@ return function(Window, Utils)
         end,
     })
 
-    EggTab:CreateSection(" EGG SELECTION ")
+    EggTab:CreateSection(" " .. string.upper(Utils.t("select_eggs")) .. " ")
     local EggDropdown = EggTab:CreateDropdown({
-        Name = "Select Eggs",
-        Info = "Choose one or multiple types of eggs to hatch.",
+        Name = Utils.t("select_eggs"),
+        Info = Utils.t("select_eggs_info"),
         Options = eggOptions,
         CurrentOption = {eggOptions[1]},
         MultipleOptions = true, -- Bật tính năng chọn nhiều
@@ -93,8 +93,8 @@ return function(Window, Utils)
     })
 
     EggTab:CreateButton({
-        Name = "🔄 Refresh Egg List",
-        Info = "Reloads egg templates from the game config files.",
+        Name = Utils.t("refresh_eggs"),
+        Info = Utils.t("refresh_eggs_info"),
         Callback = function()
             eggOptions = {}
             eggIdMap = {}
@@ -104,28 +104,28 @@ return function(Window, Utils)
         end
     })
 
-    EggTab:CreateSection(" AUTOMATION ")
+    EggTab:CreateSection(" " .. string.upper(Utils.t("auto_hatch_tab")) .. " ")
     
     local ToggleStart = EggTab:CreateToggle({
-        Name = "Auto Start Hatching",
-        Info = "Automatically drops selected eggs into empty incubator slots.",
+        Name = Utils.t("auto_start"),
+        Info = Utils.t("auto_start_info"),
         CurrentValue = false,
         Flag = "AutoStartEgg",
         Callback = function(Value) hatchSettings.autoStart = Value end
     })
 
     local ToggleClaim = EggTab:CreateToggle({
-        Name = "Auto Claim Pets",
-        Info = "Automatically claims hatched pets once incubation finishes.",
+        Name = Utils.t("auto_claim"),
+        Info = Utils.t("auto_claim_info"),
         CurrentValue = false,
         Flag = "AutoClaimEgg",
         Callback = function(Value) hatchSettings.autoClaim = Value end
     })
 
-    EggTab:CreateSection(" SAFETY & LIMITS ")
+    EggTab:CreateSection(" " .. string.upper(Utils.t("stop_if_full")) .. " ")
     EggTab:CreateToggle({
-        Name = "Stop If Bag Full",
-        Info = "Automatically stops hatching when your pet inventory is full to prevent lost pets.",
+        Name = Utils.t("stop_if_full"),
+        Info = Utils.t("stop_if_full_info"),
         CurrentValue = true,
         Flag = "StopIfFull",
         Callback = function(Value) hatchSettings.stopIfBagFull = Value end
@@ -143,7 +143,7 @@ return function(Window, Utils)
                     local currentPets = type(realPetData.GetBagAmount) == "function" and realPetData.GetBagAmount(realPetData) or 0
                     local maxPets = type(realPetData.GetBagCapacity) == "function" and realPetData.GetBagCapacity(realPetData) or 0
                     
-                    BagStatusLabel:Set("Pet Bag: " .. currentPets .. " / " .. maxPets)
+                    BagStatusLabel:Set(Utils.t("bag_status") .. currentPets .. " / " .. maxPets)
                     
                     if hatchSettings.stopIfBagFull and currentPets >= maxPets and maxPets > 0 then
                         if hatchSettings.autoClaim or hatchSettings.autoStart then
@@ -151,7 +151,7 @@ return function(Window, Utils)
                             hatchSettings.autoStart = false
                             ToggleStart:Set(false)
                             ToggleClaim:Set(false)
-                            game.StarterGui:SetCore("SendNotification", {Title = "WARNING", Text = "Pet bag is FULL! Auto hatching disabled.", Duration = 5})
+                            game.StarterGui:SetCore("SendNotification", {Title = Utils.t("warning_title"), Text = Utils.t("bag_full_warning"), Duration = 5})
                         end
                     end
                 end)
