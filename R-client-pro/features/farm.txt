@@ -354,7 +354,7 @@ return function(Window, Utils)
 
     CamTab:CreateSection(" " .. Utils.t("sec_farm_combat") .. " ")
     CamTab:CreateToggle({
-        Name = Utils.t("dg_auto_attack"),
+        Name = Utils.t("auto_attack"),
         CurrentValue = false,
         Callback = function(V)
             AppState.autoAttack = V
@@ -362,7 +362,7 @@ return function(Window, Utils)
                 local charData = GetValidCharacterData()
                 if charData then AppState.tempFarmPosition = charData.Position end
                 if AppState.tpFarmEnabled then
-                    SendNotify(Utils.t("dg_auto_attack"), Utils.t("tp_farm_active_msg"))
+                    SendNotify(Utils.t("auto_attack"), Utils.t("tp_farm_active_msg"))
                 end
             else
                 AppState.tempFarmPosition = nil

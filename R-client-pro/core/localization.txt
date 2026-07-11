@@ -181,6 +181,9 @@ local Translations = {
     ["rift_rest_time"] = { en = "Rest Time Between Rounds (Mins)", vi = "Thời gian nghỉ giữa các vòng (Phút)" },
     ["rift_rest_time_info"] = { en = "Set how long to wait before starting the next scan cycle.", vi = "Thời gian chờ trước khi bắt đầu lượt quét tiếp theo." },
 
+    ["master_toggle"] = { en = "Master Switch", vi = "Công Tắc Tổng" },
+    ["auto_attack"] = { en = "Auto Attack", vi = "Tự Động Đánh Quái" },
+
     -- Auto Dungeon keys
     ["dungeon"] = { en = "Auto Dungeon", vi = "Hầm Ngục" },
     ["dg_status_off"] = { en = "AUTO DUNGEON IS OFF", vi = "AUTO DUNGEON ĐANG TẮT" },

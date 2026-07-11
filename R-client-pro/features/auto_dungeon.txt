@@ -108,7 +108,7 @@ return function(Window, Utils, WebhookModule)
     local DungeonStatus = DungeonTab:CreateLabel(Utils.t("dg_status_off"))
 
     DungeonTab:CreateToggle({
-        Name = Utils.t("rift_master_toggle"), -- master switch
+        Name = Utils.t("master_toggle"), -- master switch
         Info = Utils.t("dg_auto_attack_info"),
         CurrentValue = false, 
         Flag = "DungeonMasterBreaker",

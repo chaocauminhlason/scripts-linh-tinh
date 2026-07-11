@@ -11,7 +11,7 @@ getgenv().R_Client_Pro_Running = true
 -- KHỞI TẠO ĐƯỜNG DẪN (ĐỒNG BỘ NHÁNH VỚI MAIN.TXT)
 -- =================================================================
 -- [!] Thay đổi nhánh ở đây cho khớp với main.txt đang test
-local branch = "main" 
+local branch = "feature/refactor-auto-farm" 
 local repoUrl = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/" .. branch .. "/R-client-pro/"
 
 local mainScriptLink = repoUrl .. "main.txt"
