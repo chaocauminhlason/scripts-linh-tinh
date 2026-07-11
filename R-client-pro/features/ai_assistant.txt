@@ -119,7 +119,7 @@ return function(Window, Utils, WebhookModule)
     TitleLabel.Size = UDim2.new(1, -40, 1, 0)
     TitleLabel.Position = UDim2.new(0, 10, 0, 0)
     TitleLabel.BackgroundTransparency = 1
-    TitleLabel.Text = "🧠 Best Script | AI "--(L-Alt Ẩn/Hiện)
+    TitleLabel.Text = Utils.t("ai_title") --(L-Alt Ẩn/Hiện)
     TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     TitleLabel.Font = Enum.Font.GothamBold
     TitleLabel.TextSize = 13
@@ -154,7 +154,7 @@ return function(Window, Utils, WebhookModule)
     KeyInput.TextColor3 = Color3.fromRGB(200, 200, 200)
     KeyInput.Font = Enum.Font.Gotham
     KeyInput.TextSize = 12
-    KeyInput.PlaceholderText = GetSavedAPIKey() and "Key da luu" or "Nhap Gemini API Key..."
+    KeyInput.PlaceholderText = GetSavedAPIKey() and Utils.t("ai_key_saved") or Utils.t("ai_key_prompt")
     KeyInput.Text = ""
     KeyInput.ClearTextOnFocus = false
     KeyInput.Parent = MainFrame
@@ -163,7 +163,7 @@ return function(Window, Utils, WebhookModule)
     KeyInput.FocusLost:Connect(function()
         if KeyInput.Text ~= "" then
             SaveAPIKey(KeyInput.Text)
-            KeyInput.PlaceholderText = "Da cap nhat Key!"
+            KeyInput.PlaceholderText = Utils.t("saved_title") .. "!"
             KeyInput.Text = ""
         end
     end)
@@ -212,7 +212,7 @@ return function(Window, Utils, WebhookModule)
     OutputLabel.TextXAlignment = Enum.TextXAlignment.Left
     OutputLabel.TextYAlignment = Enum.TextYAlignment.Top
     OutputLabel.TextWrapped = true
-    OutputLabel.Text = "> He thong AI san sang..."
+    OutputLabel.Text = Utils.t("ai_system_ready")
     OutputLabel.Parent = OutputScroll
 
     -- FIX: auto-scroll output xuống cuối
@@ -245,7 +245,7 @@ return function(Window, Utils, WebhookModule)
     PromptInput.TextColor3 = Color3.fromRGB(255, 255, 255)
     PromptInput.Font = Enum.Font.Code
     PromptInput.TextSize = 13
-    PromptInput.PlaceholderText = "Nhap lenh (ho tro dan code nhieu dong)..."
+    PromptInput.PlaceholderText = Utils.t("ai_prompt_placeholder")
     PromptInput.PlaceholderColor3 = Color3.fromRGB(90, 90, 100)
     PromptInput.TextWrapped = true
     PromptInput.ClearTextOnFocus = false
@@ -288,7 +288,7 @@ return function(Window, Utils, WebhookModule)
     WebhookToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     WebhookToggleBtn.Font = Enum.Font.GothamBold
     WebhookToggleBtn.TextSize = 11
-    WebhookToggleBtn.Text = "Webhook Log: TAT"
+    WebhookToggleBtn.Text = Utils.t("ai_webhook_log") .. Utils.t("toggle_off")
     WebhookToggleBtn.Parent = MainFrame
     Instance.new("UICorner", WebhookToggleBtn).CornerRadius = UDim.new(0, 4)
 
@@ -299,7 +299,7 @@ return function(Window, Utils, WebhookModule)
             return
         end
         useWebhook = not useWebhook
-        WebhookToggleBtn.Text = useWebhook and "Webhook Log: BAT" or "Webhook Log: TAT"
+        WebhookToggleBtn.Text = Utils.t("ai_webhook_log") .. (useWebhook and Utils.t("toggle_on") or Utils.t("toggle_off"))
         WebhookToggleBtn.BackgroundColor3 = useWebhook and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(40, 40, 45)
     end)
 
@@ -311,7 +311,7 @@ return function(Window, Utils, WebhookModule)
     ClearBtn.TextColor3 = Color3.fromRGB(255, 180, 180)
     ClearBtn.Font = Enum.Font.GothamBold
     ClearBtn.TextSize = 11
-    ClearBtn.Text = "🗑 Xoa lich su hoi thoai"
+    ClearBtn.Text = "🗑 " .. Utils.t("ai_clear_history")
     ClearBtn.Parent = MainFrame
     Instance.new("UICorner", ClearBtn).CornerRadius = UDim.new(0, 4)
 
@@ -319,7 +319,7 @@ return function(Window, Utils, WebhookModule)
         conversationHistory = {}
         promptHistory = {}
         historyIndex = 0
-        OutputLabel.Text = "> Lich su da xoa. AI san sang tu dau."
+        OutputLabel.Text = Utils.t("ai_history_cleared")
         ScrollOutputToBottom()
     end)
 
@@ -331,7 +331,7 @@ return function(Window, Utils, WebhookModule)
     SubmitBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     SubmitBtn.Font = Enum.Font.GothamBold
     SubmitBtn.TextSize = 13
-    SubmitBtn.Text = "LẤY CODE TỪ AI"
+    SubmitBtn.Text = Utils.t("ai_get_code")
     SubmitBtn.Parent = MainFrame
     Instance.new("UICorner", SubmitBtn).CornerRadius = UDim.new(0, 4)
 
@@ -343,7 +343,7 @@ return function(Window, Utils, WebhookModule)
     ExecuteBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
     ExecuteBtn.Font = Enum.Font.GothamBold
     ExecuteBtn.TextSize = 13
-    ExecuteBtn.Text = "THUC THI CODE (Sau khi da doc)"
+    ExecuteBtn.Text = Utils.t("ai_execute_code")
     ExecuteBtn.Visible = false
     ExecuteBtn.Parent = MainFrame
     Instance.new("UICorner", ExecuteBtn).CornerRadius = UDim.new(0, 4)
@@ -355,7 +355,7 @@ return function(Window, Utils, WebhookModule)
     -- FIX: ResetSubmitButton phải reset isProcessing
     local function ResetSubmitButton()
         isProcessing = false
-        SubmitBtn.Text = "LAY CODE TU AI"
+        SubmitBtn.Text = Utils.t("ai_get_code")
         SubmitBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
     end
 
@@ -364,7 +364,7 @@ return function(Window, Utils, WebhookModule)
         ExecuteBtn.Visible = true
         ExecuteBtn.BackgroundColor3 = Color3.fromRGB(180, 80, 0)
         ExecuteBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        ExecuteBtn.Text = "THUC THI CODE (Sau khi da doc)"
+        ExecuteBtn.Text = Utils.t("ai_execute_code")
     end
 
     local function ResetExecuteButton()
@@ -388,10 +388,10 @@ return function(Window, Utils, WebhookModule)
 
     local function RequestAICode(userPrompt)
         local savedKey = GetSavedAPIKey()
-        if not savedKey then return false, "Chua co API Key." end
+        if not savedKey then return false, Utils.t("ai_err_no_key") end
 
         local reqFunc = request or http_request or (syn and syn.request)
-        if not reqFunc then return false, "Executor khong ho tro HTTP Request!" end
+        if not reqFunc then return false, Utils.t("ai_err_no_http") end
 
         local modelId = MODELS[currentModelIdx].id
         local API_URL = "https://generativelanguage.googleapis.com/v1beta/models/" .. modelId .. ":generateContent?key=" .. savedKey
@@ -428,18 +428,18 @@ return function(Window, Utils, WebhookModule)
         if not success then
             -- Rollback history nếu request fail
             table.remove(conversationHistory)
-            return false, "Loi ket noi API."
+            return false, Utils.t("ai_err_connect")
         end
 
         if response.StatusCode ~= 200 then
             table.remove(conversationHistory)
-            return false, "HTTP " .. tostring(response.StatusCode)
+            return false, Utils.t("ai_err_http") .. tostring(response.StatusCode)
         end
 
         local ok, data = pcall(function() return HttpService:JSONDecode(response.Body) end)
         if not ok then
             table.remove(conversationHistory)
-            return false, "Loi parse JSON."
+            return false, Utils.t("ai_err_json")
         end
 
         local part = data.candidates
@@ -450,7 +450,7 @@ return function(Window, Utils, WebhookModule)
 
         if not part then
             table.remove(conversationHistory)
-            return false, "API tra ve response rong."
+            return false, Utils.t("ai_err_empty")
         end
 
         -- Lưu response của model vào history
@@ -471,7 +471,7 @@ return function(Window, Utils, WebhookModule)
         local func, compileError = loadstring(code)
         if not func then
             logMsg = "Compile Error:\n" .. tostring(compileError)
-            OutputLabel.Text = OutputLabel.Text .. "\n\nLOI CU PHAP:\n" .. tostring(compileError)
+            OutputLabel.Text = OutputLabel.Text .. "\n\n" .. Utils.t("ai_compile_error") .. "\n" .. tostring(compileError)
             ScrollOutputToBottom()
             TrySendWebhookLog(prompt or "", logMsg)
             return
@@ -480,10 +480,10 @@ return function(Window, Utils, WebhookModule)
         local runSuccess, runtimeError = pcall(func)
         if runSuccess then
             logMsg = "OK:\n" .. code
-            OutputLabel.Text = OutputLabel.Text .. "\n\nTHUC THI THANH CONG"
+            OutputLabel.Text = OutputLabel.Text .. "\n\n" .. Utils.t("ai_execute_success")
         else
             logMsg = "Runtime Error:\n" .. tostring(runtimeError)
-            OutputLabel.Text = OutputLabel.Text .. "\n\nLOI RUNTIME:\n" .. tostring(runtimeError)
+            OutputLabel.Text = OutputLabel.Text .. "\n\n" .. Utils.t("ai_runtime_error") .. "\n" .. tostring(runtimeError)
         end
 
         ScrollOutputToBottom()
@@ -502,15 +502,15 @@ return function(Window, Utils, WebhookModule)
 
         isProcessing = true
         ResetExecuteButton()
-        SubmitBtn.Text = "DANG XU LY..."
+        SubmitBtn.Text = Utils.t("ai_processing")
         SubmitBtn.BackgroundColor3 = Color3.fromRGB(150, 100, 0)
-        OutputLabel.Text = "> Dang cho AI..."
+        OutputLabel.Text = Utils.t("ai_waiting")
         ScrollOutputToBottom()
 
         -- Timeout: isProcessing=false bên trong ResetSubmitButton → an toàn
         task.delay(API_TIMEOUT, function()
             if isProcessing then
-                OutputLabel.Text = "Timeout: API khong phan hoi sau " .. API_TIMEOUT .. "s"
+                OutputLabel.Text = Utils.t("ai_timeout_prefix") .. API_TIMEOUT .. "s"
                 ScrollOutputToBottom()
                 ResetSubmitButton()
             end
@@ -521,7 +521,7 @@ return function(Window, Utils, WebhookModule)
 
             if success then
                 rawCode = CleanCodeResponse(rawCode)
-                OutputLabel.Text = "-- DOC CODE TRUOC KHI CHAY --\n" .. rawCode
+                OutputLabel.Text = Utils.t("ai_read_code_warn") .. rawCode
                 CopyToClipboard(rawCode)
                 PromptInput.Text = ""
                 ScrollOutputToBottom()
@@ -531,13 +531,13 @@ return function(Window, Utils, WebhookModule)
                 historyIndex = #promptHistory + 1
 
                 SetExecuteButtonReady(rawCode)
-                SubmitBtn.Text = "DA LAY CODE"
+                SubmitBtn.Text = Utils.t("ai_got_code")
                 SubmitBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
             else
                 TrySendWebhookLog(prompt, "API Error: " .. tostring(rawCode))
-                OutputLabel.Text = "LOI:\n" .. tostring(rawCode)
+                OutputLabel.Text = Utils.t("ai_error_prefix") .. tostring(rawCode)
                 ScrollOutputToBottom()
-                SubmitBtn.Text = "LOI"
+                SubmitBtn.Text = Utils.t("ai_error")
                 SubmitBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
             end
 
@@ -545,7 +545,7 @@ return function(Window, Utils, WebhookModule)
 
             task.wait(2)
             if success then
-                SubmitBtn.Text = "LAY CODE TU AI"
+                SubmitBtn.Text = Utils.t("ai_get_code")
                 SubmitBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
             else
                 ResetSubmitButton()
@@ -561,7 +561,7 @@ return function(Window, Utils, WebhookModule)
         if not pendingCode then return end
         local codeToRun = pendingCode
         local lastPrompt = PromptInput.Text
-        ExecuteBtn.Text = "DANG CHAY..."
+        ExecuteBtn.Text = Utils.t("ai_running")
         task.spawn(function() ExecuteCode(codeToRun, lastPrompt) end)
     end)
 

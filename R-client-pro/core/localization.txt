@@ -276,7 +276,38 @@ local Translations = {
     ["tele_spot_title"] = { en = "Teleporting", vi = "Dịch chuyển" },
     ["tele_spot_success_msg"] = { en = "Successfully arrived at farm center!", vi = "Đã về tâm bãi farm thành công!" },
     ["tele_spot_flying_msg"] = { en = "Flying to farm center...", vi = "Đang bay về tâm bãi farm..." },
-    ["farm_not_saved_msg"] = { en = "Saved farm position not found!", vi = "Chưa lưu vị trí tâm bãi farm!" }
+    ["farm_not_saved_msg"] = { en = "Saved farm position not found!", vi = "Chưa lưu vị trí tâm bãi farm!" },
+
+    -- AI Assistant keys
+    ["ai_title"] = { en = "🧠 Catch A Monster | AI", vi = "🧠 Catch A Monster | AI" },
+    ["ai_key_saved"] = { en = "Saved Key", vi = "Key đã lưu" },
+    ["ai_key_prompt"] = { en = "Enter Gemini API Key...", vi = "Nhập Gemini API Key..." },
+    ["ai_prompt_placeholder"] = { en = "Enter command (supports multi-line code)...", vi = "Nhập lệnh (hỗ trợ dán code nhiều dòng)..." },
+    ["ai_system_ready"] = { en = "> AI System Ready...", vi = "> Hệ thống AI sẵn sàng..." },
+    ["toggle_on"] = { en = "ON", vi = "BẬT" },
+    ["toggle_off"] = { en = "OFF", vi = "T T" },
+    ["ai_webhook_log"] = { en = "Webhook Log: ", vi = "Nhật Ký Webhook: " },
+    ["ai_clear_history"] = { en = "Clear conversation history", vi = "Xóa lịch sử hội thoại" },
+    ["ai_history_cleared"] = { en = "> History cleared. AI reset.", vi = "> Lịch sử đã xóa. AI sẵn sàng từ đầu." },
+    ["ai_get_code"] = { en = "GET CODE FROM AI", vi = "LẤY CODE TỪ AI" },
+    ["ai_execute_code"] = { en = "EXECUTE CODE (Read first)", vi = "THỰC THI CODE (Sau khi đã đọc)" },
+    ["ai_processing"] = { en = "PROCESSING...", vi = "ĐANG XỬ LÝ..." },
+    ["ai_waiting"] = { en = "> Waiting for AI...", vi = "> Đang chờ AI..." },
+    ["ai_timeout_prefix"] = { en = "Timeout: No response from API after ", vi = "Hết giờ: API không phản hồi sau " },
+    ["ai_read_code_warn"] = { en = "-- REVIEW CODE BEFORE RUNNING --\n", vi = "-- ĐỌC CODE TRƯỚC KHI CHẠY --\n" },
+    ["ai_got_code"] = { en = "CODE RECEIVED", vi = "ĐÃ LẤY ĐƯỢC CODE" },
+    ["ai_error_prefix"] = { en = "ERROR:\n", vi = "LỖI:\n" },
+    ["ai_error"] = { en = "ERROR", vi = "LỖI" },
+    ["ai_running"] = { en = "RUNNING...", vi = "ĐANG CHẠY..." },
+    ["ai_compile_error"] = { en = "COMPILE ERROR:", vi = "LỖI CÚ PHÁP:" },
+    ["ai_execute_success"] = { en = "EXECUTED SUCCESSFULLY", vi = "THỰC THI THÀNH CÔNG" },
+    ["ai_runtime_error"] = { en = "RUNTIME ERROR:", vi = "LỖI RUNTIME:" },
+    ["ai_err_no_key"] = { en = "API Key is missing.", vi = "Chưa có API Key." },
+    ["ai_err_no_http"] = { en = "Executor does not support HTTP Requests!", vi = "Executor không hỗ trợ HTTP Request!" },
+    ["ai_err_connect"] = { en = "API connection error.", vi = "Lỗi kết nối API." },
+    ["ai_err_http"] = { en = "HTTP Error: ", vi = "Lỗi HTTP: " },
+    ["ai_err_json"] = { en = "JSON parsing error.", vi = "Lỗi parse JSON." },
+    ["ai_err_empty"] = { en = "API returned an empty response.", vi = "API trả về response rỗng." }
 }
 
 local currentLang = "en"
