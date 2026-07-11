@@ -77,7 +77,28 @@ local Translations = {
     ["btn_pet_recycle"] = { en = "♻️ Pet Recycle", vi = "♻️ Tái Chế Pet" },
     ["btn_pet_collect"] = { en = "📖 Pet Collection Book", vi = "📖 Sưu Tập Pet" },
     ["btn_pet_ride"] = { en = "🐎 Mounts Management", vi = "🐎 Quản Lý Thú Cưỡi" },
-    ["btn_pet_transform"] = { en = "🔄 Pet Transform", vi = "🔄 Chuyển Hóa Pet" }
+    ["btn_pet_transform"] = { en = "🔄 Pet Transform", vi = "🔄 Chuyển Hóa Pet" },
+
+    -- Server Manager keys
+    ["server_tab"] = { en = "Server Manager", vi = "Quản Lý Server" },
+    ["sec_session_info"] = { en = "SESSION INFO", vi = "THÔNG TIN PHIÊN LÀM VIỆC" },
+    ["active_time_label"] = { en = "Active Time: ", vi = "Thời gian treo máy: " },
+    ["sec_weather_hunt"] = { en = "VIP WEATHER HUNT", vi = "SĂN THỜI TIẾT VIP" },
+    ["select_weather"] = { en = "Select Target Weather", vi = "Chọn Thời Tiết Cần Săn" },
+    ["auto_weather_hop"] = { en = "Auto Weather Hop", vi = "Tự Động Nhảy Server Săn Thời Tiết" },
+    ["auto_weather_hop_info"] = { en = "Automatically hops servers until a target weather event is active.", vi = "Tự động nhảy server cho đến khi gặp thời tiết yêu cầu." },
+    ["sec_manual_control"] = { en = "MANUAL CONTROL", vi = "ĐIỀU KHIỂN THỦ CÔNG" },
+    ["btn_join_least"] = { en = "👤 Join Emptiest Server", vi = "👤 Vào Server Vắng Nhất" },
+    ["btn_join_least_info"] = { en = "Teleports to the public server with the lowest player count.", vi = "Chuyển sang server có số lượng người chơi ít nhất." },
+    ["btn_join_random"] = { en = "🔀 Join Random Server", vi = "🔀 Vào Server Ngẫu Nhiên" },
+    ["btn_join_random_info"] = { en = "Teleports to a random public server.", vi = "Chuyển sang một server ngẫu nhiên." },
+    ["btn_join_same"] = { en = "🔄 Rejoin Same Server", vi = "🔄 Kết Nối Lại Server" },
+    ["btn_join_same_info"] = { en = "Reconnects to your current game server (quick reset).", vi = "Vào lại chính server hiện tại để reset nhân vật." },
+    ["sec_anti_kick"] = { en = "ANTI-KICK SYSTEM", vi = "HỆ THỐNG CHỐNG AFK/KICK" },
+    ["auto_rejoin"] = { en = "Auto Rejoin on Kick", vi = "Tự Động Kết Nối Lại" },
+    ["auto_rejoin_info"] = { en = "Automatically reconnects to a new server if disconnected or kicked from the game.", vi = "Tự động kết nối lại vào server mới nếu bị mất kết nối hoặc bị kick." },
+    ["hop_least_msg"] = { en = "Teleporting to the emptiest server...", vi = "Đang nhảy qua server vắng nhất..." },
+    ["hop_random_msg"] = { en = "Teleporting to a random server...", vi = "Đang nhảy qua server ngẫu nhiên..." }
 }
 
 local currentLang = "en"

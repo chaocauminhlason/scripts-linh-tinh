@@ -57,12 +57,13 @@ return function(Window, Utils)
     }
 
     -- ==========================================
+    -- ==========================================
     -- GIAO DIỆN UI
     -- ==========================================
-    local ServerTab = Window:CreateTab("Server Manager", "server")
+    local ServerTab = Window:CreateTab(Utils.t("server_tab"), "server")
 
-    ServerTab:CreateSection("THÔNG TIN SESSION")
-    local SessionLabel = ServerTab:CreateLabel("Thời gian treo máy: 00:00:00")
+    ServerTab:CreateSection(" " .. Utils.t("sec_session_info") .. " ")
+    local SessionLabel = ServerTab:CreateLabel(Utils.t("active_time_label") .. "00:00:00")
 
     task.spawn(function()
         while task.wait(1) do
@@ -70,11 +71,11 @@ return function(Window, Utils)
             local hours = math.floor(diff / 3600)
             local minutes = math.floor((diff % 3600) / 60)
             local seconds = diff % 60
-            SessionLabel:Set(string.format("Thời gian treo máy: %02d:%02d:%02d", hours, minutes, seconds))
+            SessionLabel:Set(Utils.t("active_time_label") .. string.format("%02d:%02d:%02d", hours, minutes, seconds))
         end
     end)
 
-    ServerTab:CreateSection("TÌM KIẾM THỜI TIẾT VIP")
+    ServerTab:CreateSection(" " .. Utils.t("sec_weather_hunt") .. " ")
 
     local WeatherMap = {
         ["Ban Ngày (Day)"] = 10001, ["Ban Đêm (Night)"] = 10002, ["Nhiều Mây (Cloudy)"] = 20002,
@@ -85,7 +86,7 @@ return function(Window, Utils)
     }
 
     ServerTab:CreateDropdown({
-        Name = "Chọn Thời Tiết Cần Tìm",
+        Name = Utils.t("select_weather"),
         Options = {
             "Trời Mưa (Rainy)", "Trời Tuyết (Snowy)", "Cực Quang (Aurora)", "Sấm Sét (Lightning)",
             "🔴 Huyết Nguyệt (Blood Moon)", "🐉 Hoàng Hôn Rồng (Draconic Twilight)", 
@@ -106,7 +107,8 @@ return function(Window, Utils)
     })
 
     ServerTab:CreateToggle({
-        Name = "Tự Động Nhảy Server Săn Thời Tiết",
+        Name = Utils.t("auto_weather_hop"),
+        Info = Utils.t("auto_weather_hop_info"),
         CurrentValue = weatherHopSettings.enabled,
         Callback = function(Value) 
             weatherHopSettings.enabled = Value 
@@ -152,8 +154,8 @@ return function(Window, Utils)
                     
                     if targetId then
                         game.StarterGui:SetCore("SendNotification", {
-                            Title = "🚀 Server Hop", 
-                            Text = mode == "least" and "Đang nhảy qua server vắng nhất..." or "Đang nhảy qua server ngẫu nhiên...",
+                            Title = Utils.t("server_tab"), 
+                            Text = mode == "least" and Utils.t("hop_least_msg") or Utils.t("hop_random_msg"),
                             Duration = 5
                         })
                         TeleportService:TeleportToPlaceInstance(PlaceId, targetId, LocalPlayer)
@@ -168,26 +170,30 @@ return function(Window, Utils)
     -- ==========================================
     -- ĐIỀU KHIỂN THỦ CÔNG & ANTI-KICK
     -- ==========================================
-    ServerTab:CreateSection("ĐIỀU KHIỂN THỦ CÔNG")
+    ServerTab:CreateSection(" " .. Utils.t("sec_manual_control") .. " ")
 
     ServerTab:CreateButton({ 
-        Name = "👤 Join Server Least", 
+        Name = Utils.t("btn_join_least"), 
+        Info = Utils.t("btn_join_least_info"),
         Callback = function() ManualHop("least") end 
     })
     
     ServerTab:CreateButton({ 
-        Name = "🔀 Join Random Server", 
+        Name = Utils.t("btn_join_random"), 
+        Info = Utils.t("btn_join_random_info"),
         Callback = function() ManualHop("random") end 
     })
     
     ServerTab:CreateButton({ 
-        Name = "🔄 Join Same Server", 
+        Name = Utils.t("btn_join_same"), 
+        Info = Utils.t("btn_join_same_info"),
         Callback = function() TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer) end 
     })
 
-    ServerTab:CreateSection("ANTI-KICK")
+    ServerTab:CreateSection(" " .. Utils.t("sec_anti_kick") .. " ")
     ServerTab:CreateToggle({
-        Name = "Auto Rejoin If Kick",
+        Name = Utils.t("auto_rejoin"),
+        Info = Utils.t("auto_rejoin_info"),
         CurrentValue = autoRejoinEnabled, -- Đồng bộ từ Cache cứu vớt khi chuyển server
         Callback = function(Value) 
             autoRejoinEnabled = Value 
