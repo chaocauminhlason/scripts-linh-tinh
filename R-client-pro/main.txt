@@ -100,6 +100,12 @@ end
 local Utils = SafeLoad('core/utilities.txt')
 local Controller = SafeLoad('core/system_controller.txt')
 local WebhookModule = SafeLoad('core/webhook.txt')
+local Localization = SafeLoad('core/localization.txt')
+
+if Utils and Localization then
+    Utils.t = Localization.t
+    Utils.getLang = Localization.getLang
+end
 
 -- 2. Kéo các Features
 if Utils then

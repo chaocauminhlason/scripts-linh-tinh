@@ -1411,48 +1411,13 @@ function Utils.InitMonsterMemory()
 end
 
 
--- ====================================================================
--- MULTI-LANGUAGE SYSTEM (LOCALIZATION)
--- ====================================================================
-local Translations = {
-    -- Auto Hatch keys
-    ["auto_hatch_tab"] = { en = "Auto Hatch", vi = "Ấp Trứng" },
-    ["unlocked_slots"] = { en = "Unlocked Slots", vi = "Số Lò Ấp Mở Khóa" },
-    ["unlocked_slots_info"] = { en = "Set the number of incubator slots you have unlocked in-game.", vi = "Chọn số lượng lò ấp bạn đã mở khóa trong game để phân bổ." },
-    ["select_eggs"] = { en = "Select Eggs", vi = "Chọn Loại Trứng" },
-    ["select_eggs_info"] = { en = "Choose one or multiple types of eggs to hatch.", vi = "Chọn một hoặc nhiều loại trứng để tự động ấp." },
-    ["refresh_eggs"] = { en = "🔄 Refresh Egg List", vi = "🔄 Làm Mới Danh Sách" },
-    ["refresh_eggs_info"] = { en = "Reloads egg templates from the game config files.", vi = "Tải lại danh sách cấu hình trứng từ game." },
-    ["auto_start"] = { en = "Auto Start Hatching", vi = "Tự Động Bỏ Trứng" },
-    ["auto_start_info"] = { en = "Automatically drops selected eggs into empty incubator slots.", vi = "Tự động cho trứng đã chọn vào lò khi phát hiện lò trống." },
-    ["auto_claim"] = { en = "Auto Claim Pets", vi = "Tự Động Thu Hoạch" },
-    ["auto_claim_info"] = { en = "Automatically claims hatched pets once incubation finishes.", vi = "Tự động nhận pet sau khi ấp xong." },
-    ["stop_if_full"] = { en = "Stop If Bag Full", vi = "Dừng Khi Túi Đầy" },
-    ["stop_if_full_info"] = { en = "Automatically stops hatching when your pet inventory is full to prevent lost pets.", vi = "Tự động dừng ấp khi túi pet đầy để bảo vệ pet." },
-    ["bag_status"] = { en = "Pet Bag: ", vi = "Túi Pet: " },
-    ["bag_loading"] = { en = "Pet Bag: Loading...", vi = "Túi Pet: Đang tải..." },
-    ["bag_full_warning"] = { en = "Pet bag is FULL! Auto hatching disabled.", vi = "Túi Pet ĐẦY! Đã tự động ngắt Auto." },
-    ["warning_title"] = { en = "WARNING", vi = "CẢNH BÁO" },
-    ["egg_fallback_name"] = { en = "Egg ", vi = "Trứng " },
-    ["refresh_warning_name"] = { en = "⚠️ Click Refresh to load list!", vi = "⚠️ Bấm Refresh để tải danh sách!" }
-}
-
-local currentLang = "en"
-local locale = game:GetService("LocalizationService").RobloxLocaleId
-if locale and string.sub(string.lower(locale), 1, 2) == "vi" then
-    currentLang = "vi"
-end
-
+-- Fallback dịch thuật nếu không load được core/localization.txt
 function Utils.t(key)
-    local trans = Translations[key]
-    if trans then
-        return trans[currentLang] or trans["en"]
-    end
     return key
 end
 
 function Utils.getLang()
-    return currentLang
+    return "en"
 end
 
 -- Trả về bảng Utils
