@@ -41,7 +41,7 @@ local branch = "feature/refactor-auto-farm"
 -- BƯỚC 1: LẤY MÃ COMMIT MỚI NHẤT (CACHE BYPASS)
 -- ==========================================
 local targetRef = branch -- Mặc định dùng tên nhánh
-local commitUrl = "https://api.github.com/repos/chaocauminhlason/scripts-linh-tinh/commits/" .. branch
+local commitUrl = "https://api.github.com/repos/chaocauminhlason/scripts-linh-tinh/commits/" .. branch .. "?t=" .. tostring(os.time())
 
 local successApi, apiResult = pcall(function() return game:HttpGet(commitUrl) end)
 
