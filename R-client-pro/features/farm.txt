@@ -368,7 +368,7 @@ return function(Window, Utils)
                 AppState.tempFarmPosition = nil
             end
         end
-    end)
+    end})
     CamTab:CreateToggle({
         Name = Utils.t("farm_tp_toggle"),
         Info = Utils.t("farm_tp_toggle_info"),
