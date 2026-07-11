@@ -2,7 +2,7 @@
 -- MODULE: SMART AUTO HATCH V9.1 (MULTI-SELECT UPGRADE)
 -- ====================================================================
 return function(Window, Utils)
-    local EggTab = Window:CreateTab("Trứng & Ấp", "egg")
+    local EggTab = Window:CreateTab("Auto Hatch", "egg")
 
     local hatchSettings = {
         autoStart = false,
@@ -29,7 +29,7 @@ return function(Window, Utils)
             for id, info in pairs(env.CfgEgg.Tmpls) do
                 local eId = tonumber(id)
                 if eId then
-                    local eName = info.Name or info.name or info.EggName or ("Trứng " .. tostring(eId))
+                    local eName = info.Name or info.name or info.EggName or ("Egg " .. tostring(eId))
                     eName = string.gsub(eName, '"', '')
                     eName = string.gsub(eName, '\n', ' ')
                     local displayStr = eName .. " (ID: " .. eId .. ")"
@@ -44,8 +44,8 @@ return function(Window, Utils)
     end
 
     if not LoadEggData() or #eggOptions == 0 then
-        table.insert(eggOptions, "⚠️ Bấm Refresh để tải danh sách!")
-        eggIdMap["⚠️ Bấm Refresh để tải danh sách!"] = 1
+        table.insert(eggOptions, "⚠️ Click Refresh to load list!")
+        eggIdMap["⚠️ Click Refresh to load list!"] = 1
     end
     
     -- Khởi tạo giá trị mặc định cho mảng chọn
@@ -56,15 +56,16 @@ return function(Window, Utils)
     -- ==========================================
     -- GIAO DIỆN UI
     -- ==========================================
-    EggTab:CreateSection(" TRẠNG THÁI TÚI PET ")
-    local BagStatusLabel = EggTab:CreateLabel("Túi Pet: Đang tải...")
+    EggTab:CreateSection(" PET BAG STATUS ")
+    local BagStatusLabel = EggTab:CreateLabel("Pet Bag: Loading...")
 
-    EggTab:CreateSection(" CÀI ĐẶT LÒ ẤP ")
+    EggTab:CreateSection(" INCUBATOR SETTINGS ")
     EggTab:CreateSlider({
-        Name = "Số Lò Ấp Bạn Đã Mở Khóa",
+        Name = "Unlocked Slots",
+        Info = "Set the number of incubator slots you have unlocked in-game.",
         Range = {1, 5},
         Increment = 1,
-        Suffix = "Lò",
+        Suffix = " Slots",
         CurrentValue = 1,
         Flag = "MaxIncubators",
         Callback = function(Value)
@@ -72,9 +73,10 @@ return function(Window, Utils)
         end,
     })
 
-    EggTab:CreateSection(" CHỌN TRỨNG ")
+    EggTab:CreateSection(" EGG SELECTION ")
     local EggDropdown = EggTab:CreateDropdown({
-        Name = "Chọn Loại Trứng (Có thể chọn nhiều)",
+        Name = "Select Eggs",
+        Info = "Choose one or multiple types of eggs to hatch.",
         Options = eggOptions,
         CurrentOption = {eggOptions[1]},
         MultipleOptions = true, -- Bật tính năng chọn nhiều
@@ -91,7 +93,8 @@ return function(Window, Utils)
     })
 
     EggTab:CreateButton({
-        Name = "🔄 Làm Mới Danh Sách Trứng",
+        Name = "🔄 Refresh Egg List",
+        Info = "Reloads egg templates from the game config files.",
         Callback = function()
             eggOptions = {}
             eggIdMap = {}
@@ -101,25 +104,28 @@ return function(Window, Utils)
         end
     })
 
-    EggTab:CreateSection(" TỰ ĐỘNG HÓA ")
+    EggTab:CreateSection(" AUTOMATION ")
     
     local ToggleStart = EggTab:CreateToggle({
-        Name = "1. Tự Động Bỏ Trứng (Auto Start)",
+        Name = "Auto Start Hatching",
+        Info = "Automatically drops selected eggs into empty incubator slots.",
         CurrentValue = false,
         Flag = "AutoStartEgg",
         Callback = function(Value) hatchSettings.autoStart = Value end
     })
 
     local ToggleClaim = EggTab:CreateToggle({
-        Name = "2. Tự Động Thu Hoạch (Auto Claim)",
+        Name = "Auto Claim Pets",
+        Info = "Automatically claims hatched pets once incubation finishes.",
         CurrentValue = false,
         Flag = "AutoClaimEgg",
         Callback = function(Value) hatchSettings.autoClaim = Value end
     })
 
-    EggTab:CreateSection(" BẢO VỆ ")
+    EggTab:CreateSection(" SAFETY & LIMITS ")
     EggTab:CreateToggle({
-        Name = "Dừng ấp khi Túi đầy (An Toàn)",
+        Name = "Stop If Bag Full",
+        Info = "Automatically stops hatching when your pet inventory is full to prevent lost pets.",
         CurrentValue = true,
         Flag = "StopIfFull",
         Callback = function(Value) hatchSettings.stopIfBagFull = Value end
@@ -137,7 +143,7 @@ return function(Window, Utils)
                     local currentPets = type(realPetData.GetBagAmount) == "function" and realPetData.GetBagAmount(realPetData) or 0
                     local maxPets = type(realPetData.GetBagCapacity) == "function" and realPetData.GetBagCapacity(realPetData) or 0
                     
-                    BagStatusLabel:Set("Túi Pet: " .. currentPets .. " / " .. maxPets)
+                    BagStatusLabel:Set("Pet Bag: " .. currentPets .. " / " .. maxPets)
                     
                     if hatchSettings.stopIfBagFull and currentPets >= maxPets and maxPets > 0 then
                         if hatchSettings.autoClaim or hatchSettings.autoStart then
@@ -145,7 +151,7 @@ return function(Window, Utils)
                             hatchSettings.autoStart = false
                             ToggleStart:Set(false)
                             ToggleClaim:Set(false)
-                            game.StarterGui:SetCore("SendNotification", {Title = "CẢNH BÁO", Text = "Túi Pet ĐẦY! Đã tự động ngắt Auto.", Duration = 5})
+                            game.StarterGui:SetCore("SendNotification", {Title = "WARNING", Text = "Pet bag is FULL! Auto hatching disabled.", Duration = 5})
                         end
                     end
                 end)
