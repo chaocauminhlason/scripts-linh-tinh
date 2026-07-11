@@ -188,14 +188,15 @@ return function(Window, Utils)
     -- ==========================================
     -- GIAO DIỆN (UI)
     -- ==========================================
-    local BossTab = Window:CreateTab("Săn Boss", "skull")
+    local BossTab = Window:CreateTab(Utils.t("boss_tab"), "skull")
 
     -- [UI] SPECIAL BOSS
-    BossTab:CreateSection("🌟 AUTO SPECIAL BOSS")
-    local spStatusLabel = BossTab:CreateLabel("Trạng thái: Đang chờ tín hiệu...")
+    BossTab:CreateSection(" " .. Utils.t("sec_sp_boss") .. " ")
+    local spStatusLabel = BossTab:CreateLabel(Utils.t("sp_boss_idle"))
 
     BossTab:CreateToggle({
-        Name = "Auto Săn Special Boss",
+        Name = Utils.t("auto_sp_boss"),
+        Info = Utils.t("auto_sp_boss_info"),
         CurrentValue = false,
         Flag = "EnableSpecialBoss",
         Callback = function(isEnabled) 
@@ -210,15 +211,15 @@ return function(Window, Utils)
     local spAllowedWorldIds = {}
     for worldId in pairs(SPECIAL_BOSS_MAPPING) do table.insert(spAllowedWorldIds, worldId) end
     Utils.CreateFilteredAreaMultiSelect(BossTab, {
-        name = "Chọn Đảo Săn Special Boss",
+        name = Utils.t("select_sp_worlds"),
         flag = "SpBossWorldSelect",
         allowedIds = spAllowedWorldIds,
         callback = function(selectedIds) spSettings.selectedWorlds = selectedIds end,
     })
 
     -- [UI] WORLD BOSS
-    BossTab:CreateSection("🌍 AUTO WORLD BOSS")
-    local wbStatusLabel = BossTab:CreateLabel("Trạng thái: Đang chờ Sóng...")
+    BossTab:CreateSection(" " .. Utils.t("sec_wb_boss") .. " ")
+    local wbStatusLabel = BossTab:CreateLabel(Utils.t("wb_boss_idle"))
 
     local function StartWbHuntFromFirstWorld()
         wbHuntState.currentWorldIndex = 1
@@ -230,7 +231,8 @@ return function(Window, Utils)
     end
 
     BossTab:CreateToggle({
-        Name = "Auto Săn World Boss",
+        Name = Utils.t("auto_wb_boss"),
+        Info = Utils.t("auto_wb_boss_info"),
         CurrentValue = false,
         Flag = "EnableWorldBoss",
         Callback = function(isEnabled)
@@ -239,15 +241,15 @@ return function(Window, Utils)
                 if #wbSettings.selectedWorlds > 0 then
                     print("🌍 [WORLD BOSS] Đã nhận lệnh. Đang xin Hệ thống cấp cờ...")
                     StartWbHuntFromFirstWorld()
-                    wbStatusLabel:Set("⏳ Đang xin cờ SystemController...")
+                    wbStatusLabel:Set(Utils.t("boss_req_lock"))
                 else
                     print("⚠️ [WORLD BOSS] Chưa chọn đảo nào!")
-                    wbStatusLabel:Set("⚠️ Vui lòng chọn đảo để bắt đầu...")
+                    wbStatusLabel:Set(Utils.t("boss_no_world"))
                     wbHuntState.isActive = false
                 end
             else
                 wbHuntState.isActive = false
-                wbStatusLabel:Set("Trạng thái: Đã tắt")
+                wbStatusLabel:Set(Utils.t("tracker_stopped"))
                 TryReleaseLock()
             end
         end,
@@ -256,14 +258,15 @@ return function(Window, Utils)
     local wbAllowedWorldIds = {}
     for worldId in pairs(WORLD_BOSS_MAPPING) do table.insert(wbAllowedWorldIds, worldId) end
     Utils.CreateFilteredAreaMultiSelect(BossTab, {
-        name = "Chọn World boss",
+        name = Utils.t("select_wb_worlds"),
         flag = "WbBossWorldSelect",
         allowedIds = wbAllowedWorldIds,
         callback = function(selectedIds) wbSettings.selectedWorlds = selectedIds end,
     })
 
     BossTab:CreateToggle({
-        Name = "🔄 Auto Hop Server Săn Boss",
+        Name = Utils.t("auto_hop_boss"),
+        Info = Utils.t("auto_hop_boss_info"),
         CurrentValue = false,
         Flag = "WbAutoHop",
         Callback = function(isEnabled) wbSettings.autoHop = isEnabled end,
@@ -355,7 +358,7 @@ return function(Window, Utils)
                         spHuntState.engaged       = false
                         spHuntState.isActive      = true
                         spHuntState.timeoutAt     = os.time() + SP_HUNT_TIMEOUT_SECS
-                        spStatusLabel:Set("🚨 Bắt được tín hiệu: " .. currentText)
+                        spStatusLabel:Set(Utils.t("boss_signal") .. currentText)
                         return
                     end
                 end
@@ -371,7 +374,7 @@ return function(Window, Utils)
                             if #wbSettings.selectedWorlds > 0 then
                                 print("⚔️ [SÓNG WORLD BOSS] Kích hoạt càn quét (Tín hiệu: " .. currentText .. ")")
                                 StartWbHuntFromFirstWorld()
-                                wbStatusLabel:Set("🚨 Bắt đầu Sóng! Tiến đến đảo đầu tiên...")
+                                wbStatusLabel:Set(Utils.t("wb_wave_start"))
                             end
                         end
                     end
@@ -395,14 +398,14 @@ return function(Window, Utils)
             _G.PendingSpecialBoss = true
 
             if not TryAcquireLock() then 
-                spStatusLabel:Set("⏳ Đang chờ Hệ thống cấp cờ BossHunt...") 
+                spStatusLabel:Set(Utils.t("boss_req_lock")) 
                 continue 
             end
 
             if os.time() > spHuntState.timeoutAt then
                 local reason = spHuntState.engaged and ("☠️ Đã dọn xong: " .. spHuntState.targetBoss) or ("⏱️ Hết giờ tìm: " .. spHuntState.targetBoss)
                 spHuntState.isActive = false
-                spStatusLabel:Set("Trạng thái: " .. reason)
+                spStatusLabel:Set(Utils.t("status_prefix") .. reason)
                 print("[SPECIAL] " .. reason)
                 TryReleaseLock()
                 continue
@@ -419,7 +422,7 @@ return function(Window, Utils)
                     spHuntState.engaged = true
                 end
 
-                spStatusLabel:Set("⚔️ Đang tấn công: " .. boss.Name)
+                spStatusLabel:Set(Utils.t("boss_attacking") .. boss.Name)
                 local hrp = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
                 if hrp and boss.Position and (hrp.Position - boss.Position).Magnitude > MAX_ATTACK_DISTANCE then
                     SharedTeleportToBoss(hrp, boss.Position)
@@ -432,14 +435,14 @@ return function(Window, Utils)
                 spHuntState.timeoutAt = os.time() + SP_ATTACK_EXTEND_SECS
             else
                 if not spHuntState.hasTeleported then
-                    spStatusLabel:Set("🚀 Bay tới Đảo " .. tostring(spHuntState.targetWorldId))
+                    spStatusLabel:Set(Utils.t("boss_teleporting") .. tostring(spHuntState.targetWorldId))
                     spHuntState.hasTeleported = true
                     pcall(function() Utils.TeleportToArea(spHuntState.targetWorldId) end)
                     task.wait(SHARED_TELEPORT_WAIT)
                 else
                     scanLogCooldown += 1
                     if scanLogCooldown >= SP_SCAN_LOG_INTERVAL then scanLogCooldown = 0 end
-                    spStatusLabel:Set("⏳ Đang đợi " .. spHuntState.targetBoss .. " load...")
+                    spStatusLabel:Set(Utils.t("boss_waiting_spawn") .. spHuntState.targetBoss)
                 end
             end
         end
@@ -460,12 +463,12 @@ return function(Window, Utils)
 
             -- NHƯỜNG CỜ NỘI BỘ: Đợi Special đánh xong, mình không nhả cờ ra ngoài Hệ thống
             if spHuntState.isActive then
-                wbStatusLabel:Set("⏳ Đang nhường đường cho luồng Special...")
+                wbStatusLabel:Set(Utils.t("wb_yield_sp"))
                 continue
             end
 
             if not TryAcquireLock() then 
-                wbStatusLabel:Set("⏳ Đang chờ Hệ thống cấp cờ BossHunt...") 
+                wbStatusLabel:Set(Utils.t("boss_req_lock")) 
                 continue 
             end
 
@@ -480,7 +483,7 @@ return function(Window, Utils)
                     if not isWaveActive then SaveWbWaveEndTime() end
                 end
 
-                wbStatusLabel:Set("⚔️ Đang dọn: " .. boss.Name)
+                wbStatusLabel:Set(Utils.t("wb_defeating") .. boss.Name)
                 local hrp = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
                 if hrp and boss.Position and (hrp.Position - boss.Position).Magnitude > MAX_ATTACK_DISTANCE then
                     SharedTeleportToBoss(hrp, boss.Position)
@@ -491,14 +494,14 @@ return function(Window, Utils)
                 wbHuntState.scanAttempts = 0
             else
                 if not wbHuntState.hasTeleported then
-                    wbStatusLabel:Set("🚀 Đang bay qua Đảo " .. tostring(wbHuntState.currentWorldId))
+                    wbStatusLabel:Set(Utils.t("boss_teleporting") .. tostring(wbHuntState.currentWorldId))
                     pcall(function() Utils.TeleportToArea(wbHuntState.currentWorldId) end)
                     wbHuntState.hasTeleported = true
                     task.wait(SHARED_TELEPORT_WAIT)
                 else
                     wbHuntState.scanAttempts += 1
                     if wbHuntState.scanAttempts <= WB_SCAN_TIMEOUT_TICKS then
-                        wbStatusLabel:Set("🔎 Đang tìm quái... (" .. wbHuntState.scanAttempts .. "/" .. WB_SCAN_TIMEOUT_TICKS .. ")")
+                        wbStatusLabel:Set(Utils.t("wb_scanning") .. "(" .. wbHuntState.scanAttempts .. "/" .. WB_SCAN_TIMEOUT_TICKS .. ")")
                     else
                         local nextIndex = wbHuntState.currentWorldIndex + 1
                         local isWaveActive, timeLeft = ReadWbWaveTimer()
@@ -509,11 +512,11 @@ return function(Window, Utils)
                             local isWaveActive, timeLeft = ReadWbWaveTimer()
                             
                             if wbSettings.autoHop and isWaveActive then
-                                wbStatusLabel:Set("🔄 Xong vòng! Còn " .. math.floor(timeLeft) .. "s, đang đổi Server...")
+                                wbStatusLabel:Set(Utils.t("wb_loop_done_hop") .. math.floor(timeLeft) .. "s")
                                 print("🔄 [WORLD BOSS] Còn thời gian, gửi lệnh Hop Server...")
                                 if Utils.RequestHop then Utils.RequestHop("Boss_AutoHop", 2) end
                             else
-                                wbStatusLabel:Set("💤 Xong vòng. Đang chờ Sóng tiếp theo.")
+                                wbStatusLabel:Set(Utils.t("wb_loop_done_wait"))
                                 print("💤 [WORLD BOSS] Sóng kết thúc, dừng Hop.")
                                 
                                 wbLastWaveAlertTime = os.time() 

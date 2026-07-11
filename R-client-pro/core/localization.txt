@@ -116,7 +116,35 @@ local Translations = {
     ["btn_teleport_player_info"] = { en = "Teleports you directly to the selected player's current position.", vi = "Tốc biến thẳng đến vị trí người chơi được chọn." },
     ["listen_chat"] = { en = "Listen to '!f' Chat Command", vi = "Lắng Nghe Chat '!f'" },
     ["listen_chat_info"] = { en = "Automatically follows players if they chat '!f' in-game.", vi = "Tự động đi theo người chơi nếu họ gõ '!f' trong khung chat." },
-    ["tracker_not_found"] = { en = "Target player not found or offline!", vi = "Không tìm thấy người chơi mục tiêu!" }
+    ["tracker_not_found"] = { en = "Target player not found or offline!", vi = "Không tìm thấy người chơi mục tiêu!" },
+
+    -- Boss Hunt keys
+    ["boss_tab"] = { en = "Boss Hunt", vi = "Săn Boss" },
+    ["sec_sp_boss"] = { en = "🌟 AUTO SPECIAL BOSS", vi = "🌟 AUTO SPECIAL BOSS" },
+    ["sp_boss_idle"] = { en = "Status: Waiting for signal...", vi = "Trạng thái: Đang chờ tín hiệu..." },
+    ["auto_sp_boss"] = { en = "Auto Special Boss", vi = "Auto Săn Special Boss" },
+    ["auto_sp_boss_info"] = { en = "Automatically teleports to and fights Special Bosses when they spawn.", vi = "Tự động dịch chuyển đến và đánh Special Boss khi xuất hiện." },
+    ["select_sp_worlds"] = { en = "Select Special Boss Worlds", vi = "Chọn Đảo Săn Special Boss" },
+    ["sec_wb_boss"] = { en = "🌍 AUTO WORLD BOSS", vi = "🌍 AUTO WORLD BOSS" },
+    ["wb_boss_idle"] = { en = "Status: Waiting for Wave...", vi = "Trạng thái: Đang chờ Sóng..." },
+    ["auto_wb_boss"] = { en = "Auto World Boss", vi = "Auto Săn World Boss" },
+    ["auto_wb_boss_info"] = { en = "Automatically cycles through selected worlds to hunt active World Bosses.", vi = "Tự động đi quét các đảo đã chọn để săn World Boss đang hoạt động." },
+    ["boss_req_lock"] = { en = "⏳ Requesting System Controller lock...", vi = "⏳ Đang xin cờ SystemController..." },
+    ["boss_no_world"] = { en = "⚠️ Please select at least one world!", vi = "⚠️ Vui lòng chọn đảo để bắt đầu..." },
+    ["select_wb_worlds"] = { en = "Select World Boss Worlds", vi = "Chọn Đảo Săn World Boss" },
+    ["auto_hop_boss"] = { en = "Auto Hop Server", vi = "Tự Động Nhảy Server" },
+    ["auto_hop_boss_info"] = { en = "Automatically switches servers if no target bosses are active in selected worlds.", vi = "Tự động nhảy server khác nếu không tìm thấy Boss hoạt động ở các đảo đã chọn." },
+    ["boss_signal"] = { en = "🚨 Caught signal: ", vi = "🚨 Bắt được tín hiệu: " },
+    ["boss_attacking"] = { en = "⚔️ Attacking: ", vi = "⚔️ Đang tấn công: " },
+    ["boss_teleporting"] = { en = "🚀 Teleporting to Area ", vi = "🚀 Bay tới Đảo " },
+    ["boss_waiting_spawn"] = { en = "⏳ Waiting for spawn: ", vi = "⏳ Đang đợi load: " },
+    ["wb_wave_start"] = { en = "🚨 Wave started! Moving to first world...", vi = "🚨 Bắt đầu Sóng! Tiến đến đảo đầu tiên..." },
+    ["wb_yield_sp"] = { en = "⏳ Yielding for Special Boss hunt...", vi = "⏳ Đang nhường đường cho luồng Special..." },
+    ["wb_defeating"] = { en = "⚔️ Defeating: ", vi = "⚔️ Đang dọn: " },
+    ["wb_scanning"] = { en = "🔎 Scanning area... ", vi = "🔎 Đang tìm quái... " },
+    ["wb_loop_done_hop"] = { en = "🔄 Loop done! Time left: ", vi = "🔄 Xong vòng! Còn " },
+    ["wb_loop_done_wait"] = { en = "💤 Loop done. Waiting for next wave...", vi = "💤 Xong vòng. Đang chờ Sóng tiếp theo." },
+    ["status_prefix"] = { en = "Status: ", vi = "Trạng thái: " }
 }
 
 local currentLang = "en"
