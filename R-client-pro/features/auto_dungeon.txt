@@ -104,7 +104,7 @@ return function(Window, Utils, WebhookModule)
     -- ==========================================
     -- GIAO DIỆN UI (RAYFIELD TABS)
     -- ==========================================
-    local DungeonTab = Window:CreateTab("Hầm Ngục", 4483362458)
+    local DungeonTab = Window:CreateTab("Hầm Ngục", "shield")
     local DungeonStatus = DungeonTab:CreateLabel("AUTO DUNGEON ĐANG TẮT")
 
     DungeonTab:CreateToggle({
@@ -115,7 +115,7 @@ return function(Window, Utils, WebhookModule)
         end
     })
 
-    DungeonTab:CreateSection("LOGIC TRONG HẦM NGỤC")
+    DungeonTab:CreateSection("TRONG HẦM NGỤC")
     DungeonTab:CreateToggle({ Name = "Tự Động Đánh Quái", CurrentValue = false, Flag = "AutoAttack_V2", Callback = function(Value) autoAttackEnabled = Value end })
     DungeonTab:CreateToggle({ Name = "Tự Động Thoát Màn 20", CurrentValue = false, Flag = "AutoExitDungeon", Callback = function(Value) autoExitEnabled = Value if not Value then autoExitTriggered = false stage20ClockStarted = false waitingForHost = false end end })
     
@@ -124,14 +124,14 @@ return function(Window, Utils, WebhookModule)
         Callback = function(Value) waitHostTimeoutMinutes = Value end,
     })
 
-    DungeonTab:CreateSection("LOGIC NGOÀI SẢNH (LOBBY)")
+    DungeonTab:CreateSection("NGOÀI SẢNH (LOBBY)")
     DungeonTab:CreateToggle({ Name = "Tự Động Join Phòng", CurrentValue = false, Flag = "AutoJoinOthers", Callback = function(Value) autoJoinOthersEnabled = Value end })
     DungeonTab:CreateToggle({ Name = "Tự Động Tạo Phòng & Start", CurrentValue = false, Flag = "AutoCreateRoom", Callback = function(Value) autoCreateEnabled = Value end })
 
     DungeonTab:CreateDropdown({
-        Name = "Chọn Độ Khó", Options = {"1 (Normal)", "2 (Hard)", "3 (Nightmare)", "4 (Inferno)" }, CurrentOption = {"1 (Normal)"}, MultipleOptions = false, Flag = "DungeonDifficulty",
+        Name = "Chọn Độ Khó", Options = {"1 - Normal", "2 - Hard", "3 - Nightmare", "4 - Inferno" }, CurrentOption = {"1 - Normal"}, MultipleOptions = false, Flag = "DungeonDifficulty",
         Callback = function(Option)
-            if Option[1] == "1 (Normal)" then targetDifficulty = 1 elseif Option[1] == "2 (Hard)" then targetDifficulty = 2 elseif Option[1] == "3 (Nightmare)" then targetDifficulty = 3 elseif Option[1] == "4 (Inferno)" then targetDifficulty = 4 end
+            if Option[1] == "1 - Normal" then targetDifficulty = 1 elseif Option[1] == "2 - Hard" then targetDifficulty = 2 elseif Option[1] == "3 - Nightmare" then targetDifficulty = 3 elseif Option[1] == "4 - Inferno" then targetDifficulty = 4 end
         end,
     })
 
@@ -195,7 +195,7 @@ return function(Window, Utils, WebhookModule)
                                 if (not hum) or (hum and hum.Health > 0) then
                                     local pos = monster:IsA("Model") and monster.PrimaryPart and monster.PrimaryPart.Position or monster.Position
                                     local dist2D = math.sqrt((hrp.Position.X - pos.X)^2 + (hrp.Position.Z - pos.Z)^2)
-                                    if dist2D < closestDist2D then closestDist2D = dist2D bestTarget = monster end
+                                    if dist2D < closestDist2D and dist2D < 150 then closestDist2D = dist2D bestTarget = monster end
                                 end
                             end
                         end
@@ -290,7 +290,28 @@ return function(Window, Utils, WebhookModule)
                                         end
                                     end
                                 end
+                            elseif autoCreateEnabled then
+                                -- Bật Auto Create mà không bật Auto Join -> Dùng chìa khóa đi tiếp ngay tại đấy
+                                autoExitTriggered = true
+                                DungeonStatus:Set("Trạng thái: Boss gục, dùng chìa khóa đi tiếp...")
+                                task.spawn(function()
+                                    if WebhookModule and WebhookModule.SendNotification then
+                                        WebhookModule.SendNotification("**" .. LocalPlayer.Name .. "** hoàn thành 20/20 và đã tự động dùng chìa khóa đi tiếp!")
+                                    end
+                                end)
+                                
+                                pcall(function()
+                                    local args = { "AbyssRestartChannel" }
+                                    game:GetService("ReplicatedStorage"):WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc"):InvokeServer(unpack(args))
+                                end)
+                                
+                                task.wait(5) -- Đợi game dịch chuyển sang map mới
+                                autoExitTriggered = false
+                                stage20ClockStarted = false
+                                waitingForHost = false
+                                hostMissingTime = nil
                             else
+                                -- Không bật cả hai -> Thoát bình thường
                                 autoExitTriggered = true 
                                 DungeonStatus:Set("Trạng thái: Boss gục, chuẩn bị thoát...")
                                 task.spawn(function() if WebhookModule and WebhookModule.SendNotification then WebhookModule.SendNotification("**" .. LocalPlayer.Name .. "** vừa hoàn thành vòng Dungeon 20/20!") end end)
@@ -329,9 +350,6 @@ return function(Window, Utils, WebhookModule)
                     continue 
                 end
 
-                -- Lấy lại Lock khi chuẩn bị thao tác ngoài sảnh
-                if controller then controller.RequestLock("AutoDungeon") end
-
                 if autoJoinOthersEnabled or autoCreateEnabled then
                     pcall(function()
                         local wArea = Workspace:FindFirstChild("Area")
@@ -361,8 +379,10 @@ return function(Window, Utils, WebhookModule)
                                     local board = platform and platform:FindFirstChild("Board")
                                     local surfaceGui = board and board:FindFirstChild("SurfaceGui")
                                     
+                                    local isThisRoomMyRoom = false
                                     for k, _ in pairs(room:GetAttributes()) do
                                         if k == "Owner_" .. tostring(myUserId) then
+                                            isThisRoomMyRoom = true
                                             isMyRoom = true; myRoomNode = room; break
                                         end
                                     end
@@ -381,7 +401,7 @@ return function(Window, Utils, WebhookModule)
                                                     end
                                                 end
                                                 
-                                                if isMyRoom and dist < 25 then 
+                                                if isThisRoomMyRoom and dist < 25 then 
                                                     shouldJumpOut = true 
                                                     local leaveAth = room:FindFirstChild("LeaveAth") 
                                                     if leaveAth and leaveAth:IsA("Attachment") then jumpOutTarget = leaveAth.WorldPosition end
@@ -405,10 +425,48 @@ return function(Window, Utils, WebhookModule)
                                 end
                             end
 
+                            -- KIỂM TRA VÀ QUẢN LÝ CỜ KHÓA (MUTEX LOCK) CHO SẢNH
+                            local needLock = false
+                            if autoJoinOthersEnabled then
+                                -- Cần lock nếu chuẩn bị join phòng, hoặc đang ngồi phòng người khác (không bị gài chủ phòng)
+                                if (roomToJoin and not alreadyInSomeoneRoom) or (alreadyInSomeoneRoom and not shouldJumpOut) then
+                                    needLock = true
+                                end
+                            elseif autoCreateEnabled then
+                                if isMyRoom or isPreparingRoom or emptyRoomToCreate then
+                                    needLock = true
+                                end
+                            end
+
+                            if needLock then
+                                if controller then
+                                    local hasLock = controller.RequestLock("AutoDungeon")
+                                    if not hasLock and controller.CurrentLock ~= "AutoDungeon" then
+                                        DungeonStatus:Set("Sảnh: Chờ cấp cờ AutoDungeon...")
+                                        -- Hủy các lệnh di chuyển ở sảnh trong tick này
+                                        shouldJumpOut = false
+                                        roomToJoin = nil
+                                        isPreparingRoom = false
+                                        emptyRoomToCreate = nil
+                                    end
+                                end
+                            else
+                                -- Không cần thao tác, nhả cờ sảnh để module khác (Rift, Boss) chạy
+                                if controller and controller.CurrentLock == "AutoDungeon" then
+                                    controller.ReleaseLock("AutoDungeon")
+                                end
+                            end
+
                             -- THỰC THI HÀNH ĐỘNG SẢNH
                             if autoJoinOthersEnabled then
                                 DungeonStatus:Set("Sảnh: Đang tìm phòng có người...")
-                                if shouldJumpOut then if jumpOutTarget then hrp.CFrame = CFrame.new(jumpOutTarget + Vector3.new(0, 3, 0)) else hrp.CFrame = hrp.CFrame * CFrame.new(0, 0, 20) end task.wait(2)
+                                if shouldJumpOut then 
+                                    -- Giải phóng cờ ngay lập tức khi kích hoạt chức năng nhảy ra khỏi bục
+                                    if controller and controller.CurrentLock == "AutoDungeon" then
+                                        controller.ReleaseLock("AutoDungeon")
+                                        print("[AutoDungeon] 🔓 Bị gài chủ phòng! Nhảy ra khỏi bục và nhả cờ...")
+                                    end
+                                    if jumpOutTarget then hrp.CFrame = CFrame.new(jumpOutTarget + Vector3.new(0, 3, 0)) else hrp.CFrame = hrp.CFrame * CFrame.new(0, 0, 20) end task.wait(2)
                                 elseif roomToJoin and not alreadyInSomeoneRoom then hrp.CFrame = CFrame.new(roomToJoin) task.wait(3) end
 
                             elseif autoCreateEnabled then
@@ -501,6 +559,9 @@ return function(Window, Utils, WebhookModule)
                     end)
                 else
                     DungeonStatus:Set("Sảnh: Auto Join/Create đang tắt")
+                    if controller and controller.CurrentLock == "AutoDungeon" then
+                        controller.ReleaseLock("AutoDungeon")
+                    end
                 end
             end
         end

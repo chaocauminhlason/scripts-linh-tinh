@@ -21,10 +21,10 @@ return function(Window, Utils)
     end)
 
     -- TẠO GIAO DIỆN
-    local OptimizationTab = Window:CreateTab("Tối Ưu", 4483345998)
+    local OptimizationTab = Window:CreateTab("optimization", "zap")
 
     OptimizationTab:CreateToggle({ 
-        Name = "Chống AFK (Anti-Kick)", 
+        Name = "Anti AFK", 
         CurrentValue = true, -- Sửa giá trị này thành true
         Flag = "AntiAfk", 
         Callback = function(Value) antiAfkEnabled = Value end 
@@ -81,7 +81,7 @@ return function(Window, Utils)
 
     local StreamerTab = OptimizationTab
 
-StreamerTab:CreateSection("--- TÙY CHỈNH TÊN ---")
+StreamerTab:CreateSection(" TÙY CHỈNH TÊN ")
     local NameInput = StreamerTab:CreateInput({
         Name = "Tên hiển thị (Streamer Mode)",
         PlaceholderText = "Nhập tên giả...",

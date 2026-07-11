@@ -2,7 +2,7 @@
 -- MODULE: SMART AUTO HATCH V9.1 (MULTI-SELECT UPGRADE)
 -- ====================================================================
 return function(Window, Utils)
-    local EggTab = Window:CreateTab("Trứng & Ấp", 4483362458)
+    local EggTab = Window:CreateTab("Trứng & Ấp", "egg")
 
     local hatchSettings = {
         autoStart = false,
@@ -56,10 +56,10 @@ return function(Window, Utils)
     -- ==========================================
     -- GIAO DIỆN UI
     -- ==========================================
-    EggTab:CreateSection("--- TRẠNG THÁI TÚI PET ---")
+    EggTab:CreateSection(" TRẠNG THÁI TÚI PET ")
     local BagStatusLabel = EggTab:CreateLabel("Túi Pet: Đang tải...")
 
-    EggTab:CreateSection("--- CÀI ĐẶT LÒ ẤP ---")
+    EggTab:CreateSection(" CÀI ĐẶT LÒ ẤP ")
     EggTab:CreateSlider({
         Name = "Số Lò Ấp Bạn Đã Mở Khóa",
         Range = {1, 5},
@@ -72,7 +72,7 @@ return function(Window, Utils)
         end,
     })
 
-    EggTab:CreateSection("--- CHỌN TRỨNG ---")
+    EggTab:CreateSection(" CHỌN TRỨNG ")
     local EggDropdown = EggTab:CreateDropdown({
         Name = "Chọn Loại Trứng (Có thể chọn nhiều)",
         Options = eggOptions,
@@ -101,7 +101,7 @@ return function(Window, Utils)
         end
     })
 
-    EggTab:CreateSection("--- TỰ ĐỘNG HÓA ---")
+    EggTab:CreateSection(" TỰ ĐỘNG HÓA ")
     
     local ToggleStart = EggTab:CreateToggle({
         Name = "1. Tự Động Bỏ Trứng (Auto Start)",
@@ -117,7 +117,7 @@ return function(Window, Utils)
         Callback = function(Value) hatchSettings.autoClaim = Value end
     })
 
-    EggTab:CreateSection("--- BẢO VỆ ---")
+    EggTab:CreateSection(" BẢO VỆ ")
     EggTab:CreateToggle({
         Name = "Dừng ấp khi Túi đầy (An Toàn)",
         CurrentValue = true,

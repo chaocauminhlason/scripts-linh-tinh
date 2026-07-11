@@ -188,7 +188,7 @@ return function(Window, Utils)
     -- ==========================================
     -- GIAO DIỆN (UI)
     -- ==========================================
-    local BossTab = Window:CreateTab("Săn Boss", 4483345998)
+    local BossTab = Window:CreateTab("Săn Boss", "skull")
 
     -- [UI] SPECIAL BOSS
     BossTab:CreateSection("🌟 AUTO SPECIAL BOSS")

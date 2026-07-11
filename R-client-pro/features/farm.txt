@@ -38,6 +38,7 @@ return function(Window, Utils)
         attackDelay = 0.2,
         tpDistanceOffset = Vector3.new(0, 7, 0),
         savedFarmPosition = nil,
+        savedFarmAreaId = nil,
         tempFarmPosition = nil, -- Vị trí tạm thời khi bật farm mà không lưu vị trí
         targetMonsterNames = {}
     }
@@ -254,7 +255,10 @@ return function(Window, Utils)
     InitializeNetworkRemotes()
 
     local savedPosData = Utils.LoadJSON(ConfigFiles.Position)
-    if savedPosData then AppState.savedFarmPosition = CFrame.new(savedPosData.X, savedPosData.Y, savedPosData.Z) end
+    if savedPosData then 
+        AppState.savedFarmPosition = CFrame.new(savedPosData.X, savedPosData.Y, savedPosData.Z) 
+        AppState.savedFarmAreaId = savedPosData.AreaId
+    end
     AppState.targetMonsterNames = Utils.LoadJSON(ConfigFiles.Filter) or {}
 
     if _G.SystemController and type(_G.SystemController.registerModule) == "function" then
@@ -277,11 +281,11 @@ return function(Window, Utils)
     -- ==========================================
     -- 5. XÂY DỰNG GIAO DIỆN (UI BINDING)
     -- ==========================================
-    local CamTab = Window:CreateTab("Auto farm", 4483345998)
+    local CamTab = Window:CreateTab("Auto farm", "dumbbell")
     local MonsterDropdown = nil
 
     CamTab:CreateSection("ĐIỀU KHIỂN TỔNG")
-    CamTab:CreateButton({ Name = "🛑 STOP TẤT CẢ", Callback = function()
+    CamTab:CreateButton({ Name = "🛑 STOP ALL", Callback = function()
         if _G.SystemController then
             _G.SystemController.IsPaused = true
             for _, pauseFunc in pairs(_G.SystemController.Modules) do pcall(function() pauseFunc(true) end) end
@@ -289,7 +293,7 @@ return function(Window, Utils)
         end
     end})
     
-    CamTab:CreateButton({ Name = "▶️ RESUME TẤT CẢ", Callback = function()
+    CamTab:CreateButton({ Name = "▶️ RESUME ALL", Callback = function()
         if _G.SystemController then
             _G.SystemController.IsPaused = false
             for _, pauseFunc in pairs(_G.SystemController.Modules) do pcall(function() pauseFunc(false) end) end
@@ -305,7 +309,7 @@ return function(Window, Utils)
     UpdateUIFilterLabel()
 
     MonsterDropdown = CamTab:CreateDropdown({
-        Name = "Chọn quái farm (Multi-select)",
+        Name = "Chọn quái",
         Options = {"Tất cả quái"},
         CurrentOption = #AppState.targetMonsterNames > 0 and AppState.targetMonsterNames or {"Tất cả quái"},
         MultipleOptions = true,
@@ -322,7 +326,7 @@ return function(Window, Utils)
     CamTab:CreateButton({ Name = "🔍 Quét danh sách quái trên Map", Callback = function()
         task.spawn(function()
             local names = ScanAllUniqueMonsters()
-            if #names == 0 then return SendNotify("⚠️ Cảnh báo", "Không tìm thấy quái nào!") end
+            if #names == 0 then return SendNotify("⚠️ Cảnh báo", "Không tìm thấy quái!") end
 
             local finalOptions = {"Tất cả quái"}
             for _, name in ipairs(names) do table.insert(finalOptions, name) end
@@ -375,16 +379,80 @@ return function(Window, Utils)
     CamTab:CreateToggle({ Name = "Tự động về bãi Farm (Smart Return)", CurrentValue = false, Callback = function(V) AppState.autoReturnToFarm = V end })
 
     CamTab:CreateSection("TỌA ĐỘ VÀ ĐỊNH VỊ")
-    local initText = AppState.savedFarmPosition and string.format("📍 %d, %d, %d", math.floor(AppState.savedFarmPosition.Position.X), math.floor(AppState.savedFarmPosition.Position.Y), math.floor(AppState.savedFarmPosition.Position.Z)) or "📍 Chưa cấu hình"
-    local FarmPosLabel = CamTab:CreateLabel("Tâm bãi: " .. initText)
+    
+    local function GetAreaNameById(areaId)
+        if not areaId then return nil end
+        if type(areaId) == "string" then return areaId end
+        if Utils and type(Utils.GetAreaList) == "function" then
+            local list = Utils.GetAreaList()
+            for _, area in ipairs(list) do
+                if area.id == areaId then
+                    return area.name
+                end
+            end
+        end
+        return "Unknown (" .. tostring(areaId) .. ")"
+    end
+
+    local function GetFarmPosLabelText()
+        if not AppState.savedFarmPosition then return "📍 Chưa cấu hình" end
+        local pos = AppState.savedFarmPosition.Position
+        local areaName = GetAreaNameById(AppState.savedFarmAreaId)
+        if areaName then
+            return string.format("📍 %s | %d, %d, %d", areaName, math.floor(pos.X), math.floor(pos.Y), math.floor(pos.Z))
+        else
+            return string.format("📍 %d, %d, %d", math.floor(pos.X), math.floor(pos.Y), math.floor(pos.Z))
+        end
+    end
+
+    local FarmPosLabel = CamTab:CreateLabel("Tâm bãi: " .. GetFarmPosLabelText())
 
     CamTab:CreateButton({ Name = "💾 Lưu vị trí đang đứng làm tâm Farm", Callback = function()
         local charData = GetValidCharacterData()
         if charData then
             AppState.savedFarmPosition = charData.RootPart.CFrame
-            Utils.SaveJSON(ConfigFiles.Position, {X = charData.Position.X, Y = charData.Position.Y, Z = charData.Position.Z})
-            FarmPosLabel:Set(string.format("Tâm bãi: %d, %d, %d", math.floor(charData.Position.X), math.floor(charData.Position.Y), math.floor(charData.Position.Z)))
+            local currentAreaId = Utils.GetCurrentAreaId()
+            AppState.savedFarmAreaId = currentAreaId
+            
+            Utils.SaveJSON(ConfigFiles.Position, {
+                X = charData.Position.X, 
+                Y = charData.Position.Y, 
+                Z = charData.Position.Z,
+                AreaId = currentAreaId
+            })
+            
+            FarmPosLabel:Set("Tâm bãi: " .. GetFarmPosLabelText())
             SendNotify("💾 Đã Lưu", "Vị trí bãi farm đã được ghi nhớ!")
+        end
+    end})
+
+    CamTab:CreateButton({ Name = "🚀 Dịch chuyển về tâm bãi Farm", Callback = function()
+        if AppState.savedFarmPosition then
+            local charData = GetValidCharacterData()
+            if charData then
+                local currentAreaId = Utils.GetCurrentAreaId()
+                if AppState.savedFarmAreaId and currentAreaId ~= AppState.savedFarmAreaId then
+                    if type(AppState.savedFarmAreaId) == "string" then
+                        SendNotify("⚠️ Không thể chuyển vùng", "Không thể tự động chuyển vào phụ bản: " .. AppState.savedFarmAreaId)
+                        return
+                    end
+                    
+                    SendNotify("🔄 Chuyển World", "Đang tự động chuyển sang world đã lưu...")
+                    pcall(function() Utils.TeleportToArea(AppState.savedFarmAreaId) end)
+                    task.wait(6) -- Đợi 6 giây để map kịp tải dữ liệu
+                    
+                    charData = GetValidCharacterData()
+                    if charData then
+                        Utils.SafeTeleport(AppState.savedFarmPosition, 5)
+                        SendNotify("🚀 Dịch chuyển", "Đã về tâm bãi farm thành công!")
+                    end
+                else
+                    SendNotify("🚀 Dịch chuyển", "Đang bay về tâm bãi farm...")
+                    Utils.SafeTeleport(AppState.savedFarmPosition, 5)
+                end
+            end
+        else
+            SendNotify("⚠️ Lỗi", "Chưa lưu vị trí tâm bãi farm!")
         end
     end})
 

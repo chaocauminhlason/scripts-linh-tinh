@@ -59,7 +59,7 @@ return function(Window, Utils)
     -- ==========================================
     -- GIAO DIỆN UI
     -- ==========================================
-    local ServerTab = Window:CreateTab("Server Manager", 4483362458)
+    local ServerTab = Window:CreateTab("Server Manager", "server")
 
     ServerTab:CreateSection("THÔNG TIN SESSION")
     local SessionLabel = ServerTab:CreateLabel("Thời gian treo máy: 00:00:00")

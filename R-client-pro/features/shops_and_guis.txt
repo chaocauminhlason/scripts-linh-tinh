@@ -3,7 +3,7 @@
 -- ====================================================================
 return function(Window, Utils)
     -- Tạo một Tab mới trên giao diện Rayfield
-    local GuiTab = Window:CreateTab("Shops & GUIs", 4483362458) 
+    local GuiTab = Window:CreateTab("Shops & GUIs", "shopping-cart") 
 
     -- ==========================================
     -- HÀM XỬ LÝ CỐT LÕI (BYPASS UI)
@@ -67,10 +67,10 @@ return function(Window, Utils)
     GuiTab:CreateButton({ Name = "🎉 Trung Tâm Sự Kiện (Activity)", Callback = function() OpenGameUI("ActivityView") end })
     
     -- [THÊM MỚI]: Nút bấm sự kiện Trader Event (Mã sự kiện: 27)
-    GuiTab:CreateButton({ 
-        Name = "🎪 Cửa Hàng Sự Kiện (Trader Event)", 
-        Callback = function() OpenGameUI("ActivityPrizePullView", 27) end 
-    })
+    --GuiTab:CreateButton({ 
+    --    Name = "🎪 Cửa Hàng Sự Kiện (Trader Event)", 
+    --    Callback = function() OpenGameUI("ActivityPrizePullView", 27) end 
+    --})
     
     --GuiTab:CreateButton({ Name = "🎁 Vòng Quay/Gacha (Gamble)", Callback = function() OpenGameUI("GambleRewardView") end })
     GuiTab:CreateButton({ Name = "🏅 Nhiệm Vụ Sưu Tập (Collection/Medal)", Callback = function() OpenGameUI("MedalView") end })

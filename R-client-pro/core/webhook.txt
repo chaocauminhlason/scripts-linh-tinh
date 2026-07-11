@@ -40,7 +40,7 @@ end
 
 -- 2. HÀM TẠO GIAO DIỆN (Được gọi từ main.txt)
 function WebhookModule.InitTab(Window, Rayfield)
-    local WebhookTab = Window:CreateTab("Webhook", 4483362458)
+    local WebhookTab = Window:CreateTab("Webhook", "bell")
 
     WebhookTab:CreateSection(" THIẾT LẬP DISCORD WEBHOOK ")
 

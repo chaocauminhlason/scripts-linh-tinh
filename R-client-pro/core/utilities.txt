@@ -147,77 +147,99 @@ end
 -- LẤY AREA ID HIỆN TẠI (AN TOÀN / FALLBACK)
 -- ==========================================
 function Utils.GetCurrentAreaId()
-    -- Cách 1: Lấy từ MgrAreaClient của game
+    -- Kiểm tra các phụ bản đặc biệt trước (Abyss, Rift)
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if playerGui then
+        local mainGui = playerGui:FindFirstChild("MainGui")
+        local screenGui = mainGui and mainGui:FindFirstChild("ScreenGui")
+        if screenGui then
+            local abyssView = screenGui:FindFirstChild("AbyssMainTopView")
+            if abyssView and abyssView.Visible then
+                return "Abyss"
+            end
+            
+            local arenaView = screenGui:FindFirstChild("ArenaMainRightTopView")
+            if arenaView and arenaView.Visible then
+                return "Rift"
+            end
+        end
+    end
+
+    -- Cách 1: Lấy trực tiếp từ AreaSignShower của game (Độ chính xác 100%)
     local success, areaId = pcall(function()
         local env = getrenv and getrenv()._G and getrenv()._G.PathTool
-        return env and env.MgrAreaClient and tonumber(env.MgrAreaClient.CurAreaId)
+        if env and env.AreaSignShower and type(env.AreaSignShower.GetSelfAreaId) == "function" then
+            return tonumber(env.AreaSignShower.GetSelfAreaId())
+        end
     end)
     if success and areaId then return areaId end
 
-    -- Cách 2: Phân tích khoảng cách vật lý của nhân vật đến các Folder map
-    local areaFolder = Workspace:FindFirstChild("Area")
-    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    
-    if areaFolder and hrp then
-        local closestAreaId = nil
-        local minDist = math.huge
+    -- Cách 2: Phân tích khoảng cách vật lý làm phương án dự phòng (So khớp TeleKey trong CfgAreaRegion)
+    local success2, closestAreaId = pcall(function()
+        local env = getrenv and getrenv()._G and getrenv()._G.PathTool
+        local areaFolder = Workspace:FindFirstChild("Area")
+        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         
-        for _, folder in ipairs(areaFolder:GetChildren()) do
-            local idNum = nil
+        if env and env.CfgAreaRegion and env.CfgAreaRegion.Tmpls and areaFolder and hrp then
+            local minDist = math.huge
+            local bestId = nil
             
-            -- Thử lấy ID từ số trong tên folder (ví dụ: "island_6" -> 6)
-            local numStr = string.match(folder.Name, "(%d+)")
-            if numStr then
-                idNum = tonumber(numStr)
-            end
-            
-            -- Nếu không có số, so khớp tên với AreaMap
-            if not idNum then
-                local nameLower = folder.Name:lower()
-                if nameLower == "center" then
-                    idNum = 1
-                else
-                    for id, areaName in pairs(AreaMap) do
-                        local cleanName = areaName:lower()
-                            :gsub(" island", "")
-                            :gsub(" isle", "")
-                            :gsub(" grove", "")
-                            :gsub(" shallows", "")
-                            :gsub(" coast", "")
-                            :gsub(" haven", "")
-                        if string.find(nameLower, cleanName) or string.find(cleanName, nameLower) then
-                            idNum = id
+            for _, folder in ipairs(areaFolder:GetChildren()) do
+                local folderNameLower = folder.Name:lower()
+                local matchedId = nil
+                
+                -- Tìm Area ID tương ứng trong CfgAreaRegion.Tmpls dựa trên TeleKey
+                for id, tmpl in pairs(env.CfgAreaRegion.Tmpls) do
+                    if type(tmpl) == "table" and tmpl.TeleKey then
+                        local telePrefix = string.split(tmpl.TeleKey, ".")[1]
+                        if telePrefix and string.lower(telePrefix) == folderNameLower then
+                            matchedId = tonumber(id)
                             break
                         end
                     end
                 end
-            end
-            
-            if idNum then
-                -- Lấy vị trí đại diện của folder map
-                local folderPos = nil
-                if folder:IsA("BasePart") then
-                    folderPos = folder.Position
-                else
-                    local zone = folder:FindFirstChild("ServerZone") or folder:FindFirstChild("Area")
-                    local part = zone and zone:FindFirstChildWhichIsA("BasePart", true) or folder:FindFirstChildWhichIsA("BasePart", true)
-                    if part then
-                        folderPos = part.Position
+                
+                -- Fallback nếu không khớp được qua TeleKey
+                if not matchedId then
+                    if folderNameLower == "center" then
+                        matchedId = 1
+                    else
+                        -- Dự phòng so khớp gần đúng tên từ AreaMap
+                        for id, areaName in pairs(AreaMap) do
+                            local cleanName = areaName:lower()
+                                :gsub(" island", "")
+                                :gsub(" isle", "")
+                                :gsub(" grove", "")
+                                :gsub(" shallows", "")
+                                :gsub(" coast", "")
+                                :gsub(" haven", "")
+                            if string.find(folderNameLower, cleanName) or string.find(cleanName, folderNameLower) then
+                                matchedId = id
+                                break
+                            end
+                        end
                     end
                 end
                 
-                if folderPos then
-                    local dist = (hrp.Position - folderPos).Magnitude
-                    if dist < minDist then
-                        minDist = dist
-                        closestAreaId = idNum
+                if matchedId then
+                    local folderPos = nil
+                    pcall(function() folderPos = folder:GetPivot().Position end)
+                    if folderPos then
+                        local dist = (hrp.Position - folderPos).Magnitude
+                        if dist < minDist then
+                            minDist = dist
+                            bestId = matchedId
+                        end
                     end
                 end
             end
+            return bestId
         end
-        
-        if closestAreaId then return closestAreaId end
-    end
+    end)
+    if success2 and closestAreaId then return closestAreaId end
+
     return nil
 end
 

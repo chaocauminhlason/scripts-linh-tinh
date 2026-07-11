@@ -24,7 +24,7 @@ return function(Window, Utils)
         end)
     end
 
-    local MainTab = Window:CreateTab("Theo Dõi", 4483362458)
+    local MainTab = Window:CreateTab("Theo Dõi", "eye")
     local StatusLabel = MainTab:CreateLabel("Trạng thái: Đang nghỉ")
 
     local function GetPlayerNames()

@@ -26,7 +26,8 @@ return function(Window, Utils)
         currentIndex = 1,
         currentLoadedWorld = nil,
         isResting = false,
-        restEndTime = 0
+        restEndTime = 0,
+        lastDynamicActivityTime = 0
     }
 
     local targetRiftId, targetRiftKey = nil, nil
@@ -58,6 +59,7 @@ return function(Window, Utils)
         if not enable then 
             riftState = "SCANNING"
             targetRiftId = nil; targetRiftKey = nil; hasEncounteredMonsters = false
+            cycleState.lastDynamicActivityTime = 0
             if _G.SystemController then _G.SystemController.ReleaseLock("AutoRift") end
         end
     end
@@ -69,7 +71,7 @@ return function(Window, Utils)
     -- ==========================================
     -- GIAO DIỆN UI
     -- ==========================================
-    local RiftTab = Window:CreateTab("Auto Rift", 4483362458)
+    local RiftTab = Window:CreateTab("Auto Rift", "door-open")
     local RiftStatus = RiftTab:CreateLabel("STATUS: AUTO RIFT ĐANG TẮT")
     local ClearedLabel = RiftTab:CreateLabel("Rift đã dọn dẹp: 0")
     local CycleStatus = RiftTab:CreateLabel("🔄 Vòng lặp: Chưa bắt đầu")
@@ -84,7 +86,7 @@ return function(Window, Utils)
                 CycleStatus:Set("🔄 Vòng lặp: Đã dừng")
             else 
                 RiftStatus:Set("STATUS: ĐANG CHUẨN BỊ QUÉT...")
-                cycleState.currentIndex = 1; cycleState.currentLoadedWorld = nil; cycleState.isResting = false
+                cycleState.currentIndex = 1; cycleState.currentLoadedWorld = nil; cycleState.isResting = false; cycleState.lastDynamicActivityTime = 0
             end
         end
     })
@@ -109,9 +111,6 @@ return function(Window, Utils)
     RiftTab:CreateToggle({ Name = "Tự Động Nhảy Server (Bỏ qua nghỉ ngơi)", CurrentValue = false, Flag = "RiftAutoHop", Callback = function(Value) riftSettings.autoHop = Value end })
     RiftTab:CreateSlider({ Name = "Thời gian nghỉ giữa các vòng (Phút)", Range = {1, 60}, Increment = 1, CurrentValue = 5, Flag = "RiftRestTime", Callback = function(Value) riftSettings.restTimeMinutes = Value end })
 
-    RiftTab:CreateSection("CÔNG CỤ SỬA LỖI ")
-    RiftTab:CreateButton({ Name = "Ép vào Combat Mode (Fix lỗi kẹt)", Callback = function() riftState = "COMBAT"; hasEncounteredMonsters = false; RiftStatus:Set("STATUS: Đã ép Chiến Đấu!") end })
-    RiftTab:CreateButton({ Name = "Xóa Trí Nhớ Blacklist (Quét lại từ đầu)", Callback = function() completedRifts = {}; riftsClearedCount = 0; ClearedLabel:Set("Rift đã dọn dẹp: 0") end })
 
     -- ==========================================
     -- RADAR QUÉT QUÁI & HELPERS
@@ -171,6 +170,25 @@ return function(Window, Utils)
         return success and result or false
     end
 
+    local function IsMapFolderMatchingId(folderName, worldId)
+        if not worldId then return false end
+        local env = getrenv and getrenv()._G and getrenv()._G.PathTool
+        if env and env.CfgAreaRegion and env.CfgAreaRegion.Tmpls then
+            local tmpl = env.CfgAreaRegion.Tmpls[worldId] or env.CfgAreaRegion.Tmpls[tonumber(worldId)]
+            if tmpl and tmpl.TeleKey then
+                local telePrefix = string.split(tmpl.TeleKey, ".")[1]
+                if telePrefix and string.lower(telePrefix) == string.lower(folderName) then
+                    return true
+                end
+            end
+        end
+        if worldId == 1 and string.lower(folderName) == "center" then
+            return true
+        end
+        local num = tonumber(string.match(folderName, "(%d+)"))
+        return num == worldId
+    end
+
     -- Hàm dọn dẹp danh sách Rift đã đi qua bị hết hạn
     local function CleanExpiredRifts()
         local currentTime = os.time()
@@ -227,6 +245,11 @@ return function(Window, Utils)
         targetRiftKey = bestPortal.key
         targetExpireDuration = bestPortal.penalty
         if controller then controller.RequestLock("AutoRift") end
+
+        if string.match(targetRiftKey, "^Dyn_") then
+            cycleState.lastDynamicActivityTime = os.time()
+            print("[TEST-LOG] ⚡ Đã chốt mục tiêu Dynamic Rift: " .. tostring(targetRiftId) .. ". Cập nhật lastDynamicActivityTime.")
+        end
 
         print("[TEST-LOG] 🎯 Đã chốt mục tiêu: Rift " .. tostring(targetRiftId) .. ". Đang áp sát cổng...")
         RiftStatus:Set("STATUS: Đã khóa Rift: " .. tostring(targetRiftId) .. ". Đang vào...")
@@ -362,6 +385,10 @@ return function(Window, Utils)
             completedRifts[targetRiftKey] = os.time() + targetExpireDuration
             riftsClearedCount = riftsClearedCount + 1
             ClearedLabel:Set("Rift đã dọn dẹp: " .. riftsClearedCount)
+            if string.match(targetRiftKey, "^Dyn_") then
+                cycleState.lastDynamicActivityTime = os.time()
+                print("[TEST-LOG] ⚡ Đã dọn xong cổng Dynamic: " .. tostring(targetRiftKey) .. ". Cập nhật lastDynamicActivityTime.")
+            end
         end
         
         targetRiftId = nil
@@ -452,39 +479,56 @@ return function(Window, Utils)
 
                 if not riftSettings.scanDynamic and not riftSettings.scanStatic then task.wait(1); continue end
 
-                -- Chuyển world và chờ load map dữ liệu
-                local targetWorldId = riftSettings.selectedWorlds[cycleState.currentIndex]
-                if targetWorldId then
-                    if cycleState.currentLoadedWorld ~= targetWorldId then
-                        print("[TEST-LOG] Di chuyển sang World mới ID: " .. tostring(targetWorldId))
-                        pcall(function() Utils.TeleportToArea(targetWorldId) end)
-                        cycleState.currentLoadedWorld = targetWorldId
+                local shouldCycle = riftSettings.scanStatic
+                local currentTick = os.time()
+                local hasRecentDynamicActivity = (currentTick - cycleState.lastDynamicActivityTime) < 30
+
+                if shouldCycle and not hasRecentDynamicActivity then
+                    -- Chuyển world và chờ load map dữ liệu
+                    local targetWorldId = riftSettings.selectedWorlds[cycleState.currentIndex]
+                    if targetWorldId then
+                        if cycleState.currentLoadedWorld ~= targetWorldId then
+                            print("[TEST-LOG] Di chuyển sang World mới ID: " .. tostring(targetWorldId))
+                            pcall(function() Utils.TeleportToArea(targetWorldId) end)
+                            cycleState.currentLoadedWorld = targetWorldId
+                            
+                            print("[TEST-LOG] Bắt đầu đợi 7 giây cho Server nạp dữ liệu map (StreamingEnabled)...")
+                            task.wait(7) -- Thời gian nghỉ chống lag load map
+                            print("[TEST-LOG] Đợi load map xong, tiến hành quét cổng!")
+                            continue
+                        end
+                        CycleStatus:Set("🌍 Đang ở Map: " .. tostring(targetWorldId))
+                    else
+                        print("[TEST-LOG] Đã chạy hết danh sách World -> Bắt đầu nghỉ ngơi/Chuyển Server")
+                        cycleState.isResting = true
+                        cycleState.restEndTime = os.time() + (riftSettings.restTimeMinutes * 60)
+                        cycleState.currentLoadedWorld = nil
                         
-                        print("[TEST-LOG] Bắt đầu đợi 7 giây cho Server nạp dữ liệu map (StreamingEnabled)...")
-                        task.wait(7) -- Thời gian nghỉ chống lag load map
-                        print("[TEST-LOG] Đợi load map xong, tiến hành quét cổng!")
+                        -- Giải phóng cờ AutoRift trong suốt thời gian nghỉ
+                        if controller and controller.CurrentLock == "AutoRift" then
+                            controller.ReleaseLock("AutoRift")
+                            print("[TEST-LOG] 🔓 Đã nhả cờ AutoRift cho hệ thống (Vào trạng thái nghỉ)")
+                        end
                         continue
                     end
-                    CycleStatus:Set("🌍 Đang ở Map: " .. tostring(targetWorldId))
                 else
-                    print("[TEST-LOG] Đã chạy hết danh sách World -> Bắt đầu nghỉ ngơi/Chuyển Server")
-                    cycleState.isResting = true
-                    cycleState.restEndTime = os.time() + (riftSettings.restTimeMinutes * 60)
-                    cycleState.currentLoadedWorld = nil
+                    -- Không thực hiện world cycle, giữ nguyên map hiện tại
+                    local currentWorldId = Utils.GetCurrentAreaId() or cycleState.currentLoadedWorld or "Chưa xác định"
+                    cycleState.currentLoadedWorld = currentWorldId
                     
-                    -- Giải phóng cờ AutoRift trong suốt thời gian nghỉ
-                    if controller and controller.CurrentLock == "AutoRift" then
-                        controller.ReleaseLock("AutoRift")
-                        print("[TEST-LOG] 🔓 Đã nhả cờ AutoRift cho hệ thống (Vào trạng thái nghỉ)")
+                    if hasRecentDynamicActivity then
+                        local timeLeft = 30 - (currentTick - cycleState.lastDynamicActivityTime)
+                        CycleStatus:Set(string.format("⚡ Giữ Map (Farm Dynamic): %d giây", math.ceil(timeLeft)))
+                    else
+                        CycleStatus:Set("🌍 Chỉ quét Dynamic (Đang giữ Map: " .. tostring(currentWorldId) .. ")")
                     end
-                    continue
                 end
 
                 -- Làm sạch các Rift hết hạn blacklist
                 CleanExpiredRifts()
                 
                 local bestPortal, shortestDistance = nil, math.huge
-                print("[TEST-LOG] BẮT ĐẦU QUÉT RIFT TẠI MAP " .. tostring(targetWorldId) .. " ")
+                print("[TEST-LOG] BẮT ĐẦU QUÉT RIFT TẠI MAP " .. tostring(cycleState.currentLoadedWorld or "Chưa xác định") .. " ")
 
                 -- [MÁY QUÉT 1]: QUÉT DYNAMIC PORTALS
                 if riftSettings.scanDynamic then
@@ -498,16 +542,18 @@ return function(Window, Utils)
                     end
                 end
 
-                -- [MÁY QUÉT 2]: QUÉT STATIC PORTALS
-                if riftSettings.scanStatic and not bestPortal then
+                -- [MÁY QUÉT 2]: QUÉT STATIC PORTALS (Chỉ quét trong world hiện tại)
+                if riftSettings.scanStatic and not bestPortal and cycleState.currentLoadedWorld then
                     local areaFolder = Workspace:FindFirstChild("Area")
                     if areaFolder then
                         for _, mapFolder in pairs(areaFolder:GetChildren()) do
-                            local arDungeon = mapFolder:FindFirstChild("Area") and mapFolder.Area:FindFirstChild("Dungeon")
-                            if arDungeon then
-                                local statChildren = arDungeon:GetChildren()
-                                print("[TEST-LOG] Thấy thư mục Dungeon trong map " .. mapFolder.Name .. ". Số object: " .. #statChildren)
-                                bestPortal, shortestDistance = FindBestPortalFromList(statChildren, hrp, shortestDistance, bestPortal, "Stat_", "Cổng Static")
+                            if IsMapFolderMatchingId(mapFolder.Name, cycleState.currentLoadedWorld) then
+                                local arDungeon = mapFolder:FindFirstChild("Area") and mapFolder.Area:FindFirstChild("Dungeon")
+                                if arDungeon then
+                                    local statChildren = arDungeon:GetChildren()
+                                    print("[TEST-LOG] Thấy thư mục Dungeon trong map " .. mapFolder.Name .. ". Số object: " .. #statChildren)
+                                    bestPortal, shortestDistance = FindBestPortalFromList(statChildren, hrp, shortestDistance, bestPortal, "Stat_", "Cổng Static")
+                                end
                             end
                         end
                     else
@@ -519,10 +565,16 @@ return function(Window, Utils)
                 if bestPortal then
                     TryEnterRift(bestPortal, hrp, controller)
                 else
-                    print("[TEST-LOG] ⏩ Map này không có Rift hợp lệ -> Chuyển Map tiếp theo!")
-                    cycleState.currentIndex = cycleState.currentIndex + 1
-                    cycleState.currentLoadedWorld = nil 
-                    task.wait(0.5) 
+                    if shouldCycle and not hasRecentDynamicActivity then
+                        print("[TEST-LOG] ⏩ Map này không có Rift hợp lệ -> Chuyển Map tiếp theo!")
+                        cycleState.currentIndex = cycleState.currentIndex + 1
+                        cycleState.currentLoadedWorld = nil 
+                        task.wait(0.5) 
+                    else
+                        -- Đang giữ map để quét Dynamic hoặc không chạy Static cycle
+                        print("[TEST-LOG] Đang giữ map, đợi cổng xuất hiện...")
+                        task.wait(1.0)
+                    end
                 end
 
             elseif riftState == "COMBAT" then
