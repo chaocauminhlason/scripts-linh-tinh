@@ -19,7 +19,8 @@ return function(Window, Utils)
         scanStatic = true,
         autoHop = false,
         restTimeMinutes = 5,
-        selectedWorlds = {2,3,4,5,6} 
+        selectedWorlds = {2,3,4,5,6},
+        selectedColors = {"Blue", "Purple", "Red", "Green", "Yellow", "Pink"}
     }
     
     local cycleState = {
@@ -43,6 +44,7 @@ return function(Window, Utils)
     local catchCount = {} 
     
     local riftState = "SCANNING" 
+    local riftEntryPosition = nil
     local hasEncounteredMonsters = false 
 
     local DataPullFunc = nil
@@ -51,6 +53,9 @@ return function(Window, Utils)
         if Utils and Utils.LoadSelectedAreas then
             local savedWorlds = Utils.LoadSelectedAreas("R_SelectedRiftWorlds.json")
             if type(savedWorlds) == "table" and #savedWorlds > 0 then riftSettings.selectedWorlds = savedWorlds end
+            
+            local savedColors = Utils.LoadSelectedAreas("R_SelectedRiftColors.json")
+            if type(savedColors) == "table" and #savedColors > 0 then riftSettings.selectedColors = savedColors end
         end
     end)
 
@@ -58,6 +63,7 @@ return function(Window, Utils)
         riftSettings.enabled = enable
         if not enable then 
             riftState = "SCANNING"
+            riftEntryPosition = nil
             targetRiftId = nil; targetRiftKey = nil; hasEncounteredMonsters = false
             cycleState.lastDynamicActivityTime = 0
             if _G.SystemController then _G.SystemController.ReleaseLock("AutoRift") end
@@ -111,6 +117,66 @@ return function(Window, Utils)
         end
     })
 
+    local colorDisplayOptions = {
+        Utils.t("color_blue"),
+        Utils.t("color_purple"),
+        Utils.t("color_red"),
+        Utils.t("color_green"),
+        Utils.t("color_yellow"),
+        Utils.t("color_pink")
+    }
+
+    local displayToInternalColor = {
+        [Utils.t("color_blue")] = "Blue",
+        [Utils.t("color_purple")] = "Purple",
+        [Utils.t("color_red")] = "Red",
+        [Utils.t("color_green")] = "Green",
+        [Utils.t("color_yellow")] = "Yellow",
+        [Utils.t("color_pink")] = "Pink"
+    }
+
+    local internalToDisplayColor = {
+        ["Blue"] = Utils.t("color_blue"),
+        ["Purple"] = Utils.t("color_purple"),
+        ["Red"] = Utils.t("color_red"),
+        ["Green"] = Utils.t("color_green"),
+        ["Yellow"] = Utils.t("color_yellow"),
+        ["Pink"] = Utils.t("color_pink")
+    }
+
+    local currentDisplayOptions = {}
+    for _, internalColor in ipairs(riftSettings.selectedColors) do
+        local display = internalToDisplayColor[internalColor]
+        if display then
+            table.insert(currentDisplayOptions, display)
+        end
+    end
+    if #currentDisplayOptions == 0 then
+        currentDisplayOptions = {unpack(colorDisplayOptions)}
+    end
+
+    RiftTab:CreateDropdown({
+        Name = Utils.t("rift_select_colors"),
+        Info = Utils.t("rift_select_colors_info"),
+        Options = colorDisplayOptions,
+        CurrentOption = currentDisplayOptions,
+        MultipleOptions = true,
+        Flag = "RiftColorDropdown",
+        Callback = function(Options)
+            local selected = {}
+            for _, display in ipairs(Options) do
+                local internalColor = displayToInternalColor[display]
+                if internalColor then
+                    table.insert(selected, internalColor)
+                end
+            end
+            riftSettings.selectedColors = selected
+            if Utils and Utils.SaveSelectedAreas then
+                Utils.SaveSelectedAreas(selected, "R_SelectedRiftColors.json")
+            end
+        end,
+    })
+
     RiftTab:CreateToggle({ Name = Utils.t("rift_auto_hop"), Info = Utils.t("rift_auto_hop_info"), CurrentValue = false, Flag = "RiftAutoHop", Callback = function(Value) riftSettings.autoHop = Value end })
     RiftTab:CreateSlider({ Name = Utils.t("rift_rest_time"), Info = Utils.t("rift_rest_time_info"), Range = {1, 60}, Increment = 1, CurrentValue = 5, Flag = "RiftRestTime", Callback = function(Value) riftSettings.restTimeMinutes = Value end })
 
@@ -129,6 +195,14 @@ return function(Window, Utils)
                 if not root or not root:IsA("BasePart") then 
                     root = m:FindFirstChildWhichIsA("BasePart")
                     if not root then continue end
+                end
+
+                -- Chỉ nhắm mục tiêu quái vật trong bán kính 250 studs kể từ khi vào Rift
+                if riftEntryPosition then
+                    local distFromEntry = (riftEntryPosition - root.Position).Magnitude
+                    if distFromEntry > 250 then
+                        continue
+                    end
                 end
 
                 local id = tonumber(m.Name:match("Monster_(%d+)"))
@@ -204,17 +278,48 @@ return function(Window, Utils)
 
     -- Hàm dùng chung để lọc và chọn cổng Rift tốt nhất từ danh sách các object (Tránh trùng lặp code)
     local function FindBestPortalFromList(objects, hrp, shortestDistance, bestPortal, prefix, portalTypeLabel)
+        local env = getrenv and getrenv()._G and getrenv()._G.PathTool
+        local colorMap = {
+            ["Portal1"] = "Blue",
+            ["Portal2"] = "Purple",
+            ["Portal3"] = "Red",
+            ["Portal4"] = "Green",
+            ["Portal5"] = "Yellow",
+            ["Portal6"] = "Pink",
+            ["Portal7"] = "Purple"
+        }
+
         for _, obj in ipairs(objects) do
             local idStr = string.match(obj.Name, "Dungeon_(%d+)")
             if idStr then
                 local id = tonumber(idStr)
+                
+                -- Lọc theo màu sắc của cổng Rift
+                local tmplId = obj:GetAttribute("DungeonTmplId")
+                local tmpl = tmplId and env and env.CfgDungeon and env.CfgDungeon.Tmpls[tmplId]
+                local modelName = tmpl and tmpl.EnterModel
+                local color = modelName and colorMap[modelName] or "Blue"
+
+                local isColorSelected = false
+                for _, selColor in ipairs(riftSettings.selectedColors) do
+                    if selColor == color then
+                        isColorSelected = true
+                        break
+                    end
+                end
+
+                if not isColorSelected then
+                    print(string.format("[TEST-LOG] ❌ Bỏ qua: %s %s có màu %s không nằm trong danh sách chọn!", portalTypeLabel, idStr, color))
+                    continue
+                end
+
                 local properTeamId = obj:GetAttribute("DungeonStartTick")
                 if properTeamId and properTeamId > 0 then
                     local portalKey = prefix .. idStr .. "_" .. properTeamId
                     if not completedRifts[portalKey] then
                         local doorPos = GetPortalPosition(obj)
                         local dist = (hrp.Position - doorPos).Magnitude
-                        print(string.format("[TEST-LOG] ✅ HỢP LỆ: %s %s | Khoảng cách: %d", portalTypeLabel, idStr, math.floor(dist)))
+                        print(string.format("[TEST-LOG] ✅ HỢP LỆ: %s %s (Màu: %s) | Khoảng cách: %d", portalTypeLabel, idStr, color, math.floor(dist)))
                         
                         if dist < shortestDistance then
                             shortestDistance = dist
@@ -299,12 +404,14 @@ return function(Window, Utils)
                     dungeonStuckTimer = 0
                     hasEncounteredMonsters = false
                     riftState = "COMBAT"
+                    riftEntryPosition = checkHrp.Position
                 end
             else
                 print("[TEST-LOG] 🚀 VÀO RIFT THÀNH CÔNG ngay lập tức!")
                 dungeonStuckTimer = 0
                 hasEncounteredMonsters = false
                 riftState = "COMBAT"
+                riftEntryPosition = checkHrp.Position
             end
         end
     end
@@ -396,6 +503,7 @@ return function(Window, Utils)
         
         targetRiftId = nil
         targetRiftKey = nil
+        riftEntryPosition = nil
         targetExpireDuration = 300
         catchingMemory = {}
         catchCount = {} 
@@ -454,6 +562,7 @@ return function(Window, Utils)
 
             -- LOGIC QUÉT VÀ DI CHUYỂN MAP
             if riftState == "SCANNING" then
+                riftEntryPosition = nil
                 -- Xử lý thời gian nghỉ ngơi
                 if cycleState.isResting then
                     if riftSettings.autoHop and controller then

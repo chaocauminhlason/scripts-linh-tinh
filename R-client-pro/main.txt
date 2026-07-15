@@ -138,12 +138,15 @@ if Utils then
     local o = SafeLoad('features/optimization.txt')
     if o then o(Window, Utils) end
 
+    local ev = SafeLoad('features/auto_event.txt')
+    if ev then ev(Window, Utils) end
+
     local a = SafeLoad('features/ai_assistant.txt')
     if a then a(Window, Utils, WebhookModule) end
 end
 
 if WebhookModule and WebhookModule.InitTab then
-    WebhookModule.InitTab(Window, Rayfield)
+    WebhookModule.InitTab(Window, Rayfield, Utils)
 end
 
 Rayfield:LoadConfiguration()

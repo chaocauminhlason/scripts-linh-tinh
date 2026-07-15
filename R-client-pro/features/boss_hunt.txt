@@ -397,6 +397,11 @@ return function(Window, Utils)
             end
             _G.PendingSpecialBoss = true
 
+            if _G.IsSystemHealActive then
+                task.wait(0.5)
+                continue
+            end
+
             if not TryAcquireLock() then 
                 spStatusLabel:Set(Utils.t("boss_req_lock")) 
                 continue 
@@ -426,6 +431,7 @@ return function(Window, Utils)
                 local hrp = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
                 if hrp and boss.Position and (hrp.Position - boss.Position).Magnitude > MAX_ATTACK_DISTANCE then
                     SharedTeleportToBoss(hrp, boss.Position)
+                    task.wait(0.5)
                 end
 
                 task.wait(SP_ATTACK_WAIT)
@@ -461,6 +467,11 @@ return function(Window, Utils)
             end
             _G.PendingBossHunt = true
 
+            if _G.IsSystemHealActive then
+                task.wait(0.5)
+                continue
+            end
+
             -- NHƯỜNG CỜ NỘI BỘ: Đợi Special đánh xong, mình không nhả cờ ra ngoài Hệ thống
             if spHuntState.isActive then
                 wbStatusLabel:Set(Utils.t("wb_yield_sp"))
@@ -486,15 +497,29 @@ return function(Window, Utils)
                 wbStatusLabel:Set(Utils.t("wb_defeating") .. boss.Name)
                 local hrp = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
                 if hrp and boss.Position and (hrp.Position - boss.Position).Magnitude > MAX_ATTACK_DISTANCE then
+                    -- Kiểm tra lại xem Special Boss có chen ngang không trước khi teleport
+                    if spHuntState.isActive then
+                        wbStatusLabel:Set(Utils.t("wb_yield_sp"))
+                        continue
+                    end
                     SharedTeleportToBoss(hrp, boss.Position)
+                    task.wait(0.5)
                 end
 
+                if spHuntState.isActive then
+                    wbStatusLabel:Set(Utils.t("wb_yield_sp"))
+                    continue
+                end
                 Utils.AttackMonster(boss.Id)
                 task.wait(WB_ATTACK_INTERVAL)
                 wbHuntState.scanAttempts = 0
             else
                 if not wbHuntState.hasTeleported then
                     wbStatusLabel:Set(Utils.t("boss_teleporting") .. tostring(wbHuntState.currentWorldId))
+                    if spHuntState.isActive then
+                        wbStatusLabel:Set(Utils.t("wb_yield_sp"))
+                        continue
+                    end
                     pcall(function() Utils.TeleportToArea(wbHuntState.currentWorldId) end)
                     wbHuntState.hasTeleported = true
                     task.wait(SHARED_TELEPORT_WAIT)

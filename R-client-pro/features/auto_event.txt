@@ -1,0 +1,488 @@
+-- ====================================================================
+-- MODULE: SMART AUTO EVENT SYSTEM V2.0 (Abuse Eggs, Chests, Robbery & Quizzes)
+-- ====================================================================
+return function(Window, Utils)
+    local Players = game:GetService("Players")
+    local Workspace = game:GetService("Workspace")
+    local VirtualInputManager = game:GetService("VirtualInputManager")
+    
+    local LocalPlayer = Players.LocalPlayer
+
+    local eventSettings = {
+        enabled = false,
+        xrayEnabled = false,
+        priorityMode = "Smart Scoring",
+        weightEgg = 80,
+        weightChest = 100,
+        weightGem = 50,
+        weightGold = 1
+    }
+
+    local claimedCache = {}
+
+    -- UI TAB
+    local EventTab = Window:CreateTab(Utils.t("auto_event"), "calendar")
+    
+    EventTab:CreateParagraph({
+        Title = "💡 " .. Utils.t("event_guide_title"),
+        Content = Utils.t("event_guide_content")
+    })
+    
+    -- LIVE HUD AT TOP
+    EventTab:CreateSection(" " .. Utils.t("hud_obby_title") .. " ")
+    local LiveHud = EventTab:CreateParagraph({
+        Title = "📡 Đang chờ sự kiện bắt đầu...",
+        Content = ""
+    })
+    
+    local EventStatus = EventTab:CreateLabel(Utils.t("event_status_idle"))
+
+    -- CONTROLS
+    EventTab:CreateSection(" " .. Utils.t("sec_event_controls") .. " ")
+    EventTab:CreateToggle({
+        Name = Utils.t("auto_event_toggle"),
+        Info = Utils.t("auto_event_info"),
+        CurrentValue = false,
+        Flag = "AutoClaimEventItems",
+        Callback = function(Value)
+            eventSettings.enabled = Value
+            if not Value then
+                EventStatus:Set(Utils.t("event_status_idle"))
+                LiveHud:Set({ Title = "📡 Đang chờ sự kiện bắt đầu...", Content = "" })
+            else
+                EventStatus:Set(Utils.t("event_status_farming"))
+            end
+        end
+    })
+
+    EventTab:CreateToggle({
+        Name = Utils.t("event_xray_toggle"),
+        Info = Utils.t("event_xray_info"),
+        CurrentValue = false,
+        Flag = "EventXrayPreview",
+        Callback = function(Value)
+            eventSettings.xrayEnabled = Value
+            if not Value then
+                pcall(function()
+                    for _, v in ipairs(Workspace:GetDescendants()) do
+                        if v.Name == "EventXrayBillboard" then
+                            v:Destroy()
+                        end
+                    end
+                end)
+            end
+        end
+    })
+
+
+
+    -- Helper to check thread-identity bypass
+    local get_thread_id = getthreadcontext or getthreadidentity or getidentity or (syn and syn.get_thread_identity)
+    local set_thread_id = setthreadcontext or setthreadidentity or setidentity or (syn and syn.set_thread_identity)
+
+    local function getEventClaimables()
+        local list = {}
+        for _, v in ipairs(Workspace:GetDescendants()) do
+            pcall(function()
+                if v:IsA("Model") or v:IsA("BasePart") then
+                    local obbyId = v:GetAttribute("ObbyId")
+                    local rewardIdx = v:GetAttribute("RewardIndex")
+                    if obbyId and rewardIdx then
+                        table.insert(list, {
+                            type = "SpaceReward",
+                            object = v,
+                            obbyId = obbyId,
+                            rewardIndex = rewardIdx,
+                            pos = v:GetPivot().Position
+                        })
+                        return
+                    end
+                    
+                    local robberyIndex = v:GetAttribute("Index")
+                    local eventKey = v:GetAttribute("EventKey")
+                    if robberyIndex and eventKey then
+                        table.insert(list, {
+                            type = "Robbery",
+                            object = v,
+                            index = robberyIndex,
+                            eventKey = eventKey,
+                            pos = v:GetPivot().Position
+                        })
+                        return
+                    end
+                    
+                    if string.match(v.Name, "^PET_baoxiang") then
+                        table.insert(list, {
+                            type = "Baoxiang",
+                            object = v,
+                            pos = v:GetPivot().Position
+                        })
+                        return
+                    end
+                    
+                    if v.Name == "AbuseEgg" or v.Name == "Abuse Egg" or v.Name == "xmas admin" then
+                        table.insert(list, {
+                            type = "EventEgg",
+                            object = v,
+                            pos = v:GetPivot().Position
+                        })
+                        return
+                    end
+                end
+            end)
+        end
+        return list
+    end
+
+    local function getHrp()
+        local char = LocalPlayer.Character
+        return char and char:FindFirstChild("HumanoidRootPart")
+    end
+
+    local function formatReward(rewardList)
+        if not rewardList or #rewardList == 0 then return "Không có quà" end
+        local parts = {}
+        for _, item in ipairs(rewardList) do
+            local res = item.RewardRes
+            local count = item.Count or item.Amount or 1
+            if res == "Egg" then
+                table.insert(parts, "Trứng (ID " .. tostring(item.TmplId) .. ") x" .. tostring(count))
+            elseif res == "TreasureBox" then
+                table.insert(parts, "Rương (ID " .. tostring(item.TmplId) .. ") x" .. tostring(count))
+            elseif res == "Value" then
+                local name = (item.ValueType == "HuoBi_3" and "Kim Cương") or (item.ValueType == "HuoBi_1" and "Vàng") or item.ValueType
+                table.insert(parts, name .. " x" .. tostring(count))
+            else
+                table.insert(parts, tostring(res) .. " x" .. tostring(count))
+            end
+        end
+        return table.concat(parts, ", ")
+    end
+
+    local function getRewardPriorityScore(rewardList)
+        if not rewardList then return 0 end
+        local totalScore = 0
+        for _, item in ipairs(rewardList) do
+            local res = item.RewardRes
+            local count = item.Count or item.Amount or 1
+            local typeScore = 1
+            
+            if res == "Egg" then
+                typeScore = eventSettings.weightEgg
+            elseif res == "TreasureBox" then
+                typeScore = eventSettings.weightChest
+            elseif res == "PetExpItem" or res == "CommonItem" then
+                typeScore = 30
+            elseif res == "Value" then
+                local vt = item.ValueType
+                if vt == "HuoBi_3" then -- Gems
+                    typeScore = eventSettings.weightGem
+                elseif vt == "HuoBi_13" then
+                    typeScore = eventSettings.weightGem * 0.8
+                elseif vt == "HuoBi_1" then -- Gold
+                    typeScore = eventSettings.weightGold * 0.001
+                else
+                    typeScore = 10
+                end
+            end
+            
+            totalScore = totalScore + (typeScore * count)
+        end
+        return totalScore
+    end
+
+    local function getNewSelectPartScore(part, CfgNewSelect)
+        local selectKey = part:GetAttribute("SelectKey")
+        local selectType = part:GetAttribute("SelectType")
+        if selectKey and selectType and CfgNewSelect then
+            local selectData = CfgNewSelect[selectKey]
+            local selectInfo = selectData and selectData.SelectInfo and selectData.SelectInfo[tostring(selectType)]
+            if selectInfo and selectInfo.Reward then
+                return getRewardPriorityScore(selectInfo.Reward), selectInfo.Reward
+            end
+        end
+        return 0, nil
+    end
+
+    -- Core Loop
+    task.spawn(function()
+        while task.wait(0.5) do
+            if not eventSettings.enabled then continue end
+            
+            local hrp = getHrp()
+            if not hrp then continue end
+            
+            -- ƯU TIÊN 1: KIỂM TRA SỰ KIỆN LỰA CHỌN (Q&A / CHỌN HÌNH ĐÚNG) ĐANG DIỄN RA
+            local obbyFolder = Workspace:FindFirstChild("ObbyEventFolder")
+            local activeObbyPart = nil
+            
+            if obbyFolder then
+                local env = getrenv()._G.PathTool
+                
+                -- 1. Kiểm tra QAFolder (Chọn vòng tròn Q&A)
+                local qaFolder = obbyFolder:FindFirstChild("QAFolder")
+                if qaFolder and #qaFolder:GetChildren() > 0 then
+                    local CfgQA = env and env.CfgQA
+                    local activeKey = nil
+                    local qText = "Đang diễn ra"
+                    local choices = {}
+                    
+                    for _, part in ipairs(qaFolder:GetChildren()) do
+                        local selectKey = part:GetAttribute("SelectKey")
+                        local selectIdx = part:GetAttribute("SelectIdx")
+                        if selectKey and selectIdx and CfgQA then
+                            activeKey = selectKey
+                            local qaData = CfgQA[selectKey]
+                            qText = qaData and qaData.QText or qText
+                            
+                            if selectIdx > 0 then
+                                local answer = qaData and qaData.Answers and qaData.Answers[selectIdx]
+                                local ansText = answer and answer.AnswerText or ("Bục " .. tostring(selectIdx))
+                                local ansCorrect = answer and (answer.Reward or (answer.RewardTips and string.find(string.lower(answer.RewardTips), "correct"))) ~= nil
+                                
+                                table.insert(choices, {
+                                    idx = selectIdx,
+                                    text = ansText,
+                                    correct = ansCorrect,
+                                    part = part
+                                })
+                                
+                                if ansCorrect then
+                                    activeObbyPart = part
+                                end
+                            end
+                        end
+                    end
+                    
+                    -- Cập nhật Live HUD Q&A
+                    if activeKey then
+                        local lines = { "Câu hỏi: " .. tostring(qText) }
+                        for _, ch in ipairs(choices) do
+                            table.insert(lines, string.format("  • Bục %d: %s%s", ch.idx, ch.text, ch.correct and " [ĐÚNG]" or ""))
+                        end
+                        if activeObbyPart then
+                            table.insert(lines, "Đang đứng yên ở: Bục " .. tostring(activeObbyPart:GetAttribute("SelectIdx")) .. " (Chính xác!)")
+                        end
+                        LiveHud:Set({
+                            Title = "📡 SỰ KIỆN ĐỐ VUI (Q&A) LIVE",
+                            Content = table.concat(lines, "\n")
+                        })
+                    end
+                end
+                
+                -- 2. Nếu không tìm thấy trong QAFolder, kiểm tra NewSelectFolder (Chọn quà)
+                if not activeObbyPart then
+                    local newSelectFolder = obbyFolder:FindFirstChild("NewSelectFolder")
+                    if newSelectFolder and #newSelectFolder:GetChildren() > 0 then
+                        local CfgNewSelect = env and env.CfgNewSelect
+                        local bestPart = nil
+                        local highestScore = -1
+                        local hudLines = {}
+                        
+                        for _, part in ipairs(newSelectFolder:GetChildren()) do
+                            local selectType = part:GetAttribute("SelectType")
+                            local score, rewards = getNewSelectPartScore(part, CfgNewSelect)
+                            local labelName = (tostring(selectType) == "1" and "Bục Trái (1)" or "Bục Phải (2)")
+                            
+                            if rewards then
+                                table.insert(hudLines, string.format("  • %s: %s (Điểm: %.2f)", labelName, formatReward(rewards), score))
+                            end
+                            
+                            if eventSettings.priorityMode == "Smart Scoring" then
+                                if score > highestScore then
+                                    highestScore = score
+                                    bestPart = part
+                                end
+                            end
+                        end
+                        
+                        -- Nếu ở chế độ Follow Crowd hoặc điểm bằng nhau
+                        if eventSettings.priorityMode == "Follow Crowd" or highestScore <= 0 or not bestPart then
+                            local maxVotes = -1
+                            for _, part in ipairs(newSelectFolder:GetChildren()) do
+                                local voteCount = part:GetAttribute("VoteCount") or 0
+                                local selectType = part:GetAttribute("SelectType")
+                                local labelName = (tostring(selectType) == "1" and "Bục Trái" or "Bục Phải")
+                                table.insert(hudLines, string.format("  • %s: Số người đứng = %d", labelName, voteCount))
+                                if voteCount > maxVotes then
+                                    maxVotes = voteCount
+                                    bestPart = part
+                                end
+                            end
+                            table.insert(hudLines, "Đang chọn theo: Số đông người đứng")
+                        else
+                            table.insert(hudLines, "Đang chọn theo: Trọng số chấm điểm tự động")
+                        end
+                        
+                        activeObbyPart = bestPart
+                        
+                        if activeObbyPart then
+                            local chosenName = (tostring(activeObbyPart:GetAttribute("SelectType")) == "1" and "Bục Trái (1)" or "Bục Phải (2)")
+                            table.insert(hudLines, "Đang đứng yên ở: " .. chosenName)
+                        end
+                        
+                        LiveHud:Set({
+                            Title = "📡 SỰ KIỆN CHỌN QUÀ LIVE",
+                            Content = table.concat(hudLines, "\n")
+                        })
+                    end
+                end
+            end
+            
+            -- Nếu phát hiện ô lựa chọn chính xác đang hoạt động, dịch chuyển đến đó và đứng yên
+            if activeObbyPart then
+                EventStatus:Set(Utils.t("event_status_standing"))
+                hrp.CFrame = CFrame.new(activeObbyPart.Position + Vector3.new(0, 3.5, 0))
+                task.wait(0.5) -- Chờ chu kỳ quét tiếp theo (để đứng yên trên bục)
+                continue
+            end
+            
+            -- Reset Live HUD nếu không có sự kiện đố vui/lựa chọn diễn ra
+            if not obbyFolder or not (obbyFolder:FindFirstChild("QAFolder") or obbyFolder:FindFirstChild("NewSelectFolder")) then
+                LiveHud:Set({ Title = "📡 Đang chờ sự kiện bắt đầu...", Content = "" })
+            end
+            
+            -- ƯU TIÊN 2: QUÉT THU THẬP VẬT PHẨM SỰ KIỆN RƠI TỰ DO (CHESTS/EGGS)
+            local items = getEventClaimables()
+            
+            -- Tự động dọn dẹp cache của các vật phẩm không còn tồn tại
+            local activeKeys = {}
+            for _, it in ipairs(items) do
+                activeKeys[it.object:GetFullName() .. "_" .. tostring(it.pos)] = true
+            end
+            for k, _ in pairs(claimedCache) do
+                if not activeKeys[k] then
+                    claimedCache[k] = nil
+                end
+            end
+
+            if #items > 0 then
+                EventStatus:Set(Utils.t("event_status_farming"))
+                
+                -- Sắp xếp tìm cái gần nhất
+                table.sort(items, function(a, b)
+                    return (hrp.Position - a.pos).Magnitude < (hrp.Position - b.pos).Magnitude
+                end)
+                
+                local target = items[1]
+                local cacheKey = target.object:GetFullName() .. "_" .. tostring(target.pos)
+                
+                if not claimedCache[cacheKey] then
+                    print("[EventAuto] Teleporting to claim: " .. target.object.Name .. " at " .. tostring(target.pos))
+                    
+                    -- Dịch chuyển nhân vật đến vật thể (độ cao cách 3 studs)
+                    hrp.CFrame = CFrame.new(target.pos + Vector3.new(0, 3, 0))
+                    task.wait(0.3) -- Chờ game stream/load vị trí vật lý
+                    
+                    local env = getrenv()._G.PathTool
+                    
+                    -- Thực hiện claim tùy theo loại
+                    if target.type == "SpaceReward" then
+                        pcall(function()
+                            local oldId = get_thread_id()
+                            set_thread_id(2)
+                            if env and env.SpaceRewardSystem and env.SpaceRewardSystem.ClientClaimFinnalReward then
+                                env.SpaceRewardSystem.ClientClaimFinnalReward(target.obbyId, target.rewardIndex)
+                            end
+                            set_thread_id(oldId)
+                        end)
+                    elseif target.type == "Robbery" then
+                        pcall(function()
+                            local oldId = get_thread_id()
+                            set_thread_id(2)
+                            if env and env.SpaceRewardSystem and env.SpaceRewardSystem.ClientRobberyClaimReward then
+                                env.SpaceRewardSystem.ClientRobberyClaimReward({
+                                    Index = target.index,
+                                    EventKey = target.eventKey
+                                })
+                            end
+                            set_thread_id(oldId)
+                        end)
+                    else
+                        -- Rương hoặc Trứng bình thường có ProximityPrompt
+                        local prompt = target.object:FindFirstChildWhichIsA("ProximityPrompt", true)
+                        if prompt then
+                            if fireproximityprompt then
+                                fireproximityprompt(prompt)
+                            else
+                                VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                                task.wait(0.02)
+                                VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                            end
+                        else
+                            -- Fallback spam E
+                            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                            task.wait(0.02)
+                            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                        end
+                    end
+                    
+                    claimedCache[cacheKey] = true
+                    task.wait(0.5) -- Tránh spam mạng
+                end
+            else
+                EventStatus:Set(Utils.t("event_status_idle"))
+            end
+        end
+    end)
+
+    -- X-Ray Thread for Choice/Gift Event Rewards Preview (Hiển thị 3D Billboard xem trước quà ẩn)
+    task.spawn(function()
+        while task.wait(1) do
+            if eventSettings.xrayEnabled then
+                pcall(function()
+                    local obbyFolder = Workspace:FindFirstChild("ObbyEventFolder")
+                    local newSelectFolder = obbyFolder and obbyFolder:FindFirstChild("NewSelectFolder")
+                    local env = getrenv()._G.PathTool
+                    local CfgNewSelect = env and env.CfgNewSelect
+                    
+                    if newSelectFolder and CfgNewSelect then
+                        for _, part in ipairs(newSelectFolder:GetChildren()) do
+                            local selectKey = part:GetAttribute("SelectKey")
+                            local selectType = part:GetAttribute("SelectType")
+                            if selectKey and selectType then
+                                local selectData = CfgNewSelect[selectKey]
+                                local selectInfo = selectData and selectData.SelectInfo and selectData.SelectInfo[tostring(selectType)]
+                                if selectInfo and selectInfo.Reward then
+                                    local rewardStr = formatReward(selectInfo.Reward)
+                                    
+                                    local bbg = part:FindFirstChild("EventXrayBillboard")
+                                    if not bbg then
+                                        bbg = Instance.new("BillboardGui")
+                                        bbg.Name = "EventXrayBillboard"
+                                        bbg.Size = UDim2.new(0, 200, 0, 50)
+                                        bbg.StudsOffset = Vector3.new(0, 4, 0)
+                                        bbg.AlwaysOnTop = true
+                                        
+                                        local tl = Instance.new("TextLabel")
+                                        tl.Size = UDim2.new(1, 0, 1, 0)
+                                        tl.BackgroundTransparency = 0.5
+                                        tl.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+                                        tl.TextColor3 = Color3.fromRGB(0, 255, 127)
+                                        tl.TextSize = 14
+                                        tl.Font = Enum.Font.SourceSansBold
+                                        tl.TextWrapped = true
+                                        tl.Parent = bbg
+                                        
+                                        bbg.Parent = part
+                                    end
+                                    if bbg:FindFirstChild("TextLabel") then
+                                        bbg.TextLabel.Text = rewardStr
+                                    end
+                                end
+                            end
+                        end
+                    else
+                        for _, v in ipairs(Workspace:GetDescendants()) do
+                            if v.Name == "EventXrayBillboard" then
+                                v:Destroy()
+                            end
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+
+
+end

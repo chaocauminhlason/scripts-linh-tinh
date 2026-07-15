@@ -7,6 +7,8 @@ local HttpService = game:GetService("HttpService")
 local currentWebhookURL = ""
 local webhookEnabled = false
 
+WebhookModule.Utils = nil
+
 -- 1. HÀM GỬI THÔNG BÁO (Để các file khác gọi lại)
 function WebhookModule.SendNotification(message)
     if not webhookEnabled or currentWebhookURL == "" or not string.find(currentWebhookURL, "api/webhooks") then 
@@ -16,11 +18,21 @@ function WebhookModule.SendNotification(message)
     local req = (syn and syn.request) or (http and http.request) or http_request or fluxus and fluxus.request or request
     
     if req then
+        local tFunc = function(k)
+            if WebhookModule.Utils and WebhookModule.Utils.t then
+                return WebhookModule.Utils.t(k)
+            end
+            local fallbacks = {
+                webhook_notification_title = "🎉 Update Auto-Farm"
+            }
+            return fallbacks[k] or k
+        end
+
         local data = {
             ["content"] = "",
             ["embeds"] = {
                 {
-                    ["title"] = "🎉 Cập nhật Auto-Farm",
+                    ["title"] = tFunc("webhook_notification_title"),
                     ["description"] = message,
                     ["type"] = "rich",
                     ["color"] = tonumber(0x00FF00),
@@ -39,13 +51,35 @@ function WebhookModule.SendNotification(message)
 end
 
 -- 2. HÀM TẠO GIAO DIỆN (Được gọi từ main.txt)
-function WebhookModule.InitTab(Window, Rayfield)
-    local WebhookTab = Window:CreateTab("Webhook", "bell")
+function WebhookModule.InitTab(Window, Rayfield, Utils)
+    WebhookModule.Utils = Utils
+    
+    local tFunc = function(k)
+        if Utils and Utils.t then
+            return Utils.t(k)
+        end
+        local fallbacks = {
+            webhook = "Webhook",
+            sec_webhook_settings = "THIẾT LẬP DISCORD WEBHOOK",
+            webhook_toggle = "Bật/Tắt Thông Báo Discord",
+            webhook_url = "Link Discord Webhook",
+            webhook_url_placeholder = "Dán link Webhook của bạn vào đây...",
+            webhook_btn_test = "Gửi Thông Báo Test (Kiểm tra)",
+            error_title = "Lỗi",
+            webhook_invalid_msg = "Link Webhook không hợp lệ!",
+            success_title = "Thành công",
+            webhook_test_sent_msg = "Đã gửi thông báo test qua Discord!",
+            webhook_test_payload = "🛠️ Test Webhook thành công! Hệ thống R-Client Pro đang hoạt động tốt."
+        }
+        return fallbacks[k] or k
+    end
 
-    WebhookTab:CreateSection(" THIẾT LẬP DISCORD WEBHOOK ")
+    local WebhookTab = Window:CreateTab(tFunc("webhook"), "bell")
+
+    WebhookTab:CreateSection(" " .. tFunc("sec_webhook_settings") .. " ")
 
     WebhookTab:CreateToggle({
-        Name = "Bật/Tắt Thông Báo Discord",
+        Name = tFunc("webhook_toggle"),
         CurrentValue = false,
         Flag = "WebhookToggleConfig",
         Callback = function(Value)
@@ -54,8 +88,8 @@ function WebhookModule.InitTab(Window, Rayfield)
     })
 
     WebhookTab:CreateInput({
-        Name = "Link Discord Webhook",
-        PlaceholderText = "Dán link Webhook của bạn vào đây...",
+        Name = tFunc("webhook_url"),
+        PlaceholderText = tFunc("webhook_url_placeholder"),
         RemoveTextAfterFocusLost = false,
         Flag = "WebhookUrlConfig",
         Callback = function(Text)
@@ -64,13 +98,13 @@ function WebhookModule.InitTab(Window, Rayfield)
     })
 
     WebhookTab:CreateButton({
-        Name = "Gửi Thông Báo Test (Kiểm tra)",
+        Name = tFunc("webhook_btn_test"),
         Callback = function()
             if currentWebhookURL == "" or not string.find(currentWebhookURL, "api/webhooks") then
-                Rayfield:Notify({Title = "Lỗi", Content = "Link Webhook không hợp lệ!", Duration = 3})
+                Rayfield:Notify({Title = tFunc("error_title"), Content = tFunc("webhook_invalid_msg"), Duration = 3})
             else
-                WebhookModule.SendNotification("🛠️ Test Webhook thành công! Hệ thống R-Client Pro đang hoạt động tốt.")
-                Rayfield:Notify({Title = "Thành công", Content = "Đã gửi thông báo test qua Discord!", Duration = 3})
+                WebhookModule.SendNotification(tFunc("webhook_test_payload"))
+                Rayfield:Notify({Title = tFunc("success_title"), Content = tFunc("webhook_test_sent_msg"), Duration = 3})
             end
         end,
     })

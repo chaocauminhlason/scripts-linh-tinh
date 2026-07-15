@@ -10,7 +10,9 @@ return function(Window, Utils)
         autoClaim = false,
         stopIfBagFull = true,
         eggIdsToHatch = {}, -- Chuyển thành Table để chứa nhiều ID
-        maxSlots = 1 
+        autoBreed = false,
+        breedFather = "Any",
+        breedMother = "Any"
     }
 
     -- Hàm can thiệp quyền hạn của Executor
@@ -59,19 +61,7 @@ return function(Window, Utils)
     EggTab:CreateSection(" " .. string.upper(Utils.t("bag_status")) .. " ")
     local BagStatusLabel = EggTab:CreateLabel(Utils.t("bag_loading"))
 
-    EggTab:CreateSection(" " .. string.upper(Utils.t("unlocked_slots")) .. " ")
-    EggTab:CreateSlider({
-        Name = Utils.t("unlocked_slots"),
-        Info = Utils.t("unlocked_slots_info"),
-        Range = {1, 5},
-        Increment = 1,
-        Suffix = Utils.getLang() == "vi" and " Lò" or " Slots",
-        CurrentValue = 1,
-        Flag = "MaxIncubators",
-        Callback = function(Value)
-            hatchSettings.maxSlots = Value
-        end,
-    })
+
 
     EggTab:CreateSection(" " .. string.upper(Utils.t("select_eggs")) .. " ")
     local EggDropdown = EggTab:CreateDropdown({
@@ -131,6 +121,114 @@ return function(Window, Utils)
         Callback = function(Value) hatchSettings.stopIfBagFull = Value end
     })
 
+    EggTab:CreateSection(" " .. string.upper(Utils.t("auto_breed")) .. " ")
+    
+    local function FormatPetOptionString(pet, env)
+        local tmpl = pet:GetTmpl()
+        local name = tmpl.Name or tmpl.name or "Unknown"
+        local grade = pet:GetGrade()
+        local gradeName = env.Constants.PetGradeName[grade] or tostring(grade)
+        
+        local muts = {}
+        local spProp = pet:GetSpecialProp() or 0
+        if spProp > 0 then
+            for _, v in pairs(env.PetSpecialPropUtil.SpecialPropertyDef) do
+                if bit32.band(spProp, v) > 0 then
+                    local desc = env.PetSpecialPropUtil.SpecialPropertyDesc[v]
+                    if desc and desc.Name then
+                        table.insert(muts, desc.Name)
+                    end
+                end
+            end
+        end
+        
+        local displayStr = name .. " (" .. gradeName .. ")"
+        if #muts > 0 then
+            displayStr = displayStr .. " [" .. table.concat(muts, "+") .. "]"
+        end
+        displayStr = displayStr .. " (ID: " .. tostring(pet.itemId) .. ")"
+        return displayStr
+    end
+
+    local maleNames, femaleNames = {"Any"}, {"Any"}
+    pcall(function()
+        local env = getrenv()._G.PathTool
+        local player = env.ClientPlayerManager.GetGamePlayer()
+        local petData = player.pet
+        petData:IterItem(function(pet)
+            local tmpl = pet:GetTmpl()
+            if not pet:IsChildPet() and not tmpl.CantBreed and pet:GetGrade() >= env.CfgPetBreed.ParentGradeMin then
+                local displayStr = FormatPetOptionString(pet, env)
+                local gender = pet:GetGender()
+                if gender == env.Constants.PetGenderType.Male then
+                    table.insert(maleNames, displayStr)
+                elseif gender == env.Constants.PetGenderType.Female then
+                    table.insert(femaleNames, displayStr)
+                end
+            end
+            return true
+        end)
+    end)
+    table.sort(maleNames)
+    table.sort(femaleNames)
+
+    local ToggleBreed = EggTab:CreateToggle({
+        Name = Utils.t("auto_breed"),
+        Info = Utils.t("auto_breed_info"),
+        CurrentValue = false,
+        Flag = "AutoBreedPets",
+        Callback = function(Value) hatchSettings.autoBreed = Value end
+    })
+
+    local FatherDropdown = EggTab:CreateDropdown({
+        Name = Utils.t("breed_father"),
+        Options = maleNames,
+        CurrentOption = {"Any"},
+        Flag = "BreedFatherDropdown",
+        Callback = function(Options)
+            hatchSettings.breedFather = Options[1] or "Any"
+        end
+    })
+
+    local MotherDropdown = EggTab:CreateDropdown({
+        Name = Utils.t("breed_mother"),
+        Options = femaleNames,
+        CurrentOption = {"Any"},
+        Flag = "BreedMotherDropdown",
+        Callback = function(Options)
+            hatchSettings.breedMother = Options[1] or "Any"
+        end
+    })
+
+    EggTab:CreateButton({
+        Name = "🔄 Refresh Pet List",
+        Callback = function()
+            local mList, fList = {"Any"}, {"Any"}
+            pcall(function()
+                local env = getrenv()._G.PathTool
+                local player = env.ClientPlayerManager.GetGamePlayer()
+                local petData = player.pet
+                petData:IterItem(function(pet)
+                    local tmpl = pet:GetTmpl()
+                    if not pet:IsChildPet() and not tmpl.CantBreed and pet:GetGrade() >= env.CfgPetBreed.ParentGradeMin then
+                        local displayStr = FormatPetOptionString(pet, env)
+                        local gender = pet:GetGender()
+                        if gender == env.Constants.PetGenderType.Male then
+                            table.insert(mList, displayStr)
+                        elseif gender == env.Constants.PetGenderType.Female then
+                            table.insert(fList, displayStr)
+                        end
+                    end
+                    return true
+                end)
+            end)
+            table.sort(mList)
+            table.sort(fList)
+            FatherDropdown:Refresh(mList)
+            MotherDropdown:Refresh(fList)
+        end
+    })
+
     -- ==========================================
     -- LUỒNG 1: THEO DÕI TÚI PET
     -- ==========================================
@@ -172,9 +270,10 @@ return function(Window, Utils)
             local clientEgg = env.BossRoomSystemClient.gamePlayer.egg
             if not clientEgg then continue end
 
-            local currentTime = workspace:GetServerTimeNow()
+            local currentTime = (env.Utils and env.Utils.GetServerTime()) or workspace:GetServerTimeNow()
 
-            for slotNum = 1, hatchSettings.maxSlots do
+            for slotNum = 1, 10 do
+                if not clientEgg:IsHatchUnlocked(slotNum) then continue end
                 local eggId = clientEgg:GetHatchEggTmplId(slotNum)
                 local startTick = clientEgg:GetHatchEggStartTick(slotNum) or 0
 
@@ -205,7 +304,7 @@ return function(Window, Utils)
                 
                 -- AUTO CLAIM: Khi Lò có trứng
                 elseif hatchSettings.autoClaim and eggId then
-                    local eggCfg = env.CfgEgg and env.CfgEgg.Tmpls[tostring(eggId)]
+                    local eggCfg = env.CfgEgg and (env.CfgEgg.Tmpls[eggId] or env.CfgEgg.Tmpls[tonumber(eggId)] or env.CfgEgg.Tmpls[tostring(eggId)])
                     local hatchTime = eggCfg and eggCfg.HatchTime or 3600
                     
                     if (startTick + hatchTime) <= currentTime then
@@ -226,6 +325,131 @@ return function(Window, Utils)
                         task.wait(0.3)
                     end
                 end
+            end
+
+            -- AUTO CLAIM BREEDING EGG: Nhận trứng lai dắt (Pet Breed) khi ấp xong
+            if hatchSettings.autoClaim then
+                pcall(function()
+                    local petData = env.BossRoomSystemClient.gamePlayer.pet
+                    if petData then
+                        for i = 1, 5 do
+                            local breedingInfo = petData:GetBreeding(i)
+                            if breedingInfo then
+                                local breedTime = env.CfgPetBreed and env.CfgPetBreed.BreedTime or 14400
+                                if (breedingInfo.StartTick + breedTime) <= currentTime then
+                                    if petData:GetBagAmount() < petData:GetBagCapacity() then
+                                        local oldId = get_thread_id()
+                                        set_thread_id(2)
+                                        
+                                        if env.PetBreedSystem and env.PetBreedSystem.ClientHatching then
+                                            env.PetBreedSystem.ClientHatching()
+                                        end
+                                        
+                                        set_thread_id(oldId)
+                                        task.wait(0.3)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end)
+            end
+
+            -- AUTO BREED PAIRING: Tự động ghép cặp lai dắt (Pet Breed)
+            if hatchSettings.autoBreed then
+                pcall(function()
+                    local petData = env.BossRoomSystemClient.gamePlayer.pet
+                    if petData then
+                        local hasActiveBreed = false
+                        for i = 1, 5 do
+                            if petData:GetBreeding(i) ~= nil then
+                                hasActiveBreed = true
+                                break
+                            end
+                        end
+                        if not hasActiveBreed then
+                            -- Quét tìm con đực phù hợp
+                            local maleCandidates = {}
+                            local selectedFatherId = tonumber(string.match(hatchSettings.breedFather, "%(ID:%s*(%d+)%)"))
+                            
+                            petData:IterItem(function(pet)
+                                local tmpl = pet:GetTmpl()
+                                if not pet:IsChildPet() and not tmpl.CantBreed and pet:GetGrade() >= env.CfgPetBreed.ParentGradeMin then
+                                    if pet:GetGender() == env.Constants.PetGenderType.Male then
+                                        if selectedFatherId then
+                                            if pet.itemId == selectedFatherId then
+                                                table.insert(maleCandidates, {
+                                                    itemId = pet.itemId,
+                                                    grade = pet:GetGrade()
+                                                })
+                                            end
+                                        else
+                                            table.insert(maleCandidates, {
+                                                itemId = pet.itemId,
+                                                grade = pet:GetGrade()
+                                            })
+                                        end
+                                    end
+                                end
+                                return true
+                            end)
+                            
+                            -- Quét tìm con cái phù hợp
+                            local femaleCandidates = {}
+                            local selectedMotherId = tonumber(string.match(hatchSettings.breedMother, "%(ID:%s*(%d+)%)"))
+                            
+                            petData:IterItem(function(pet)
+                                local tmpl = pet:GetTmpl()
+                                if not pet:IsChildPet() and not tmpl.CantBreed and pet:GetGrade() >= env.CfgPetBreed.ParentGradeMin then
+                                    if pet:GetGender() == env.Constants.PetGenderType.Female then
+                                        if selectedMotherId then
+                                            if pet.itemId == selectedMotherId then
+                                                table.insert(femaleCandidates, {
+                                                    itemId = pet.itemId,
+                                                    grade = pet:GetGrade()
+                                                })
+                                            end
+                                        else
+                                            table.insert(femaleCandidates, {
+                                                itemId = pet.itemId,
+                                                grade = pet:GetGrade()
+                                            })
+                                        end
+                                    end
+                                end
+                                return true
+                            end)
+                            
+                            -- Sắp xếp theo Grade cao nhất trước
+                            table.sort(maleCandidates, function(a, b) return a.grade > b.grade end)
+                            table.sort(femaleCandidates, function(a, b) return a.grade > b.grade end)
+                            
+                            local bestMale = maleCandidates[1]
+                            local bestFemale = femaleCandidates[1]
+                            
+                            if bestMale and bestFemale then
+                                -- Check Cost
+                                local canPay = true
+                                pcall(function()
+                                    canPay = env.ExchangeSystem.CheckCost(env.BossRoomSystemClient.gamePlayer, env.CfgPetBreed.BreedCost)
+                                end)
+                                
+                                if canPay then
+                                    local oldId = get_thread_id()
+                                    set_thread_id(2)
+                                    
+                                    if env.PetBreedSystem and env.PetBreedSystem.ClientCreateBreeding then
+                                        env.PetBreedSystem.ClientCreateBreeding(bestMale.itemId, bestFemale.itemId)
+                                        print("[AutoBreed] Paired Male (" .. tostring(bestMale.itemId) .. ") with Female (" .. tostring(bestFemale.itemId) .. ") successfully!")
+                                    end
+                                    
+                                    set_thread_id(oldId)
+                                    task.wait(0.5)
+                                end
+                            end
+                        end
+                    end
+                end)
             end
         end
     end)

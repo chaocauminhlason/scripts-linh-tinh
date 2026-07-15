@@ -169,9 +169,20 @@ return function(Window, Utils)
         return nil
     end
 
+    local function IsAllMonstersOption(option)
+        return option == "farm_target_all" 
+            or option == "All monsters" 
+            or option == "Tất cả quái"
+            or option == (Utils.t and Utils.t("farm_target_all") or "farm_target_all")
+    end
+
     -- [Validation] Lọc quái theo cài đặt người chơi
     local function IsMonsterInFilter(monster)
-        if not AppState.targetMonsterNames or #AppState.targetMonsterNames == 0 or AppState.targetMonsterNames[1] == "Tất cả quái" then return true end
+        if not AppState.targetMonsterNames or #AppState.targetMonsterNames == 0 then return true end
+        for _, opt in ipairs(AppState.targetMonsterNames) do
+            if IsAllMonstersOption(opt) then return true end
+        end
+        
         local realName = ResolveMonsterName(monster)
         for _, targetName in ipairs(AppState.targetMonsterNames) do
             if string.find(string.lower(realName), string.lower(targetName)) then
@@ -185,44 +196,78 @@ return function(Window, Utils)
     -- 3. TẦNG LOGIC NGHIỆP VỤ (BUSINESS LOGIC)
     -- ==========================================
     
-    -- Tính toán thiệt hại của Pet (Đồng bộ giữa UI và Thực tế)
+    -- Tính toán thiệt hại của Pet (Đồng bộ giữa UI và Thực tế qua dữ liệu túi đồ hoặc MgrPetClient)
     local function CalculatePetCasualties()
-        local uiPetCount = 0
-        local mapPetCount = 0
+        local deadCount = 0
+        local aliveCount = 0
+        local maxEquipped = 3 -- Mặc định/Dự phòng số pet được trang bị
+        local checkedViaMap = false
         
         pcall(function()
-            local petListUI = LocalPlayer:FindFirstChild("PlayerGui")
-                and LocalPlayer.PlayerGui:FindFirstChild("MainGui")
-                and LocalPlayer.PlayerGui.MainGui:FindFirstChild("ScreenGui")
-                and LocalPlayer.PlayerGui.MainGui.ScreenGui:FindFirstChild("MainLeftView")
-                and LocalPlayer.PlayerGui.MainGui.ScreenGui.MainLeftView:FindFirstChild("PetList")
-
-            if petListUI then
-                for _, cell in pairs(petListUI:GetChildren()) do
-                    if cell.Name == "ItemCell" and cell:FindFirstChild("hp0", true) and cell:FindFirstChild("LabName", true) then
-                        local labName = cell:FindFirstChild("LabName", true)
-                        if labName.Text ~= "Label" and labName.Text ~= "" then uiPetCount = uiPetCount + 1 end
+            local env = getrenv and getrenv()._G and getrenv()._G.PathTool
+            local petData = env and env.BossRoomSystemClient and env.BossRoomSystemClient.gamePlayer and env.BossRoomSystemClient.gamePlayer.pet
+            
+            if petData and petData._equipedItemMap then
+                local equippedCount = 0
+                for _, petObj in pairs(petData._equipedItemMap) do
+                    equippedCount = equippedCount + 1
+                    if petObj.IsDead and petObj:IsDead() then
+                        deadCount = deadCount + 1
+                    else
+                        aliveCount = aliveCount + 1
                     end
                 end
+                maxEquipped = math.max(maxEquipped, equippedCount)
+                checkedViaMap = true
             end
-
-            local petsFolder = Workspace:FindFirstChild("Pets")
-            if petsFolder then
-                local myId = tostring(LocalPlayer.UserId)
-                for _, pet in pairs(petsFolder:GetChildren()) do
-                    if string.find(pet.Name, myId) then
-                        local hpPart = pet:FindFirstChild("Health")
-                        if hpPart then
-                            local hpStr = tostring(hpPart.Value)
-                            local currentHp = tonumber(string.split(hpStr, ",")[1]) or tonumber((string.gsub(hpStr, ",", ".")))
-                            if currentHp and currentHp > 0 then mapPetCount = mapPetCount + 1 end
+            
+            -- Chỉ dùng MgrPetClient fallback nếu không truy cập được dữ liệu trực tiếp từ túi đồ
+            if not checkedViaMap and env and env.MgrPetClient and env.LogicNumber then
+                local MgrPetClient = env.MgrPetClient
+                local LogicNumber = env.LogicNumber
+                
+                MgrPetClient.IterPet(function(pet)
+                    if pet.PlayerId == LocalPlayer.UserId then
+                        if pet.EquipedAmount then
+                            maxEquipped = math.max(maxEquipped, pet.EquipedAmount)
                         end
+                        
+                        local isAlive = false
+                        local curRaw = pet.HealthValue and pet.HealthValue.Value
+                        local maxRaw = pet.HealthValue and pet.HealthValue:GetAttribute("MaxHealth")
+                        
+                        if curRaw and maxRaw then
+                            local curLogic = LogicNumber.FixLogicNumber(curRaw)
+                            local maxLogic = LogicNumber.FixLogicNumber(maxRaw)
+                            local ratio = LogicNumber.ToNumber(LogicNumber.Divide(curLogic, maxLogic))
+                            
+                            -- Nếu máu trên 1%, pet còn sống
+                            if ratio > 0.01 then
+                                isAlive = true
+                            end
+                        end
+                        
+                        if isAlive then
+                            aliveCount = aliveCount + 1
+                        else
+                            deadCount = deadCount + 1
+                        end
+                    end
+                    return true
+                end)
+                
+                -- Nếu số lượng pet hoạt động/còn sống thực tế ít hơn tổng số pet được trang bị (EquipedAmount),
+                -- chứng tỏ các pet bị thiếu hụt đã bị ẩn/chết hoàn toàn và không còn được hiển thị trong IterPet.
+                if aliveCount < maxEquipped then
+                    local missingCount = maxEquipped - aliveCount
+                    if missingCount > deadCount then
+                        deadCount = missingCount
                     end
                 end
             end
         end)
         
-        return (uiPetCount > 0) and (uiPetCount - mapPetCount) or 0
+        return deadCount
     end
 
     -- Xác định tọa độ suối hồi máu gần nhất
@@ -259,7 +304,14 @@ return function(Window, Utils)
         AppState.savedFarmPosition = CFrame.new(savedPosData.X, savedPosData.Y, savedPosData.Z) 
         AppState.savedFarmAreaId = savedPosData.AreaId
     end
-    AppState.targetMonsterNames = Utils.LoadJSON(ConfigFiles.Filter) or {}
+    local loadedFilter = Utils.LoadJSON(ConfigFiles.Filter) or {}
+    local cleanedFilter = {}
+    for _, opt in ipairs(loadedFilter) do
+        if not IsAllMonstersOption(opt) then
+            table.insert(cleanedFilter, opt)
+        end
+    end
+    AppState.targetMonsterNames = cleanedFilter
 
     if _G.SystemController and type(_G.SystemController.registerModule) == "function" then
         _G.SystemController:registerModule("AutoFarm", function(paused)
@@ -283,6 +335,11 @@ return function(Window, Utils)
     -- ==========================================
     local CamTab = Window:CreateTab(Utils.t("farm"), "dumbbell")
     local MonsterDropdown = nil
+
+    CamTab:CreateParagraph({
+        Title = "💡 " .. Utils.t("farm_guide_title"),
+        Content = Utils.t("farm_guide_content")
+    })
 
     CamTab:CreateSection(" " .. Utils.t("sec_farm_controls") .. " ")
     CamTab:CreateButton({ 
@@ -325,7 +382,33 @@ return function(Window, Utils)
         Flag = "MonsterSelectFarm",
         Callback = function(Options)
             pcall(function()
-                AppState.targetMonsterNames = table.find(Options, Utils.t("farm_target_all")) and {} or Options
+                local hasAll = false
+                local cleanOptions = {}
+                for _, opt in ipairs(Options) do
+                    if IsAllMonstersOption(opt) then
+                        hasAll = true
+                    else
+                        table.insert(cleanOptions, opt)
+                    end
+                end
+                
+                if hasAll and #Options > 1 then
+                    if #AppState.targetMonsterNames == 0 then
+                        -- Previously all, now specific added -> Uncheck 'All monsters'
+                        AppState.targetMonsterNames = cleanOptions
+                        task.spawn(function() pcall(function() MonsterDropdown:Set(cleanOptions) end) end)
+                    else
+                        -- Previously specific, now 'All monsters' selected -> Select only 'All monsters'
+                        AppState.targetMonsterNames = {}
+                        local allOpt = { Utils.t("farm_target_all") }
+                        task.spawn(function() pcall(function() MonsterDropdown:Set(allOpt) end) end)
+                    end
+                elseif hasAll then
+                    AppState.targetMonsterNames = {}
+                else
+                    AppState.targetMonsterNames = cleanOptions
+                end
+                
                 Utils.SaveJSON(ConfigFiles.Filter, AppState.targetMonsterNames)
                 UpdateUIFilterLabel()
             end)
@@ -355,6 +438,7 @@ return function(Window, Utils)
     CamTab:CreateSection(" " .. Utils.t("sec_farm_combat") .. " ")
     CamTab:CreateToggle({
         Name = Utils.t("auto_attack"),
+        Info = Utils.t("auto_attack_info"),
         CurrentValue = false,
         Callback = function(V)
             AppState.autoAttack = V
@@ -550,7 +634,13 @@ return function(Window, Utils)
     -- Luồng 3: Teleport Farm (Không gian)
     task.spawn(function()
         while task.wait(0.1) do
-            if not AppState.autoAttack or not AppState.tpFarmEnabled or IsSystemBusy() or AppState.isHealing then continue end
+            if not AppState.autoAttack or not AppState.tpFarmEnabled or IsSystemBusy() or AppState.isHealing then 
+                pcall(function()
+                    local platform = Workspace:FindFirstChild("FarmSafePlatform")
+                    if platform then platform:Destroy() end
+                end)
+                continue 
+            end
 
             local charData = GetValidCharacterData()
             if not charData then task.wait(1); continue end
@@ -590,6 +680,22 @@ return function(Window, Utils)
 
                 if (charData.Position - targetPos).Magnitude > 20 then
                     Utils.ToggleMount(true)
+                    
+                    -- Spawn safe platform underneath targetPos to prevent falling
+                    pcall(function()
+                        local platform = Workspace:FindFirstChild("FarmSafePlatform")
+                        if not platform then
+                            platform = Instance.new("Part")
+                            platform.Name = "FarmSafePlatform"
+                            platform.Size = Vector3.new(8, 1, 8)
+                            platform.Transparency = 1
+                            platform.Anchored = true
+                            platform.CanCollide = true
+                            platform.Parent = Workspace
+                        end
+                        platform.CFrame = CFrame.new(targetPos - Vector3.new(0, 3.5, 0))
+                    end)
+
                     charData.RootPart.CFrame = CFrame.lookAt(targetPos, closestMonster.Position)
                 end
                 pcall(function() SystemCache.AttackRemote:InvokeServer("MonsterAttackChannel", closestMonster.Id) end)
@@ -602,14 +708,39 @@ return function(Window, Utils)
     -- Luồng 4: Smart Auto Heal (Chạy tuần tự với Mutex Lock)
     task.spawn(function()
         while task.wait(1) do
-            if not AppState.autoHeal or AppState.isHealing or IsSystemBusy() or (LocalPlayer:GetAttribute("RidePetId") ~= nil) then continue end
+            if not AppState.autoHeal or AppState.isHealing then continue end
+
+            -- Chỉ hồi máu ở Map thường (phải ở Open World và tồn tại MainLeftView)
+            local isNormalMap = false
+            pcall(function()
+                local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+                local mainGui = playerGui and playerGui:FindFirstChild("MainGui")
+                local screenGui = mainGui and mainGui:FindFirstChild("ScreenGui")
+                
+                -- Phải có MainLeftView
+                local leftView = screenGui and screenGui:FindFirstChild("MainLeftView")
+                
+                -- Phải ở Open World (không ở trong phó bản/Rift)
+                local mainRightView = screenGui and screenGui:FindFirstChild("MainRightView")
+                local fmReturn = mainRightView and mainRightView:FindFirstChild("FmReturn")
+                local btReturn = fmReturn and fmReturn:FindFirstChild("BtReturn")
+                local isInOpenWorld = btReturn and btReturn.Visible or false
+                
+                isNormalMap = (leftView ~= nil) and isInOpenWorld
+            end)
+            if not isNormalMap then continue end
 
             local deadPetsCount = CalculatePetCasualties()
             if deadPetsCount >= AppState.healThreshold then
                 -- Khóa State, báo hiệu cho các luồng Farm khác tạm dừng
                 AppState.isHealing = true
-                local charData = GetValidCharacterData()
+                _G.IsSystemHealActive = true
                 
+                -- Xuống thú cưỡi trước khi di chuyển hồi máu
+                Utils.SmartDismount()
+                task.wait(0.2)
+                
+                local charData = GetValidCharacterData()
                 if charData then
                     SendNotify("🔄 Auto Heal", "Pet đã kiệt sức. Tiến hành Teleport hồi máu...")
                     local safeReturnPos = charData.RootPart.CFrame
@@ -624,8 +755,14 @@ return function(Window, Utils)
 
                         charData.RootPart.CFrame = CFrame.new(bestRecoverPos + Vector3.new(0, 3, 0))
                         
-                        -- Tác vụ chạy tuần tự (Sequential Blocking): Đợi máu hồi đầy
-                        task.wait(9)
+                        -- Tác vụ chạy tuần tự (Sequential Blocking): Đợi máu hồi đầy (tối đa 9 giây)
+                        local healTimeout = tick() + 9
+                        while tick() < healTimeout do
+                            task.wait(0.5)
+                            if CalculatePetCasualties() == 0 then
+                                break
+                            end
+                        end
                         
                         platform:Destroy()
                         Utils.SafeTeleport(safeReturnPos, 5)
@@ -634,6 +771,7 @@ return function(Window, Utils)
                 end
                 
                 -- Mở khóa State
+                _G.IsSystemHealActive = false
                 AppState.isHealing = false
             end
         end

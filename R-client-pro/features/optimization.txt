@@ -12,6 +12,91 @@ return function(Window, Utils)
     local originalFPS = 60
     local antiAfkEnabled = true
 
+    local potatoEnabled = false
+    local cleanVfxEnabled = false
+    local autoGcEnabled = false
+
+    local function applyPotatoToPart(v)
+        if v:IsA("BasePart") and not v:IsA("MeshPart") then
+            v.Material = Enum.Material.SmoothPlastic
+            v.Reflectance = 0
+        elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") then
+            v:Destroy()
+        end
+    end
+
+    local function applyVfxClean(v)
+        local c = v.ClassName
+        if c == "ParticleEmitter" or c == "Trail" or c == "Beam" or c == "Sparkles" or c == "Smoke" or c == "Fire" then
+            v:Destroy()
+        elseif v:IsA("BillboardGui") and (v.Name == "DamageTag" or string.match(v.Name, "Damage") or v:FindFirstChild("TextLabel")) then
+            v:Destroy()
+        end
+    end
+
+    -- Real-time optimization listener
+    Workspace.DescendantAdded:Connect(function(v)
+        if potatoEnabled then
+            pcall(applyPotatoToPart, v)
+        end
+        if cleanVfxEnabled then
+            pcall(applyVfxClean, v)
+        end
+    end)
+
+    local function PerformAggressiveClean(silent)
+        local before = gcinfo()
+        collectgarbage("collect")
+        local after = gcinfo()
+        
+        -- Clear console logs
+        if clearconsole then
+            pcall(clearconsole)
+        elseif rconsoleclear then
+            pcall(rconsoleclear)
+        end
+        
+        -- Attempt DevConsole clearing
+        pcall(function()
+            local devConsoleController = require(game:GetService("CoreGui").RobloxGui.Modules.DevConsole.Controllers.DevConsoleController)
+            if devConsoleController and devConsoleController.get then
+                local controller = devConsoleController:get()
+                if controller and controller.clear then
+                    controller:clear()
+                end
+            end
+        end)
+        
+        -- Free CoreGui Log cache
+        pcall(function()
+            local logService = game:GetService("LogService")
+            if logService and type(logService.Clear) == "function" then
+                logService:Clear()
+            end
+        end)
+
+        local savedMB = (before - after) / 1024
+        if not silent then
+            pcall(function()
+                game.StarterGui:SetCore("SendNotification", {
+                    Title = "🧹 System Cleaned",
+                    Text = string.format("Đã giải phóng %.2f MB RAM & xóa sạch logs!", savedMB),
+                    Duration = 3
+                })
+            end)
+        end
+        print(string.format("[Optimization] Aggressive memory clean: Reduced Lua heap from %.2f MB to %.2f MB (Saved %.2f MB)", before / 1024, after / 1024, savedMB))
+    end
+
+    -- Auto GC Background thread (Chạy định kỳ mỗi 60 giây)
+    task.spawn(function()
+        while task.wait(60) do
+            if autoGcEnabled then
+                pcall(PerformAggressiveClean, true)
+            end
+        end
+    end)
+
     -- LOGIC CHỐNG AFK NGẦM
     LocalPlayer.Idled:Connect(function() 
         if antiAfkEnabled then 
@@ -26,40 +111,83 @@ return function(Window, Utils)
     OptimizationTab:CreateToggle({ 
         Name = Utils.t("anti_afk"), 
         Info = Utils.t("anti_afk_info"),
-        CurrentValue = true, -- Sửa giá trị này thành true
+        CurrentValue = true,
         Flag = "AntiAfk", 
         Callback = function(Value) antiAfkEnabled = Value end 
     })
 
-    OptimizationTab:CreateButton({ 
+    OptimizationTab:CreateToggle({ 
         Name = Utils.t("potato_mode"), 
         Info = Utils.t("potato_mode_info"),
-        Callback = function()
-            Lighting.GlobalShadows = false 
-            Lighting.FogEnd = 9e9 
-            Lighting.ShadowSoftness = 0
-            if Lighting:FindFirstChildOfClass("Atmosphere") then Lighting:FindFirstChildOfClass("Atmosphere"):Destroy() end
-            
-            for _, v in ipairs(Workspace:GetDescendants()) do 
-                if v:IsA("BasePart") and not v:IsA("MeshPart") then 
-                    v.Material = Enum.Material.SmoothPlastic 
-                    v.Reflectance = 0 
-                elseif v:IsA("Decal") or v:IsA("Texture") or v:IsA("ParticleEmitter") then 
-                    v:Destroy() 
-                end 
+        CurrentValue = false,
+        Flag = "PotatoModeRealTime",
+        Callback = function(Value)
+            potatoEnabled = Value
+            if Value then
+                pcall(function()
+                    Lighting.GlobalShadows = false 
+                    Lighting.FogEnd = 9e9 
+                    Lighting.ShadowSoftness = 0
+                    local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
+                    if atmosphere then atmosphere:Destroy() end
+                    
+                    for _, v in ipairs(Workspace:GetDescendants()) do 
+                        pcall(applyPotatoToPart, v)
+                    end
+                    
+                    Workspace.Terrain.WaterWaveSize = 0 
+                    Workspace.Terrain.WaterWaveSpeed = 0 
+                    Workspace.Terrain.WaterReflectance = 0 
+                    Workspace.Terrain.WaterTransparency = 1
+                end)
+            else
+                pcall(function()
+                    Lighting.GlobalShadows = true
+                    Workspace.Terrain.WaterWaveSize = 0.15 
+                    Workspace.Terrain.WaterWaveSpeed = 1 
+                    Workspace.Terrain.WaterReflectance = 1 
+                    Workspace.Terrain.WaterTransparency = 0.3
+                end)
             end
-            
-            Workspace.Terrain.WaterWaveSize = 0 
-            Workspace.Terrain.WaterWaveSpeed = 0 
-            Workspace.Terrain.WaterReflectance = 0 
-            Workspace.Terrain.WaterTransparency = 1
-            
-            game.StarterGui:SetCore("SendNotification", {
-                Title = Utils.t("optimization_tab"), 
-                Text = Utils.t("potato_active"), 
-                Duration = 3
-            })
         end 
+    })
+
+    OptimizationTab:CreateToggle({
+        Name = Utils.t("clean_vfx"),
+        Info = Utils.t("clean_vfx_info"),
+        CurrentValue = false,
+        Flag = "CleanVfxDebris",
+        Callback = function(Value)
+            cleanVfxEnabled = Value
+            if Value then
+                pcall(function()
+                    for _, v in ipairs(Workspace:GetDescendants()) do
+                        applyVfxClean(v)
+                    end
+                end)
+            end
+        end
+    })
+
+    OptimizationTab:CreateToggle({
+        Name = Utils.t("auto_gc"),
+        Info = Utils.t("auto_gc_info"),
+        CurrentValue = false,
+        Flag = "AutoGcMemory",
+        Callback = function(Value)
+            autoGcEnabled = Value
+            if Value then
+                pcall(collectgarbage, "collect")
+            end
+        end
+    })
+
+    OptimizationTab:CreateButton({
+        Name = Utils.t("btn_clear_now"),
+        Info = Utils.t("clear_ram_logs_info"),
+        Callback = function()
+            PerformAggressiveClean(false)
+        end
     })
 
     OptimizationTab:CreateToggle({ 
@@ -160,6 +288,65 @@ return function(Window, Utils)
                         local hum = char:FindFirstChild("Humanoid")
                         if hum and hum.DisplayName ~= _streamerName then
                             hum.DisplayName = _streamerName
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+
+    -- Intercept và ẩn tên thật trong toàn bộ thông báo hệ thống (StarterGui:SetCore)
+    pcall(function()
+        local StarterGui = game:GetService("StarterGui")
+        if hookfunction then
+            local oldSetCore
+            oldSetCore = hookfunction(StarterGui.SetCore, function(self, name, data)
+                if isSpoofing and name == "SendNotification" and type(data) == "table" then
+                    if data.Title and type(data.Title) == "string" then
+                        data.Title = string.gsub(data.Title, realName, _streamerName)
+                        data.Title = string.gsub(data.Title, realDisplayName, _streamerName)
+                    end
+                    if data.Text and type(data.Text) == "string" then
+                        data.Text = string.gsub(data.Text, realName, _streamerName)
+                        data.Text = string.gsub(data.Text, realDisplayName, _streamerName)
+                    end
+                end
+                return oldSetCore(self, name, data)
+            end)
+        else
+            local rawSetCore = StarterGui.SetCore
+            StarterGui.SetCore = function(self, name, data)
+                if isSpoofing and name == "SendNotification" and type(data) == "table" then
+                    if data.Title and type(data.Title) == "string" then
+                        data.Title = string.gsub(data.Title, realName, _streamerName)
+                        data.Title = string.gsub(data.Title, realDisplayName, _streamerName)
+                    end
+                    if data.Text and type(data.Text) == "string" then
+                        data.Text = string.gsub(data.Text, realName, _streamerName)
+                        data.Text = string.gsub(data.Text, realDisplayName, _streamerName)
+                    end
+                end
+                return rawSetCore(self, name, data)
+            end
+        end
+    end)
+
+    -- Luồng quét định kỳ quét sạch tên thật trên toàn bộ giao diện màn hình (PlayerGui)
+    task.spawn(function()
+        while task.wait(0.5) do
+            if isSpoofing then
+                pcall(function()
+                    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+                    if playerGui then
+                        for _, v in ipairs(playerGui:GetDescendants()) do
+                            if v:IsA("TextLabel") or v:IsA("TextButton") then
+                                if string.find(v.Text, realName) or string.find(v.Text, realDisplayName) then
+                                    local txt = v.Text
+                                    txt = string.gsub(txt, realName, _streamerName)
+                                    txt = string.gsub(txt, realDisplayName, _streamerName)
+                                    v.Text = txt
+                                end
+                            end
                         end
                     end
                 end)
