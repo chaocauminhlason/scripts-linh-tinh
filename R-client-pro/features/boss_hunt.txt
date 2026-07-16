@@ -470,6 +470,12 @@ return function(Window, Utils)
         local localPlayer = game:GetService("Players").LocalPlayer
 
         while task.wait(0.2) do
+            -- [Tự động kích hoạt khi cấu hình dropdown nạp trễ hơn toggle ở startup]
+            if wbSettings.enabled and not wbHuntState.isActive and #wbSettings.selectedWorlds > 0 then
+                print("🌍 [WORLD BOSS] Phát hiện cấu hình đảo đã được nạp. Tự động kích hoạt luồng săn Boss.")
+                StartWbHuntFromFirstWorld()
+            end
+
             if not wbSettings.enabled or not wbHuntState.isActive then 
                 _G.PendingBossHunt = false
                 continue 
