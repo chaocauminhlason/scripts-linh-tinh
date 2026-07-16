@@ -46,6 +46,7 @@ return function(Window, Utils)
     local riftState = "SCANNING" 
     local riftEntryPosition = nil
     local hasEncounteredMonsters = false 
+    local combatStartTime = 0 
 
     local DataPullFunc = nil
 
@@ -408,6 +409,7 @@ return function(Window, Utils)
                     dungeonStuckTimer = 0
                     hasEncounteredMonsters = false
                     riftState = "COMBAT"
+                    combatStartTime = os.time()
                     riftEntryPosition = checkHrp.Position
                 end
             else
@@ -415,6 +417,7 @@ return function(Window, Utils)
                 dungeonStuckTimer = 0
                 hasEncounteredMonsters = false
                 riftState = "COMBAT"
+                combatStartTime = os.time()
                 riftEntryPosition = checkHrp.Position
             end
         end
@@ -540,6 +543,7 @@ return function(Window, Utils)
         catchingMemory = {}
         catchCount = {} 
         hasEncounteredMonsters = false
+        combatStartTime = 0
         
         if controller then controller.ReleaseLock("AutoRift") end
         riftState = "SCANNING"
@@ -595,6 +599,7 @@ return function(Window, Utils)
                 targetRiftKey = nil
                 riftEntryPosition = nil
                 hasEncounteredMonsters = false
+                combatStartTime = 0
             end
 
             -- Yêu cầu giữ cờ AutoRift khi bắt đầu chu kỳ quét (Chống tranh chấp với AutoFarm)
@@ -768,10 +773,17 @@ return function(Window, Utils)
                     else 
                         -- Đã xử lý xong quái, tiến hành thoát
                         if not hasEncounteredMonsters then
-                            print("[TEST-LOG] Combat Mode: Đợi Server spawn con quái duy nhất...")
-                            RiftStatus:Set(Utils.t("rift_status_wait_spawn"))
+                            local elapsed = os.time() - combatStartTime
+                            if elapsed > 10 then
+                                print("[AutoRift] ⏳ Quá 10 giây không có quái spawn trong Rift. Tự động thoát!")
+                                RiftStatus:Set(Utils.t("rift_status_done_exit") .. " (Timeout)")
+                                riftState = "EXITING"
+                            else
+                                print("[TEST-LOG] Combat Mode: Đợi Server spawn quái... (" .. tostring(math.ceil(10 - elapsed)) .. "s)")
+                                RiftStatus:Set(Utils.t("rift_status_wait_spawn"))
+                            end
                         else
-                            print("[TEST-LOG] Đã giết/bắt xong con quái duy nhất. Kích hoạt EXIT ngay lập tức!")
+                            print("[TEST-LOG] Đã giết/bắt xong quái. Kích hoạt EXIT ngay lập tức!")
                             RiftStatus:Set(Utils.t("rift_status_done_exit"))
                             riftState = "EXITING" 
                         end
