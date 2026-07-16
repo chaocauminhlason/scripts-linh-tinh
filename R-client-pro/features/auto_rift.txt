@@ -518,6 +518,31 @@ return function(Window, Utils)
         task.wait(1)
     end
 
+    -- Kiểm tra số lượng pet chết và tự động thoát
+    local function CheckPetCasualtiesAndExit(controller)
+        local deadCount = 0
+        local equippedCount = 0
+        pcall(function()
+            local env = getrenv and getrenv()._G and getrenv()._G.PathTool
+            local petData = env and env.BossRoomSystemClient and env.BossRoomSystemClient.gamePlayer and env.BossRoomSystemClient.gamePlayer.pet
+            if petData and petData._equipedItemMap then
+                for _, petObj in pairs(petData._equipedItemMap) do
+                    equippedCount = equippedCount + 1
+                    if petObj.IsDead and petObj:IsDead() then
+                        deadCount = deadCount + 1
+                    end
+                end
+            end
+        end)
+        
+        -- Nếu toàn bộ pet được trang bị đều đã chết (ví dụ: cả 3 con chết sạch)
+        if equippedCount > 0 and deadCount >= equippedCount then
+            print("[AutoRift] ☠️ Phát hiện toàn bộ Pet đã chết (" .. tostring(deadCount) .. "/" .. tostring(equippedCount) .. "). Tự động thoát Rift!")
+            RiftStatus:Set(Utils.t("rift_status_done_exit") .. " (Pet Dead)")
+            riftState = "EXITING"
+        end
+    end
+
     -- ==========================================
     -- MAIN LOOP 
     -- ==========================================
@@ -704,19 +729,24 @@ return function(Window, Utils)
                 end
 
             elseif riftState == "COMBAT" then
-                if unhandledDeadCount > 0 then
-                    HandleCatching(deadMonsters)
-                elseif hasAliveMonsters then
-                    HandleCombat(hrp, humanoid, bestTarget, closestDist2D)
-                else 
-                    -- Đã xử lý xong quái, tiến hành thoát
-                    if not hasEncounteredMonsters then
-                        print("[TEST-LOG] Combat Mode: Đợi Server spawn con quái duy nhất...")
-                        RiftStatus:Set(Utils.t("rift_status_wait_spawn"))
-                    else
-                        print("[TEST-LOG] Đã giết/bắt xong con quái duy nhất. Kích hoạt EXIT ngay lập tức!")
-                        RiftStatus:Set(Utils.t("rift_status_done_exit"))
-                        riftState = "EXITING" 
+                -- Kiểm tra pet chết trước khi hành động
+                CheckPetCasualtiesAndExit(controller)
+                
+                if riftState == "COMBAT" then
+                    if unhandledDeadCount > 0 then
+                        HandleCatching(deadMonsters)
+                    elseif hasAliveMonsters then
+                        HandleCombat(hrp, humanoid, bestTarget, closestDist2D)
+                    else 
+                        -- Đã xử lý xong quái, tiến hành thoát
+                        if not hasEncounteredMonsters then
+                            print("[TEST-LOG] Combat Mode: Đợi Server spawn con quái duy nhất...")
+                            RiftStatus:Set(Utils.t("rift_status_wait_spawn"))
+                        else
+                            print("[TEST-LOG] Đã giết/bắt xong con quái duy nhất. Kích hoạt EXIT ngay lập tức!")
+                            RiftStatus:Set(Utils.t("rift_status_done_exit"))
+                            riftState = "EXITING" 
+                        end
                     end
                 end
 
