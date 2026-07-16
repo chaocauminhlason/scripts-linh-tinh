@@ -420,6 +420,14 @@ return function(Window, Utils)
                 combatStartTime = os.time()
                 riftEntryPosition = checkHrp.Position
             end
+        else
+            -- Nhân vật tạm thời chưa load xong HRP nhưng lệnh gửi đi rồi -> Ép trạng thái COMBAT
+            print("[TEST-LOG] 🚀 VÀO RIFT THÀNH CÔNG (Nhân vật đang load)!")
+            dungeonStuckTimer = 0
+            hasEncounteredMonsters = false
+            riftState = "COMBAT"
+            combatStartTime = os.time()
+            riftEntryPosition = nil
         end
     end
 
@@ -610,6 +618,7 @@ return function(Window, Utils)
                     combatStartTime = os.time()
                     hasEncounteredMonsters = false
                     riftEntryPosition = hrp.Position
+                    RiftStatus:Set(Utils.t("rift_status_fight"))
                 end
             end
 
