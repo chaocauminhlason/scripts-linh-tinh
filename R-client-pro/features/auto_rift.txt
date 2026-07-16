@@ -486,14 +486,42 @@ return function(Window, Utils)
         print("[TEST-LOG] Gửi lệnh thoát (ArenaLeaveChannel)...")
         
         local exit_id, exit_team = targetRiftId, currentTeamId
-        task.spawn(function()
-            pcall(function()
-                DataPullFunc:InvokeServer("ArenaLeaveChannel")
-                if exit_id and exit_team then 
-                    DataPullFunc:InvokeServer("DungeonLeaveTeamChannel", exit_id, exit_team) 
-                end
-            end)
+        
+        -- Gửi Remote thoát
+        pcall(function()
+            DataPullFunc:InvokeServer("ArenaLeaveChannel")
+            if exit_id and exit_team then 
+                DataPullFunc:InvokeServer("DungeonLeaveTeamChannel", exit_id, exit_team) 
+            end
         end)
+        
+        -- Nhấp nút quay về vật lý (nếu có trên màn hình)
+        pcall(function()
+            local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+            local mainGui = playerGui and playerGui:FindFirstChild("MainGui")
+            local screenGui = mainGui and mainGui:FindFirstChild("ScreenGui")
+            local mainRightView = screenGui and screenGui:FindFirstChild("MainRightView")
+            local fmReturn = mainRightView and mainRightView:FindFirstChild("FmReturn")
+            local btReturn = fmReturn and fmReturn:FindFirstChild("BtReturn")
+            
+            if btReturn and btReturn.Visible then
+                local VirtualInputManager = game:GetService("VirtualInputManager")
+                local absPos = btReturn.AbsolutePosition
+                local absSize = btReturn.AbsoluteSize
+                local centerX = absPos.X + (absSize.X / 2)
+                local centerY = absPos.Y + (absSize.Y / 2)
+                VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, true, game, 1)
+                task.wait(0.1)
+                VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 1)
+                print("[AutoRift] Đã click nút BtReturn vật lý để thoát Rift!")
+            end
+        end)
+        
+        -- Chờ cho đến khi thực sự về tới Open World (Tối đa 8 giây)
+        local waitStart = os.time()
+        while not IsInOpenWorld() and (os.time() - waitStart) < 8 do
+            task.wait(0.5)
+        end
         
         if targetRiftKey then
             completedRifts[targetRiftKey] = os.time() + targetExpireDuration
