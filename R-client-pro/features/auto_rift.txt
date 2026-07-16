@@ -785,12 +785,12 @@ return function(Window, Utils)
                         -- Đã xử lý xong quái, tiến hành thoát
                         if not hasEncounteredMonsters then
                             local elapsed = os.time() - combatStartTime
-                            if elapsed > 10 then
-                                print("[AutoRift] ⏳ Quá 10 giây không có quái spawn trong Rift. Tự động thoát!")
+                            if elapsed > 3 then
+                                print("[AutoRift] ⏳ Quá 3 giây không có quái spawn trong Rift. Tự động thoát!")
                                 RiftStatus:Set(Utils.t("rift_status_done_exit") .. " (Timeout)")
                                 riftState = "EXITING"
                             else
-                                print("[TEST-LOG] Combat Mode: Đợi Server spawn quái... (" .. tostring(math.ceil(10 - elapsed)) .. "s)")
+                                print("[TEST-LOG] Combat Mode: Đợi Server spawn quái... (" .. tostring(math.ceil(3 - elapsed)) .. "s)")
                                 RiftStatus:Set(Utils.t("rift_status_wait_spawn"))
                             end
                         else
