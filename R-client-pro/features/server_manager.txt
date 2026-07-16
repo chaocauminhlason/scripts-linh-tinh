@@ -19,6 +19,8 @@ return function(Window, Utils)
         selectedNames = {"🔴 Huyết Nguyệt (Blood Moon)"} 
     }
     local autoRejoinEnabled = false -- Biến cấu hình nút Rejoin
+    local autoRejoinTimerEnabled = false -- Biến bật tắt Rejoin theo thời gian
+    local rejoinIntervalMinutes = 30 -- Thời gian hẹn giờ Rejoin (phút)
     local sessionStartTime = os.time()
 
     -- Khôi phục trạng thái từ file JSON cục bộ
@@ -31,6 +33,8 @@ return function(Window, Utils)
                 weatherHopSettings.targetIds = parsedData.targetIds or {60001}
                 weatherHopSettings.selectedNames = parsedData.selectedNames or {"🔴 Huyết Nguyệt (Blood Moon)"}
                 autoRejoinEnabled = parsedData.autoRejoinEnabled or false -- Khôi phục cấu hình Rejoin
+                autoRejoinTimerEnabled = parsedData.autoRejoinTimerEnabled or false
+                rejoinIntervalMinutes = parsedData.rejoinIntervalMinutes or 30
             end
         end
     end)
@@ -43,7 +47,9 @@ return function(Window, Utils)
                     enabled = weatherHopSettings.enabled,
                     targetIds = weatherHopSettings.targetIds,
                     selectedNames = weatherHopSettings.selectedNames,
-                    autoRejoinEnabled = autoRejoinEnabled -- Đóng gói cấu hình Rejoin vào JSON
+                    autoRejoinEnabled = autoRejoinEnabled, -- Đóng gói cấu hình Rejoin vào JSON
+                    autoRejoinTimerEnabled = autoRejoinTimerEnabled,
+                    rejoinIntervalMinutes = rejoinIntervalMinutes
                 }
                 local jsonData = HttpService:JSONEncode(dataToSave)
                 writefile(configFileName, jsonData)
@@ -201,6 +207,31 @@ return function(Window, Utils)
         end,
     })
 
+    ServerTab:CreateSection(" " .. Utils.t("sec_timed_rejoin") .. " ")
+    local RejoinTimerLabel = ServerTab:CreateLabel(Utils.t("rejoin_timer_label") .. "--:--")
+    
+    ServerTab:CreateToggle({
+        Name = Utils.t("auto_rejoin_timer"),
+        Info = Utils.t("auto_rejoin_timer_info"),
+        CurrentValue = autoRejoinTimerEnabled,
+        Callback = function(Value)
+            autoRejoinTimerEnabled = Value
+            SaveState()
+        end
+    })
+    
+    ServerTab:CreateSlider({
+        Name = Utils.t("rejoin_interval"),
+        Info = Utils.t("rejoin_interval_info"),
+        Range = {5, 120},
+        Increment = 5,
+        CurrentValue = rejoinIntervalMinutes,
+        Callback = function(Value)
+            rejoinIntervalMinutes = Value
+            SaveState()
+        end
+    })
+
     -- LUỒNG QUÉT POPUP ERROR 279
     task.spawn(function()
         while task.wait(0.5) do
@@ -339,6 +370,45 @@ return function(Window, Utils)
             end
         end
     end)
+
+    -- LUỒNG ĐỔI SERVER THEO HẸN GIỜ (TIMED SERVER HOP)
+    task.spawn(function()
+        while task.wait(1) do
+            if autoRejoinTimerEnabled then
+                local elapsed = os.time() - sessionStartTime
+                local targetSeconds = rejoinIntervalMinutes * 60
+                local timeLeft = targetSeconds - elapsed
+                
+                if timeLeft > 0 then
+                    local minutes = math.floor(timeLeft / 60)
+                    local seconds = timeLeft % 60
+                    RejoinTimerLabel:Set(Utils.t("rejoin_timer_label") .. string.format("%02d:%02d", minutes, seconds))
+                else
+                    RejoinTimerLabel:Set(Utils.t("rejoin_timer_label") .. "HOPPING...")
+                    
+                    -- Kiểm tra xem có thể nhảy Server ngay không (tránh ngắt quãng Boss/Dungeon)
+                    local controller = _G.SystemController
+                    local canHop = true
+                    if controller and controller.CurrentLock then
+                        local lock = controller.CurrentLock
+                        if lock == "BossHunt" or lock == "SpecialBoss" or lock == "AutoDungeon" or lock == "AutoRift" then
+                            canHop = false
+                        end
+                    end
+                    
+                    if canHop then
+                        print("[ServerManager] ⏰ Hết thời gian phiên chơi (" .. tostring(rejoinIntervalMinutes) .. " phút). Đang chuyển server...")
+                        pcall(function() Utils.HopServer("Hẹn giờ nhảy Server") end)
+                        task.wait(10)
+                    else
+                        RejoinTimerLabel:Set(Utils.t("rejoin_timer_label") .. "WAITING (" .. tostring(controller.CurrentLock) .. ")")
+                    end
+                end
+            else
+                RejoinTimerLabel:Set(Utils.t("rejoin_timer_label") .. "DISABLED")
+            end
+        end
+    end)
     
-    print("✅ Server Manager 4.2 (Full Persistence Loaded!)")
+    print("✅ Server Manager 4.3 (Timed Server Hop & Persistence Loaded!)")
 end

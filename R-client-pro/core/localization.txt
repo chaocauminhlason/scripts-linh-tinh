@@ -101,6 +101,12 @@ local Translations = {
     ["sec_anti_kick"] = { en = "ANTI-KICK SYSTEM", vi = "HỆ THỐNG CHỐNG AFK/KICK" },
     ["auto_rejoin"] = { en = "Auto Rejoin", vi = "Auto Rejoin" },
     ["auto_rejoin_info"] = { en = "Automatically reconnects to a new server if disconnected or kicked from the game.", vi = "Tự động kết nối lại vào server mới nếu bị mất kết nối hoặc bị kick." },
+    ["sec_timed_rejoin"] = { en = "TIMED SERVER REJOIN / HOP", vi = "TỰ ĐỘNG ĐỔI SERVER THEO THỜI GIAN" },
+    ["auto_rejoin_timer"] = { en = "Timed Server Hop", vi = "Tự Động Đổi Server" },
+    ["auto_rejoin_timer_info"] = { en = "Automatically switches to a new server after playing for a specific amount of time to reduce lag.", vi = "Tự động chuyển sang server mới sau một khoảng thời gian chơi nhất định để tránh giật lag." },
+    ["rejoin_interval"] = { en = "Rejoin Interval (Minutes)", vi = "Thời Gian Nhảy Server (Phút)" },
+    ["rejoin_interval_info"] = { en = "Set the amount of minutes to wait before hopping to another server.", vi = "Thiết lập số phút chơi trước khi tự động nhảy sang server mới." },
+    ["rejoin_timer_label"] = { en = "Next Hop In: ", vi = "Nhảy server tiếp theo sau: " },
     ["hop_least_msg"] = { en = "Teleporting to the emptiest server...", vi = "Đang nhảy qua server vắng nhất..." },
     ["hop_random_msg"] = { en = "Teleporting to a random server...", vi = "Đang nhảy qua server ngẫu nhiên..." },
 
