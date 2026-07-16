@@ -236,20 +236,11 @@ return function(Window, Utils)
     end
 
     local function IsInOpenWorld()
-        local success, result = pcall(function()
-            local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-            local mainGui = playerGui and playerGui:FindFirstChild("MainGui")
-            local screenGui = mainGui and mainGui:FindFirstChild("ScreenGui")
-            local mainRightView = screenGui and screenGui:FindFirstChild("MainRightView")
-            local fmReturn = mainRightView and mainRightView:FindFirstChild("FmReturn")
-            local btReturn = fmReturn and fmReturn:FindFirstChild("BtReturn")
-            -- Nếu tồn tại nút quay về và nó đang hiển thị -> tức là đang ở trong Rift (không phải Open World)
-            if btReturn and btReturn.Visible then
-                return false
-            end
-            return true
-        end)
-        return success and result or true
+        if Utils and type(Utils.GetCurrentAreaId) == "function" then
+            local currentArea = Utils.GetCurrentAreaId()
+            return currentArea ~= "Rift" and currentArea ~= "Abyss"
+        end
+        return true
     end
 
     local function IsMapFolderMatchingId(folderName, worldId)
