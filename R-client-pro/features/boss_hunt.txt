@@ -397,6 +397,15 @@ return function(Window, Utils)
             end
             _G.PendingSpecialBoss = true
 
+            if Utils and type(Utils.GetCurrentAreaId) == "function" then
+                local currentArea = Utils.GetCurrentAreaId()
+                if currentArea == "Rift" or currentArea == "Abyss" then
+                    spStatusLabel:Set("⏳ Đang trong phó bản (" .. tostring(currentArea) .. "), tạm dừng săn Boss...")
+                    task.wait(1.0)
+                    continue
+                end
+            end
+
             if _G.IsSystemHealActive then
                 task.wait(0.5)
                 continue
@@ -466,6 +475,15 @@ return function(Window, Utils)
                 continue 
             end
             _G.PendingBossHunt = true
+
+            if Utils and type(Utils.GetCurrentAreaId) == "function" then
+                local currentArea = Utils.GetCurrentAreaId()
+                if currentArea == "Rift" or currentArea == "Abyss" then
+                    wbStatusLabel:Set("⏳ Đang trong phó bản (" .. tostring(currentArea) .. "), tạm dừng săn Boss...")
+                    task.wait(1.0)
+                    continue
+                end
+            end
 
             if _G.IsSystemHealActive then
                 task.wait(0.5)
