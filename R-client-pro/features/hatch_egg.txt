@@ -370,14 +370,14 @@ return function(Window, Utils)
                         if not hasActiveBreed then
                             -- Quét tìm con đực phù hợp
                             local maleCandidates = {}
-                            local selectedFatherId = tonumber(string.match(hatchSettings.breedFather, "%(ID:%s*(%d+)%)"))
+                            local selectedFatherId = string.match(hatchSettings.breedFather, "%(ID:%s*(%d+)%)")
                             
                             petData:IterItem(function(pet)
                                 local tmpl = pet:GetTmpl()
                                 if not pet:IsChildPet() and not tmpl.CantBreed and pet:GetGrade() >= env.CfgPetBreed.ParentGradeMin then
                                     if pet:GetGender() == env.Constants.PetGenderType.Male then
                                         if selectedFatherId then
-                                            if pet.itemId == selectedFatherId then
+                                            if tostring(pet.itemId) == selectedFatherId then
                                                 table.insert(maleCandidates, {
                                                     itemId = pet.itemId,
                                                     grade = pet:GetGrade()
@@ -396,14 +396,14 @@ return function(Window, Utils)
                             
                             -- Quét tìm con cái phù hợp
                             local femaleCandidates = {}
-                            local selectedMotherId = tonumber(string.match(hatchSettings.breedMother, "%(ID:%s*(%d+)%)"))
+                            local selectedMotherId = string.match(hatchSettings.breedMother, "%(ID:%s*(%d+)%)")
                             
                             petData:IterItem(function(pet)
                                 local tmpl = pet:GetTmpl()
                                 if not pet:IsChildPet() and not tmpl.CantBreed and pet:GetGrade() >= env.CfgPetBreed.ParentGradeMin then
                                     if pet:GetGender() == env.Constants.PetGenderType.Female then
                                         if selectedMotherId then
-                                            if pet.itemId == selectedMotherId then
+                                            if tostring(pet.itemId) == selectedMotherId then
                                                 table.insert(femaleCandidates, {
                                                     itemId = pet.itemId,
                                                     grade = pet:GetGrade()
