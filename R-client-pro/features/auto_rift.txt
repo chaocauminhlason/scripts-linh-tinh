@@ -591,15 +591,26 @@ return function(Window, Utils)
             local humanoid = char and char:FindFirstChild("Humanoid")
             if not (hrp and humanoid and humanoid.Health > 0) then continue end
 
-            -- Nếu phát hiện đã ở ngoài Open World nhưng trạng thái logic vẫn là COMBAT/EXITING -> Tự động reset về SCANNING
-            if IsInOpenWorld() and (riftState == "COMBAT" or riftState == "EXITING") then
-                print("[AutoRift] Phát hiện đang ở Open World. Tự động reset trạng thái về SCANNING.")
-                riftState = "SCANNING"
-                targetRiftId = nil
-                targetRiftKey = nil
-                riftEntryPosition = nil
-                hasEncounteredMonsters = false
-                combatStartTime = 0
+            -- [Bám sát vị trí thực tế - Đồng bộ trạng thái logic]
+            if IsInOpenWorld() then
+                if riftState == "COMBAT" or riftState == "EXITING" then
+                    print("[AutoRift] Phát hiện đang ở Open World. Tự động reset trạng thái về SCANNING.")
+                    riftState = "SCANNING"
+                    targetRiftId = nil
+                    targetRiftKey = nil
+                    riftEntryPosition = nil
+                    hasEncounteredMonsters = false
+                    combatStartTime = 0
+                end
+            else
+                -- Nếu nhân vật đang ở trong phó bản nhưng trạng thái logic vẫn là SCANNING -> Buộc chuyển sang COMBAT
+                if riftState == "SCANNING" then
+                    print("[AutoRift] Phát hiện đang ở trong Rift. Tự động ép trạng thái sang COMBAT.")
+                    riftState = "COMBAT"
+                    combatStartTime = os.time()
+                    hasEncounteredMonsters = false
+                    riftEntryPosition = hrp.Position
+                end
             end
 
             -- Yêu cầu giữ cờ AutoRift khi bắt đầu chu kỳ quét (Chống tranh chấp với AutoFarm)
