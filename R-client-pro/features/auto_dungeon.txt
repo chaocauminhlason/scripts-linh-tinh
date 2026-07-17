@@ -259,7 +259,8 @@ return function(Window, Utils, WebhookModule)
                     else dungeonStuckTimer = 0 SmartDismount() end
                 end
 
-                if autoExitEnabled and not autoExitTriggered then
+                local shouldCheckCompletion = autoExitEnabled or autoCreateEnabled or autoJoinOthersEnabled
+                if shouldCheckCompletion and not autoExitTriggered then
                     local fmTimeFrame = nil
                     pcall(function() fmTimeFrame = playerGui.MainGui.ScreenGui.ArenaMainRightTopView.FmTime end)
                     local currentStage, maxStage = string.match(labStage.Text, "(%d+)/(%d+)")
