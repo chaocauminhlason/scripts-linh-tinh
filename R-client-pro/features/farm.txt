@@ -588,7 +588,7 @@ return function(Window, Utils)
             if SystemCache.MonsterSystem then
                 for _, mData in ipairs(validMonsters) do
                     if mData.Id then pcall(function() SystemCache.MonsterSystem:ClientAttackMonster(mData.Id) end) end
-                    Utils.SmartDismount()
+                    
                 end
             end
         end
@@ -697,6 +697,7 @@ return function(Window, Utils)
                     end)
 
                     charData.RootPart.CFrame = CFrame.lookAt(targetPos, closestMonster.Position)
+                    task.wait(0.2)
                 end
                 pcall(function() SystemCache.AttackRemote:InvokeServer("MonsterAttackChannel", closestMonster.Id) end)
                 task.wait(AppState.attackDelay + 0.1)
