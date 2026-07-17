@@ -364,10 +364,19 @@ return function(Window, Utils)
                     return (hrp.Position - a.pos).Magnitude < (hrp.Position - b.pos).Magnitude
                 end)
                 
-                local target = items[1]
-                local cacheKey = target.object:GetFullName() .. "_" .. tostring(target.pos)
+                -- Tìm vật phẩm gần nhất mà chưa được claim
+                local target = nil
+                local cacheKey = nil
+                for _, it in ipairs(items) do
+                    local key = it.object:GetFullName() .. "_" .. tostring(it.pos)
+                    if not claimedCache[key] then
+                        target = it
+                        cacheKey = key
+                        break
+                    end
+                end
                 
-                if not claimedCache[cacheKey] then
+                if target then
                     print("[EventAuto] Teleporting to claim: " .. target.object.Name .. " at " .. tostring(target.pos))
                     
                     -- Dịch chuyển nhân vật đến vật thể (độ cao cách 3 studs)
@@ -419,6 +428,8 @@ return function(Window, Utils)
                     
                     claimedCache[cacheKey] = true
                     task.wait(0.5) -- Tránh spam mạng
+                else
+                    EventStatus:Set(Utils.t("event_status_idle"))
                 end
             else
                 EventStatus:Set(Utils.t("event_status_idle"))
