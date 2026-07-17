@@ -401,7 +401,12 @@ return function(Window, Utils)
                     hasEncounteredMonsters = false
                     riftState = "COMBAT"
                     combatStartTime = os.time()
-                    riftEntryPosition = checkHrp.Position
+                    -- Chỉ lưu vị trí khi thực sự không ở map gốc (đã vào Rift)
+                    if not IsInOpenWorld() then
+                        riftEntryPosition = checkHrp.Position
+                    else
+                        riftEntryPosition = nil
+                    end
                 end
             else
                 print("[TEST-LOG] 🚀 VÀO RIFT THÀNH CÔNG ngay lập tức!")
@@ -409,7 +414,12 @@ return function(Window, Utils)
                 hasEncounteredMonsters = false
                 riftState = "COMBAT"
                 combatStartTime = os.time()
-                riftEntryPosition = checkHrp.Position
+                -- Chỉ lưu vị trí khi thực sự không ở map gốc (đã vào Rift)
+                if not IsInOpenWorld() then
+                    riftEntryPosition = checkHrp.Position
+                else
+                    riftEntryPosition = nil
+                end
             end
         else
             -- Nhân vật tạm thời chưa load xong HRP nhưng lệnh gửi đi rồi -> Ép trạng thái COMBAT
@@ -610,6 +620,10 @@ return function(Window, Utils)
                     hasEncounteredMonsters = false
                     riftEntryPosition = hrp.Position
                     RiftStatus:Set(Utils.t("rift_status_fight"))
+                elseif riftState == "COMBAT" and not riftEntryPosition then
+                    -- Đảm bảo đồng bộ vị trí vào Rift khẩn cấp nếu trước đó chưa lưu hoặc lưu lỗi
+                    riftEntryPosition = hrp.Position
+                    print("[AutoRift] Đồng bộ riftEntryPosition từ HRP hiện tại đang ở trong Rift.")
                 end
             end
 
