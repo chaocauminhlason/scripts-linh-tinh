@@ -264,7 +264,22 @@ return function(Window, Utils, WebhookModule)
                     pcall(function() fmTimeFrame = playerGui.MainGui.ScreenGui.ArenaMainRightTopView.FmTime end)
                     local currentStage, maxStage = string.match(labStage.Text, "(%d+)/(%d+)")
                     
-                    if currentStage and maxStage and tonumber(currentStage) == tonumber(maxStage) then
+                    -- Kiểm tra giao diện kết quả màn chơi (Thắng/Thua)
+                    local isSettled = false
+                    pcall(function()
+                        local screenGui = playerGui.MainGui.ScreenGui
+                        for _, view in ipairs(screenGui:GetChildren()) do
+                            if view.Visible and (string.find(view.Name, "WinResultView") or string.find(view.Name, "FailResultView") or string.find(view.Name, "Settlement")) then
+                                isSettled = true
+                                break
+                            end
+                        end
+                    end)
+                    
+                    local isFinished = false
+                    if isSettled then
+                        isFinished = true
+                    elseif currentStage and maxStage and tonumber(currentStage) == tonumber(maxStage) then
                         if fmTimeFrame and fmTimeFrame.Visible == true then 
                             if not stage20ClockStarted then 
                                 stage20ClockStarted = true
@@ -273,72 +288,75 @@ return function(Window, Utils, WebhookModule)
                                 DungeonStatus:Set(Utils.t("dg_label_stage20_clock")) 
                             end 
                         end
-                        
                         if stage20ClockStarted and (not fmTimeFrame or fmTimeFrame.Visible == false) then
-                            if autoJoinOthersEnabled then
-                                if not waitingForHost then
-                                    waitingForHost = true
-                                    dungeonCompletionTime = tick()
-                                    hostMissingTime = nil 
-                                    DungeonStatus:Set(string.format(Utils.t("dg_label_wait_host"), waitHostTimeoutMinutes))
-                                else
-                                    local elapsed = math.floor(tick() - dungeonCompletionTime)
-                                    local playersInside = GetPlayersInDungeon(hrp)
-                                    local maxWaitSeconds = waitHostTimeoutMinutes * 60 
+                            isFinished = true
+                        end
+                    end
+                    
+                    if isFinished then
+                        if autoJoinOthersEnabled then
+                            if not waitingForHost then
+                                waitingForHost = true
+                                dungeonCompletionTime = tick()
+                                hostMissingTime = nil 
+                                DungeonStatus:Set(string.format(Utils.t("dg_label_wait_host"), waitHostTimeoutMinutes))
+                            else
+                                local elapsed = math.floor(tick() - dungeonCompletionTime)
+                                local playersInside = GetPlayersInDungeon(hrp)
+                                local maxWaitSeconds = waitHostTimeoutMinutes * 60 
+                                
+                                if playersInside <= 1 then
+                                    if not hostMissingTime then hostMissingTime = tick() end
+                                    local missingElapsed = math.floor(tick() - hostMissingTime)
                                     
-                                    if playersInside <= 1 then
-                                        if not hostMissingTime then hostMissingTime = tick() end
-                                        local missingElapsed = math.floor(tick() - hostMissingTime)
-                                        
-                                        if missingElapsed >= 7 then 
-                                            autoExitTriggered = true 
-                                            DungeonStatus:Set(Utils.t("dg_label_host_left"))
-                                            task.spawn(function() if WebhookModule and WebhookModule.SendNotification then WebhookModule.SendNotification("**" .. LocalPlayer.Name .. "** thoát Hầm ngục vì chủ phòng sủi.") end end)
-                                            task.spawn(SafeExitRoutine)
-                                        else
-                                            DungeonStatus:Set(string.format(Utils.t("dg_label_sync_host"), missingElapsed))
-                                        end
+                                    if missingElapsed >= 7 then 
+                                        autoExitTriggered = true 
+                                        DungeonStatus:Set(Utils.t("dg_label_host_left"))
+                                        task.spawn(function() if WebhookModule and WebhookModule.SendNotification then WebhookModule.SendNotification("**" .. LocalPlayer.Name .. "** thoát Hầm ngục vì chủ phòng sủi.") end end)
+                                        task.spawn(SafeExitRoutine)
                                     else
-                                        hostMissingTime = nil 
-                                        if elapsed >= maxWaitSeconds then
-                                            autoExitTriggered = true 
-                                            DungeonStatus:Set(Utils.t("dg_label_host_timeout"))
-                                            task.spawn(function() if WebhookModule and WebhookModule.SendNotification then WebhookModule.SendNotification(string.format("**%s** thoát Hầm ngục do Timeout (%d phút).", LocalPlayer.Name, waitHostTimeoutMinutes)) end end)
-                                            task.spawn(SafeExitRoutine)
-                                        else
-                                            DungeonStatus:Set(string.format(Utils.t("dg_label_wait_host_detail"), elapsed, maxWaitSeconds, playersInside))
-                                        end
+                                        DungeonStatus:Set(string.format(Utils.t("dg_label_sync_host"), missingElapsed))
+                                    end
+                                else
+                                    hostMissingTime = nil 
+                                    if elapsed >= maxWaitSeconds then
+                                        autoExitTriggered = true 
+                                        DungeonStatus:Set(Utils.t("dg_label_host_timeout"))
+                                        task.spawn(function() if WebhookModule and WebhookModule.SendNotification then WebhookModule.SendNotification(string.format("**%s** thoát Hầm ngục do Timeout (%d phút).", LocalPlayer.Name, waitHostTimeoutMinutes)) end end)
+                                        task.spawn(SafeExitRoutine)
+                                    else
+                                        DungeonStatus:Set(string.format(Utils.t("dg_label_wait_host_detail"), elapsed, maxWaitSeconds, playersInside))
                                     end
                                 end
-                            elseif autoCreateEnabled then
-                                -- Bật Auto Create mà không bật Auto Join -> Dùng chìa khóa đi tiếp ngay tại đấy
-                                autoExitTriggered = true
-                                DungeonStatus:Set(Utils.t("dg_label_boss_key"))
-                                task.spawn(function()
-                                    if WebhookModule and WebhookModule.SendNotification then
-                                        WebhookModule.SendNotification("**" .. LocalPlayer.Name .. "** hoàn thành 20/20 và đã tự động dùng chìa khóa đi tiếp!")
-                                    end
-                                end)
-                                
-                                pcall(function()
-                                    local args = { "AbyssRestartChannel" }
-                                    game:GetService("ReplicatedStorage"):WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc"):InvokeServer(unpack(args))
-                                end)
-                                
-                                task.wait(5) -- Đợi game dịch chuyển sang map mới
-                                autoExitTriggered = false
-                                stage20ClockStarted = false
-                                waitingForHost = false
-                                hostMissingTime = nil
-                            else
-                                -- Không bật cả hai -> Thoát bình thường
-                                autoExitTriggered = true 
-                                DungeonStatus:Set(Utils.t("dg_label_boss_done_exit"))
-                                task.spawn(function() if WebhookModule and WebhookModule.SendNotification then WebhookModule.SendNotification("**" .. LocalPlayer.Name .. "** vừa hoàn thành vòng Dungeon 20/20!") end end)
-                                task.spawn(SafeExitRoutine)
                             end
+                        elseif autoCreateEnabled then
+                            -- Bật Auto Create mà không bật Auto Join -> Dùng chìa khóa đi tiếp ngay tại đấy
+                            autoExitTriggered = true
+                            DungeonStatus:Set(Utils.t("dg_label_boss_key"))
+                            task.spawn(function()
+                                if WebhookModule and WebhookModule.SendNotification then
+                                    WebhookModule.SendNotification("**" .. LocalPlayer.Name .. "** hoàn thành 20/20 và đã tự động dùng chìa khóa đi tiếp!")
+                                end
+                            end)
+                            
+                            pcall(function()
+                                local args = { "AbyssRestartChannel" }
+                                game:GetService("ReplicatedStorage"):WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc"):InvokeServer(unpack(args))
+                            end)
+                            
+                            task.wait(5) -- Đợi game dịch chuyển sang map mới
+                            autoExitTriggered = false
+                            stage20ClockStarted = false
+                            waitingForHost = false
+                            hostMissingTime = nil
+                        else
+                            -- Không bật cả hai -> Thoát bình thường
+                            autoExitTriggered = true 
+                            DungeonStatus:Set(Utils.t("dg_label_boss_done_exit"))
+                            task.spawn(function() if WebhookModule and WebhookModule.SendNotification then WebhookModule.SendNotification("**" .. LocalPlayer.Name .. "** vừa hoàn thành vòng Dungeon 20/20!") end end)
+                            task.spawn(SafeExitRoutine)
                         end
-                    else 
+                    elseif not (currentStage and maxStage and tonumber(currentStage) == tonumber(maxStage)) then 
                         stage20ClockStarted = false
                         autoExitTriggered = false 
                         waitingForHost = false
