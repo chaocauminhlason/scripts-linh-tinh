@@ -222,7 +222,8 @@ return function(Window, Utils)
                 -- 1. Kiểm tra QAFolder (Chọn vòng tròn Q&A)
                 local qaFolder = obbyFolder:FindFirstChild("QAFolder")
                 if qaFolder and #qaFolder:GetChildren() > 0 then
-                    local CfgQA = env and env.CfgQA
+                    local successQa, CfgQA = pcall(function() return env and env.CfgQA end)
+                    CfgQA = successQa and CfgQA or nil
                     local activeKey = nil
                     local qText = "Đang diễn ra"
                     local choices = {}
@@ -253,6 +254,18 @@ return function(Window, Utils)
                             end
                         end
                     end
+
+                    -- Fallback: Nếu không có CfgQA hoặc không tìm thấy câu trả lời đúng, chọn theo số đông
+                    if not activeObbyPart then
+                        local maxVotes = -1
+                        for _, part in ipairs(qaFolder:GetChildren()) do
+                            local voteCount = part:GetAttribute("VoteCount") or 0
+                            if voteCount > maxVotes then
+                                maxVotes = voteCount
+                                activeObbyPart = part
+                            end
+                        end
+                    end
                     
                     -- Cập nhật Live HUD Q&A
                     if activeKey then
@@ -274,7 +287,8 @@ return function(Window, Utils)
                 if not activeObbyPart then
                     local newSelectFolder = obbyFolder:FindFirstChild("NewSelectFolder")
                     if newSelectFolder and #newSelectFolder:GetChildren() > 0 then
-                        local CfgNewSelect = env and env.CfgNewSelect
+                        local successNs, CfgNewSelect = pcall(function() return env and env.CfgNewSelect end)
+                        CfgNewSelect = successNs and CfgNewSelect or nil
                         local bestPart = nil
                         local highestScore = -1
                         local hudLines = {}
