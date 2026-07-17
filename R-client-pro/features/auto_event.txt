@@ -341,6 +341,60 @@ return function(Window, Utils)
                         })
                     end
                 end
+
+                -- 3. Kiểm tra MemePetFind (Tìm Meme Pet)
+                if not activeObbyPart then
+                    local memeFolder = nil
+                    for _, child in ipairs(obbyFolder:GetChildren()) do
+                        if string.find(child.Name, "MemePetFind") then
+                            memeFolder = child:FindFirstChild("MemePetFindRuntimeZones")
+                            if memeFolder then break end
+                        end
+                    end
+                    
+                    if memeFolder and #memeFolder:GetChildren() > 0 then
+                        local bestPart = nil
+                        local maxVotes = -1
+                        local hudLines = { "Sự kiện: Tìm Meme Pet" }
+                        
+                        for _, cell in ipairs(memeFolder:GetChildren()) do
+                            if cell:IsA("BasePart") then
+                                -- Tính số người chơi đang đứng trên bục này
+                                local playerCount = 0
+                                for _, p in ipairs(Players:GetPlayers()) do
+                                    if p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                                        local dist = (p.Character.HumanoidRootPart.Position - cell.Position).Magnitude
+                                        if dist < 15 then
+                                            playerCount = playerCount + 1
+                                        end
+                                    end
+                                end
+                                
+                                local labelName = cell.Name
+                                local groupLabel = cell:FindFirstChild("TrickOrTreat") and cell.TrickOrTreat:FindFirstChild("Main") and cell.TrickOrTreat.Main:FindFirstChild("Group")
+                                if groupLabel then
+                                    labelName = labelName .. " (" .. groupLabel.Text .. ")"
+                                end
+                                
+                                table.insert(hudLines, string.format("  • %s: Số người đứng = %d", labelName, playerCount))
+                                if playerCount > maxVotes then
+                                    maxVotes = playerCount
+                                    bestPart = cell
+                                end
+                            end
+                        end
+                        
+                        activeObbyPart = bestPart
+                        if activeObbyPart then
+                            table.insert(hudLines, "Đang chọn theo số đông: " .. activeObbyPart.Name)
+                        end
+                        
+                        LiveHud:Set({
+                            Title = "📡 SỰ KIỆN TÌM MEME PET LIVE",
+                            Content = table.concat(hudLines, "\n")
+                        })
+                    end
+                end
             end
             
             -- Nếu phát hiện ô lựa chọn chính xác đang hoạt động, dịch chuyển đến đó và đứng yên
