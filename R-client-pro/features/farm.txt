@@ -43,6 +43,8 @@ return function(Window, Utils)
         targetMonsterNames = {}
     }
 
+    local catchingCache = {}
+
     -- ==========================================
     -- 2. TẦNG XỬ LÝ DỮ LIỆU & TIỆN ÍCH (HELPER FUNCTIONS)
     -- ==========================================
@@ -607,25 +609,30 @@ return function(Window, Utils)
             
             local targetCatch, minDist = nil, math.huge
             for _, mData in ipairs(catchableMonsters) do
-                if mData.Distance < minDist then
-                    minDist, targetCatch = mData.Distance, mData
+                if mData.Id and not catchingCache[mData.Id] then
+                    if mData.Distance < minDist then
+                        minDist, targetCatch = mData.Distance, mData
+                    end
                 end
             end
 
             if targetCatch and SystemCache.MonsterSystem then
-            -- Nếu quá gần (dưới 15 studs) thì không cần Teleport
-            if minDist > 20 then
-            task.wait(0.25)
-                Utils.SafeTeleport(CFrame.new(targetCatch.Position), 5)
-            end
+                -- Nếu quá gần (dưới 20 studs) thì không cần Teleport
+                if minDist > 20 then
+                    task.wait(0.25)
+                    Utils.SafeTeleport(CFrame.new(targetCatch.Position), 5)
+                end
             
                 -- Task con xử lý Async việc ném bóng bắt quái
                 task.spawn(function()
+                    catchingCache[targetCatch.Id] = true
                     local success, isStarted = pcall(function() return SystemCache.MonsterSystem:ClientCatchMonsterStart(targetCatch.Id) end)
                     if success then
-                        task.wait(isStarted and 1.5 or 5)
+                        task.wait(0.2) -- Giảm trễ từ 1.5s xuống 0.2s để ném bóng siêu tốc
                         pcall(function() SystemCache.MonsterSystem:ClientCatchMonsterComplete(targetCatch.Id) end)
                     end
+                    task.wait(1.8) -- Đợi thêm 1.8s trước khi xóa khỏi cache để tránh trùng lặp
+                    catchingCache[targetCatch.Id] = nil
                 end)
             end
         end

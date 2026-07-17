@@ -4,6 +4,7 @@
 -- ====================================================================
 
 local SPECIAL_BOSS_MAPPING = {
+    [3]  = {"Frostbun"},
     [5]  = { "DustWing" },
     [6]  = { "Undine", "Walrusk" },
     [7]  = { "Cobaltwing" },
