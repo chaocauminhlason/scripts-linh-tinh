@@ -2,7 +2,11 @@
 -- MODULE: DUNGEON AUTO (AUTO ATTACK, AUTO EXIT, AUTO JOIN & AUTO CREATE)
 -- BẢN CẬP NHẬT: TÍCH HỢP HỆ THỐNG ƯU TIÊN SỐ 1 & NHƯỜNG ĐƯỜNG CHO BOSS
 -- ====================================================================
-return function(Window, Utils, WebhookModule)
+return function(ctx)
+    local Window = ctx.Window
+    local Utils = ctx.Utils
+    local Controller = ctx.Controller
+    local WebhookModule = ctx.Webhook
     local Players = game:GetService("Players")
     local Workspace = game:GetService("Workspace")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -49,12 +53,12 @@ return function(Window, Utils, WebhookModule)
                     char.Humanoid:MoveTo(char.HumanoidRootPart.Position)
                 end
             end)
-            if _G.SystemController then _G.SystemController.ReleaseLock("AutoDungeon") end
+            if Controller then Controller.ReleaseLock("AutoDungeon") end
         end
     end
 
-    if _G.SystemController and type(_G.SystemController.registerModule) == "function" then
-        _G.SystemController:registerModule("dungeon", DungeonToggle)
+    if Controller and type(Controller.registerModule) == "function" then
+        Controller:registerModule("dungeon", DungeonToggle)
     end
 
     -- ==========================================
@@ -168,7 +172,7 @@ return function(Window, Utils, WebhookModule)
         end)
         
         -- [TÍCH HỢP]: Nhả Lock ngay khi ấn thoát để hệ thống biết Dungeon đã xong
-        if _G.SystemController then _G.SystemController.ReleaseLock("AutoDungeon") end
+        if Controller then Controller.ReleaseLock("AutoDungeon") end
         
         task.wait(1.5)
         
@@ -190,7 +194,7 @@ return function(Window, Utils, WebhookModule)
         while task.wait(0.5) do
             if not masterSwitchEnabled then continue end
 
-            local controller = _G.SystemController
+            local controller = Controller
             local char = LocalPlayer.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
             local humanoid = char and char:FindFirstChild("Humanoid")

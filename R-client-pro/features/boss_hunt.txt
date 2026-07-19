@@ -42,7 +42,11 @@ local WB_WAVE_COOLDOWN_SECS = 60
 local WB_ATTACK_INTERVAL    = 1
 local SHARED_TELEPORT_WAIT  = 3
 
-return function(Window, Utils)
+return function(ctx)
+    local Window = ctx.Window
+    local Utils = ctx.Utils
+    local Controller = ctx.Controller
+    local Config = ctx.Config
     -- ==========================================
     -- TRẠNG THÁI (STATE)
     -- ==========================================
@@ -74,17 +78,16 @@ return function(Window, Utils)
     -- QUẢN LÝ CỜ (MUTEX LOCK) - BẢN BỌC THÉP
     -- ==========================================
     local function TryAcquireLock()
-        local ctrl = _G.SystemController
-        if ctrl then
-            if ctrl.CurrentLock == "BossHunt" then return true end
+        if Controller then
+            if Controller.CurrentLock == "BossHunt" then return true end
             
             pcall(function()
-                if type(ctrl.RequestLock) == "function" then
-                    ctrl.RequestLock("BossHunt")
+                if type(Controller.RequestLock) == "function" then
+                    Controller.RequestLock("BossHunt")
                 end
             end)
             
-            return ctrl.CurrentLock == "BossHunt"
+            return Controller.CurrentLock == "BossHunt"
         end
         return true 
     end
@@ -97,14 +100,13 @@ return function(Window, Utils)
         _G.PendingSpecialBoss = false
         
         -- 2. Thực hiện trả cờ cực kỳ an toàn
-        local ctrl = _G.SystemController
-        if ctrl and ctrl.CurrentLock == "BossHunt" then
+        if Controller and Controller.CurrentLock == "BossHunt" then
             local success, err = pcall(function()
                 -- Thử cả 2 cách gọi phổ biến nhất để chống crash ngầm
-                if type(ctrl.ReleaseLock) == "function" then
-                    ctrl.ReleaseLock("BossHunt") 
-                elseif type(ctrl.releaseLock) == "function" then
-                    ctrl.releaseLock("BossHunt")
+                if type(Controller.ReleaseLock) == "function" then
+                    Controller.ReleaseLock("BossHunt") 
+                elseif type(Controller.releaseLock) == "function" then
+                    Controller.releaseLock("BossHunt")
                 end
             end)
             

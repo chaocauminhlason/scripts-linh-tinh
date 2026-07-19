@@ -1,7 +1,10 @@
 -- ====================================================================
 -- MODULE: QUẢN LÝ SERVER & AUTO HOP (V4.2 - FULL PERSISTENT STATE)
 -- ====================================================================
-return function(Window, Utils)
+return function(ctx)
+    local Window = ctx.Window
+    local Utils = ctx.Utils
+    local Controller = ctx.Controller
     local Players = game:GetService("Players")
     local TeleportService = game:GetService("TeleportService")
     local HttpService = game:GetService("HttpService")
@@ -299,7 +302,7 @@ return function(Window, Utils)
         local HOP_COOLDOWN = 10 
 
         while task.wait(2) do
-            local controller = _G.SystemController
+            local controller = Controller
             
             if controller and controller.IsPaused and not currentlyInTargetWeather then 
                 continue 
@@ -387,7 +390,7 @@ return function(Window, Utils)
                     RejoinTimerLabel:Set(Utils.t("rejoin_timer_label") .. "HOPPING...")
                     
                     -- Kiểm tra xem có thể nhảy Server ngay không (tránh ngắt quãng Boss/Dungeon)
-                    local controller = _G.SystemController
+                    local controller = Controller
                     local canHop = true
                     if controller and controller.CurrentLock then
                         local lock = controller.CurrentLock

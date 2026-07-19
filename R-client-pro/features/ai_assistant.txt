@@ -25,7 +25,10 @@ local UTF8_MAP = {
     ["Ý"]="Y",["Ỳ"]="Y",["Ỷ"]="Y",["Ỹ"]="Y",["Ỵ"]="Y",["Đ"]="D"
 }
 
-return function(Window, Utils, WebhookModule)
+return function(ctx)
+    local Window = ctx.Window
+    local Utils = ctx.Utils
+    local WebhookModule = ctx.Webhook
     local HttpService      = game:GetService("HttpService")
     local CoreGui          = game:GetService("CoreGui")
     local UserInputService = game:GetService("UserInputService")

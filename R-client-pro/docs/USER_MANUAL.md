@@ -59,7 +59,7 @@ Hệ thống săn boss sở hữu cơ chế điều phối thông minh tránh xu
 
 ### 🌌 Auto Rift (Săn Cổng Rift)
 * **Lọc Màu Cổng Rift (Rift Color Filter)**: Bạn có thể chọn cụ thể các màu sắc cổng muốn vào (ví dụ: chỉ săn cổng Đỏ và Tím). Hệ thống sẽ tự động quét và bỏ qua các cổng có màu sắc không nằm trong danh sách lựa chọn của bạn để tiết kiệm thời gian.
-* **Ranh giới an toàn (Anti-Escape)**: Khi vào cổng Rift, hệ thống sẽ tự động khóa mục tiêu săn bắn trong phạm vi bán kính 250 studs tính từ điểm vào. Điều này giúp bạn không bị dịch chuyển bay ra ngoài rìa bản đồ Rift dẫn đến việc bị rơi xuống hư vô.
+
 
 ---
 

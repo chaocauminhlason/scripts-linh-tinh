@@ -6,7 +6,8 @@ def bundle():
         'core/utilities.txt',
         'core/system_controller.txt',
         'core/webhook.txt',
-        'core/localization.txt'
+        'core/localization.txt',
+        'core/config_manager.txt'
     ]
     
     feature_files = [

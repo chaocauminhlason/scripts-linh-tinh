@@ -101,48 +101,58 @@ local Utils = SafeLoad('core/utilities.txt')
 local Controller = SafeLoad('core/system_controller.txt')
 local WebhookModule = SafeLoad('core/webhook.txt')
 local Localization = SafeLoad('core/localization.txt')
+local ConfigManager = SafeLoad('core/config_manager.txt')
 
 if Utils and Localization then
     Utils.t = Localization.t
     Utils.getLang = Localization.getLang
 end
 
--- 2. Kéo các Features
+-- 2. Tạo Context Object (AI_GUIDELINES Section 1: Dependency Injection)
+local ctx = {
+    Window = Window,
+    Utils = Utils,
+    Controller = Controller,
+    Webhook = WebhookModule,
+    Config = ConfigManager,
+    Localization = Localization,
+}
+
+-- 3. Kéo các Features (truyền ctx thay vì tham số rời)
 if Utils then
 
-
     local r = SafeLoad('features/farm.txt')
-    if r then r(Window, Utils, Controller) end
+    if r then r(ctx) end
     
     local b = SafeLoad('features/boss_hunt.txt')
-    if b then b(Window, Utils) end
+    if b then b(ctx) end
     
     local sm = SafeLoad('features/server_manager.txt')
-    if sm then sm(Window, Utils) end
+    if sm then sm(ctx) end
     
     local sg = SafeLoad('features/shops_and_guis.txt')
-    if sg then sg(Window, Utils) end
+    if sg then sg(ctx) end
 
     local d = SafeLoad('features/auto_dungeon.txt')
-    if d then d(Window, Utils, WebhookModule) end
+    if d then d(ctx) end
     
     local t = SafeLoad('features/tracker.txt')
-    if t then t(Window, Utils) end
+    if t then t(ctx) end
 
     local h = SafeLoad('features/hatch_egg.txt')
-    if h then h(Window, Utils) end
+    if h then h(ctx) end
 
     local rift = SafeLoad('features/auto_rift.txt')
-    if rift then rift(Window, Utils) end
+    if rift then rift(ctx) end
     
     local o = SafeLoad('features/optimization.txt')
-    if o then o(Window, Utils) end
+    if o then o(ctx) end
 
     local ev = SafeLoad('features/auto_event.txt')
-    if ev then ev(Window, Utils) end
+    if ev then ev(ctx) end
 
-    local a = SafeLoad('features/ai_assistant.txt')
-    if a then a(Window, Utils, WebhookModule) end
+    --local a = SafeLoad('features/ai_assistant.txt')
+    --if a then a(ctx) end
 end
 
 if WebhookModule and WebhookModule.InitTab then

@@ -1,7 +1,9 @@
 -- ====================================================================
 -- MODULE: TỐI ƯU HÓA & CHỐNG AFK
 -- ====================================================================
-return function(Window, Utils)
+return function(ctx)
+    local Window = ctx.Window
+    local Utils = ctx.Utils
     local Players = game:GetService("Players")
     local Lighting = game:GetService("Lighting")
     local Workspace = game:GetService("Workspace")

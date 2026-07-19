@@ -2,7 +2,10 @@
 -- MODULE: AUTO RIFT SYSTEM V9.3 (DEBUG LOGS & 1-MONSTER INSTANT EXIT)
 -- REFACTORED: Tối ưu hoá cấu trúc, giảm trùng lặp, cải thiện hiệu suất
 -- ====================================================================
-return function(Window, Utils)
+return function(ctx)
+    local Window = ctx.Window
+    local Utils = ctx.Utils
+    local Controller = ctx.Controller
     local Players = game:GetService("Players")
     local Workspace = game:GetService("Workspace")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -67,12 +70,12 @@ return function(Window, Utils)
             riftEntryPosition = nil
             targetRiftId = nil; targetRiftKey = nil; hasEncounteredMonsters = false
             cycleState.lastDynamicActivityTime = 0
-            if _G.SystemController then _G.SystemController.ReleaseLock("AutoRift") end
+            if Controller then Controller.ReleaseLock("AutoRift") end
         end
     end
 
-    if _G.SystemController and type(_G.SystemController.registerModule) == "function" then
-        _G.SystemController:registerModule("rift", RiftToggle)
+    if Controller and type(Controller.registerModule) == "function" then
+        Controller:registerModule("rift", RiftToggle)
     end
 
     -- ==========================================
@@ -591,8 +594,7 @@ return function(Window, Utils)
         DataPullFunc = ReplicatedStorage:WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc")
 
         while task.wait(0.5) do
-            local controller = _G.SystemController
-            if controller and controller.IsPaused then continue end
+            if Controller and Controller.IsPaused then continue end
             if not riftSettings.enabled or #riftSettings.selectedWorlds == 0 then continue end
 
             local char = LocalPlayer.Character
@@ -791,12 +793,16 @@ return function(Window, Utils)
                 CheckPetCasualtiesAndExit(controller)
                 
                 if riftState == "COMBAT" then
+                    -- Ném bóng bắt quái song song (không chặn luồng combat)
                     if unhandledDeadCount > 0 then
-                        HandleCatching(deadMonsters)
-                    elseif hasAliveMonsters then
+                        task.spawn(HandleCatching, deadMonsters)
+                    end
+
+                    -- Ưu tiên chiến đấu nếu vẫn còn quái sống
+                    if hasAliveMonsters then
                         HandleCombat(hrp, humanoid, bestTarget, closestDist2D)
                     else 
-                        -- Đã xử lý xong quái, tiến hành thoát
+                        -- Đã xử lý xong quái sống, tiến hành thoát
                         if not hasEncounteredMonsters then
                             local elapsed = os.time() - combatStartTime
                             if elapsed > 3 then

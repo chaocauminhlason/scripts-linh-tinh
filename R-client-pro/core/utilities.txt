@@ -1125,6 +1125,37 @@ function Utils.LoadSelectedAreas(fileName)
 end
 
 -- ==========================================
+-- HÀM XỬ LÝ LỖI CÓ CẤU TRÚC (SAFECALL)
+-- AI_GUIDELINES Section 6: Không dùng raw pcall nuốt lỗi
+-- ==========================================
+
+--- Wrapper an toàn cho pcall với stack trace đầy đủ.
+--- Thay vì pcall(func) nuốt lỗi im lặng, SafeCall sẽ log lỗi ra console.
+--- @param func function Hàm cần gọi an toàn
+--- @param context string Mô tả ngữ cảnh để debug (VD: "Farm.Attack", "Rift.Teleport")
+--- @return boolean success, any result
+function Utils.SafeCall(func, context)
+    local success, result = xpcall(func, function(err)
+        local trace = debug.traceback(err, 2)
+        warn(string.format("[SafeCall] ❌ Lỗi tại [%s]:\n%s", context or "Unknown", trace))
+        return err
+    end)
+    return success, result
+end
+
+--- Phiên bản SafeCall trả về giá trị (tiện dùng cho expressions)
+--- VD: local value = Utils.SafeGet(function() return obj.Name end, "GetName")
+--- @param func function Hàm cần gọi
+--- @param context string Mô tả ngữ cảnh
+--- @param default any Giá trị mặc định nếu lỗi
+--- @return any
+function Utils.SafeGet(func, context, default)
+    local success, result = Utils.SafeCall(func, context)
+    if success then return result end
+    return default
+end
+
+-- ==========================================
 -- HÀM MỞ RỘNG CHO UTILITIES
 -- ==========================================
 

@@ -1,7 +1,7 @@
 -- ====================================================================
 -- MODULE: SMART AUTO EVENT SYSTEM V2.0 (Abuse Eggs, Chests, Robbery & Quizzes)
 -- ====================================================================
-return function(Window, Utils)
+return function(ctx)\r\n    local Window = ctx.Window\r\n    local Utils = ctx.Utils
     local Players = game:GetService("Players")
     local Workspace = game:GetService("Workspace")
     local VirtualInputManager = game:GetService("VirtualInputManager")

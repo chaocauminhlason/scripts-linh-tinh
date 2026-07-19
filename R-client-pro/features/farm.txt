@@ -1,7 +1,13 @@
 -- ====================================================================
--- MODULE: R-GAME AUTO FARM (V10 REFACTORED - CONCURRENCY OPTIMIZED)
+-- MODULE: R-GAME AUTO FARM (V10 REFACTORED - CTX PATTERN)
 -- ====================================================================
-return function(Window, Utils)
+return function(ctx)
+    -- Dependency Injection (AI_GUIDELINES Section 1)
+    local Window = ctx.Window
+    local Utils = ctx.Utils
+    local Controller = ctx.Controller
+    local Config = ctx.Config
+
     -- ==========================================
     -- 1. KHỞI TẠO DỊCH VỤ & BIẾN MÔI TRƯỜNG
     -- ==========================================
@@ -17,12 +23,6 @@ return function(Window, Utils)
         AttackRemote = nil,
         InternalMonsterTable = nil,
         MonsterNames = {}
-    }
-
-    -- Quản lý File I/O
-    local ConfigFiles = {
-        Position = "R_ClientPro_FarmPos.json",
-        Filter = "R_ClientPro_MonsterFilter.json"
     }
 
     -- Quản lý Trạng thái cục bộ (Local State)
@@ -153,8 +153,7 @@ return function(Window, Utils)
 
     -- [Validation] Kiểm tra xem hệ thống có đang bận hoặc bị khóa không
     local function IsSystemBusy()
-        local controller = _G.SystemController
-        if controller and (controller.IsPaused or controller.CurrentLock ~= nil) then return true end
+        if Controller and (Controller.IsPaused or Controller.CurrentLock ~= nil) then return true end
         if _G.PendingBossHunt or _G.PendingSpecialBoss then return true end
         return false
     end
@@ -301,12 +300,12 @@ return function(Window, Utils)
     -- ==========================================
     InitializeNetworkRemotes()
 
-    local savedPosData = Utils.LoadJSON(ConfigFiles.Position)
-    if savedPosData then 
+    local savedPosData = Config and Config.Get("Farm.Position") or Utils.LoadJSON("R_ClientPro_FarmPos.json")
+    if savedPosData and savedPosData.X then 
         AppState.savedFarmPosition = CFrame.new(savedPosData.X, savedPosData.Y, savedPosData.Z) 
         AppState.savedFarmAreaId = savedPosData.AreaId
     end
-    local loadedFilter = Utils.LoadJSON(ConfigFiles.Filter) or {}
+    local loadedFilter = Config and Config.Get("Farm.MonsterFilter", {}) or Utils.LoadJSON("R_ClientPro_MonsterFilter.json") or {}
     local cleanedFilter = {}
     for _, opt in ipairs(loadedFilter) do
         if not IsAllMonstersOption(opt) then
@@ -315,8 +314,8 @@ return function(Window, Utils)
     end
     AppState.targetMonsterNames = cleanedFilter
 
-    if _G.SystemController and type(_G.SystemController.registerModule) == "function" then
-        _G.SystemController:registerModule("AutoFarm", function(paused)
+    if Controller and type(Controller.registerModule) == "function" then
+        Controller:registerModule("AutoFarm", function(paused)
             AppState.autoAttack = not paused
             AppState.autoCatch = not paused
             if not paused then
@@ -348,9 +347,9 @@ return function(Window, Utils)
         Name = Utils.t("btn_stop_all"), 
         Info = Utils.t("btn_stop_all_info"),
         Callback = function()
-            if _G.SystemController then
-                _G.SystemController.IsPaused = true
-                for _, pauseFunc in pairs(_G.SystemController.Modules) do pcall(function() pauseFunc(true) end) end
+            if Controller then
+                Controller.IsPaused = true
+                for _, pauseFunc in pairs(Controller.Modules) do pcall(function() pauseFunc(true) end) end
                 SendNotify(Utils.t("system_title"), Utils.t("stopped_all_msg"))
             end
         end
@@ -360,9 +359,9 @@ return function(Window, Utils)
         Name = Utils.t("btn_resume_all"), 
         Info = Utils.t("btn_resume_all_info"),
         Callback = function()
-            if _G.SystemController then
-                _G.SystemController.IsPaused = false
-                for _, pauseFunc in pairs(_G.SystemController.Modules) do pcall(function() pauseFunc(false) end) end
+            if Controller then
+                Controller.IsPaused = false
+                for _, pauseFunc in pairs(Controller.Modules) do pcall(function() pauseFunc(false) end) end
                 SendNotify(Utils.t("system_title"), Utils.t("resumed_all_msg"))
             end
         end
@@ -411,7 +410,7 @@ return function(Window, Utils)
                     AppState.targetMonsterNames = cleanOptions
                 end
                 
-                Utils.SaveJSON(ConfigFiles.Filter, AppState.targetMonsterNames)
+                if Config then Config.Set("Farm.MonsterFilter", AppState.targetMonsterNames) else Utils.SaveJSON("R_ClientPro_MonsterFilter.json", AppState.targetMonsterNames) end
                 UpdateUIFilterLabel()
             end)
         end
@@ -525,12 +524,13 @@ return function(Window, Utils)
                 local currentAreaId = Utils.GetCurrentAreaId()
                 AppState.savedFarmAreaId = currentAreaId
                 
-                Utils.SaveJSON(ConfigFiles.Position, {
+                local posData = {
                     X = charData.Position.X, 
                     Y = charData.Position.Y, 
                     Z = charData.Position.Z,
                     AreaId = currentAreaId
-                })
+                }
+                if Config then Config.Set("Farm.Position", posData) else Utils.SaveJSON("R_ClientPro_FarmPos.json", posData) end
                 
                 FarmPosLabel:Set(Utils.t("farm_center_label") .. GetFarmPosLabelText())
                 SendNotify(Utils.t("saved_title"), Utils.t("farm_saved_msg"))
@@ -638,14 +638,81 @@ return function(Window, Utils)
         end
     end)
 
-    -- Luồng 3: Teleport Farm (Không gian)
+    -- Luồng 3: Teleport Farm (Không gian) — Tối ưu: Chuyển mục tiêu tức thì khi quái chết
     task.spawn(function()
+        local currentTargetId = nil -- Theo dõi con quái đang đánh để detect khi nó chết
+
+        -- [Helper] Tính vị trí teleport phía sau lưng quái
+        local function CalcTeleportPosition(monsterData)
+            local obj = monsterData.Object
+            local monsterRoot = nil
+            if obj:IsA("Model") then
+                monsterRoot = obj.PrimaryPart or obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Root")
+            elseif obj:IsA("BasePart") then
+                monsterRoot = obj
+            end
+            
+            local targetPos = monsterData.Position
+            if monsterRoot then
+                local backPos = (monsterRoot.CFrame * CFrame.new(0, 0, 5)).Position
+                targetPos = Vector3.new(backPos.X, monsterData.Position.Y, backPos.Z)
+            else
+                targetPos = monsterData.Position + Vector3.new(0, 0, 5)
+            end
+            return targetPos
+        end
+
+        -- [Helper] Teleport đến vị trí quái (có safe platform)
+        local function TeleportToMonster(charData, targetPos, monsterPos)
+            if (charData.Position - targetPos).Magnitude > 20 then
+                Utils.ToggleMount(true)
+                task.wait(0.1)
+                pcall(function()
+                    local platform = Workspace:FindFirstChild("FarmSafePlatform")
+                    if not platform then
+                        platform = Instance.new("Part")
+                        platform.Name = "FarmSafePlatform"
+                        platform.Size = Vector3.new(8, 1, 8)
+                        platform.Transparency = 1
+                        platform.Anchored = true
+                        platform.CanCollide = true
+                        platform.Parent = Workspace
+                    end
+                    platform.CFrame = CFrame.new(targetPos - Vector3.new(0, 3.5, 0))
+                end)
+                charData.RootPart.CFrame = CFrame.lookAt(targetPos, monsterPos)
+                task.wait(0.15)
+            end
+        end
+
+        -- [Helper] Tìm con quái gần nhất (ưu tiên con khác target hiện tại nếu có)
+        local function FindNextTarget(centerPos, charPos, excludeId)
+            local allMonsters = Utils.SmartScanMonsters(centerPos, AppState.attackRadius, "Attack", IsMonsterInFilter)
+            if not allMonsters or #allMonsters == 0 then return nil end
+
+            local best, bestDist = nil, math.huge
+            for _, m in ipairs(allMonsters) do
+                -- Bỏ qua con đang đánh (nếu nó vẫn còn trong list vì delay server)
+                if excludeId and m.Id == excludeId then continue end
+                local d = (charPos - m.Position).Magnitude
+                if d < bestDist then
+                    bestDist, best = d, m
+                end
+            end
+            -- Fallback: nếu chỉ có đúng 1 con (con đang đánh), vẫn trả về nó
+            if not best and #allMonsters > 0 then
+                best = allMonsters[1]
+            end
+            return best
+        end
+
         while task.wait(0.1) do
             if not AppState.autoAttack or not AppState.tpFarmEnabled or IsSystemBusy() or AppState.isHealing then 
                 pcall(function()
                     local platform = Workspace:FindFirstChild("FarmSafePlatform")
                     if platform then platform:Destroy() end
                 end)
+                currentTargetId = nil
                 continue 
             end
 
@@ -654,61 +721,92 @@ return function(Window, Utils)
 
             local centerPos = AppState.savedFarmPosition and AppState.savedFarmPosition.Position or AppState.tempFarmPosition or charData.Position
             
-            -- Lọc quái thông minh thông qua thư viện Utils bên ngoài
-            local allMonsters = Utils.SmartScanMonsters(centerPos, AppState.attackRadius, "Attack", IsMonsterInFilter)
-            
-            if not allMonsters or #allMonsters == 0 then task.wait(0.5); continue end
+            -- Tìm mục tiêu đầu tiên
+            local target = FindNextTarget(centerPos, charData.Position, nil)
+            if not target then task.wait(0.3); continue end
 
-            local closestMonster, minDist = nil, math.huge
-            for _, m in ipairs(allMonsters) do
-                local distFromPlayer = (charData.Position - m.Position).Magnitude
-                if distFromPlayer < minDist then
-                    minDist, closestMonster = distFromPlayer, m
-                end
-            end
-            
-            if closestMonster and SystemCache.AttackRemote then
-                local obj = closestMonster.Object
-                local monsterRoot = nil
-                if obj:IsA("Model") then
-                    monsterRoot = obj.PrimaryPart or obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Root")
-                elseif obj:IsA("BasePart") then
-                    monsterRoot = obj
-                end
-                local targetPos = closestMonster.Position
+            -- === VÒNG LẶP TẤN CÔNG LIÊN TỤC ===
+            -- Thay vì quay về vòng while chính mỗi lần, ta ở trong inner loop
+            -- để chuyển target tức thì khi con hiện tại chết
+            while target do
+                -- Kiểm tra điều kiện dừng
+                if not AppState.autoAttack or not AppState.tpFarmEnabled or IsSystemBusy() or AppState.isHealing then break end
                 
-                if monsterRoot then
-                    -- Lấy vị trí phía sau lưng quái 5 studs (trên cùng mặt phẳng Y)
-                    local backPos = (monsterRoot.CFrame * CFrame.new(0, 0, 5)).Position
-                    targetPos = Vector3.new(backPos.X, closestMonster.Position.Y, backPos.Z)
-                else
-                    targetPos = closestMonster.Position + Vector3.new(0, 0, 5)
-                end
+                charData = GetValidCharacterData()
+                if not charData then break end
 
-                if (charData.Position - targetPos).Magnitude > 20 then
-                    Utils.ToggleMount(true)
-                    task.wait(0.1)
-                    -- Spawn safe platform underneath targetPos to prevent falling
+                currentTargetId = target.Id
+
+                -- Teleport đến con quái
+                local telePos = CalcTeleportPosition(target)
+                TeleportToMonster(charData, telePos, target.Position)
+
+                -- Tấn công liên tục cho đến khi con quái chết hoặc điều kiện thay đổi
+                local attackStartTick = tick()
+                local maxAttackDuration = 15 -- Timeout 15s phòng trường hợp quái bất tử
+                
+                while tick() - attackStartTick < maxAttackDuration do
+                    if not AppState.autoAttack or not AppState.tpFarmEnabled or IsSystemBusy() or AppState.isHealing then break end
+                    
+                    -- Kiểm tra quái còn sống không (real-time)
+                    local stillAlive = false
                     pcall(function()
-                        local platform = Workspace:FindFirstChild("FarmSafePlatform")
-                        if not platform then
-                            platform = Instance.new("Part")
-                            platform.Name = "FarmSafePlatform"
-                            platform.Size = Vector3.new(8, 1, 8)
-                            platform.Transparency = 1
-                            platform.Anchored = true
-                            platform.CanCollide = true
-                            platform.Parent = Workspace
+                        if target.Object and target.Object.Parent then
+                            stillAlive = Utils.IsMonsterAlive(target.Object)
                         end
-                        platform.CFrame = CFrame.new(targetPos - Vector3.new(0, 3.5, 0))
+                    end)
+                    
+                    if not stillAlive then
+                        -- Con quái vừa chết → Thoát inner loop để tìm con mới NGAY LẬP TỨC
+                        break
+                    end
+
+                    -- Gửi lệnh tấn công
+                    if SystemCache.AttackRemote and target.Id then
+                        pcall(function() SystemCache.AttackRemote:InvokeServer("MonsterAttackChannel", target.Id) end)
+                    end
+                    
+                    -- Bám theo quái nếu nó di chuyển (cập nhật vị trí real-time)
+                    pcall(function()
+                        if target.RootPart and target.RootPart.Parent then
+                            local newPos = target.RootPart.Position
+                            local newTelePos = CalcTeleportPosition({
+                                Object = target.Object,
+                                Position = newPos,
+                                RootPart = target.RootPart
+                            })
+                            charData = GetValidCharacterData()
+                            if charData and (charData.Position - newTelePos).Magnitude > 15 then
+                                charData.RootPart.CFrame = CFrame.lookAt(newTelePos, newPos)
+                                -- Cập nhật platform
+                                local platform = Workspace:FindFirstChild("FarmSafePlatform")
+                                if platform then
+                                    platform.CFrame = CFrame.new(newTelePos - Vector3.new(0, 3.5, 0))
+                                end
+                            end
+                        end
                     end)
 
-                    charData.RootPart.CFrame = CFrame.lookAt(targetPos, closestMonster.Position)
-                    task.wait(0.2)
+                    task.wait(AppState.attackDelay)
                 end
-                pcall(function() SystemCache.AttackRemote:InvokeServer("MonsterAttackChannel", closestMonster.Id) end)
-                task.wait(AppState.attackDelay + 0.1)
+
                 Utils.SmartDismount()
+
+                -- === CHUYỂN MỤC TIÊU TỨC THÌ ===
+                -- Con vừa chết → scan ngay con tiếp theo, không quay về vòng while chính
+                charData = GetValidCharacterData()
+                if not charData then break end
+                
+                centerPos = AppState.savedFarmPosition and AppState.savedFarmPosition.Position or AppState.tempFarmPosition or charData.Position
+                target = FindNextTarget(centerPos, charData.Position, currentTargetId)
+                currentTargetId = nil
+                
+                -- Nếu không còn quái → thoát inner loop, về vòng chính để chờ respawn
+                if not target then
+                    task.wait(0.2)
+                    break
+                end
+                -- Có con mới → tiếp tục inner loop ngay, KHÔNG delay
             end
         end
     end)

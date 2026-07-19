@@ -1,0 +1,142 @@
+-- ====================================================================
+-- MODULE: CENTRALIZED CONFIG MANAGER
+-- Quản lý cấu hình tập trung thay vì mỗi feature tự đọc/ghi JSON riêng
+-- ====================================================================
+local HttpService = game:GetService("HttpService")
+
+local ConfigManager = {}
+ConfigManager.__index = ConfigManager
+
+-- File lưu trữ chính
+local CONFIG_FILE = "R_ClientPro_Config.json"
+
+-- Bảng lưu toàn bộ settings trong RAM
+local _store = {}
+
+-- Cờ chống ghi đè liên tục (debounce)
+local _savePending = false
+local _saveDelay = 1 -- Giây
+
+-- ==========================================
+-- HÀM NỘI BỘ: ĐỌC/GHI FILE AN TOÀN
+-- ==========================================
+local function RawLoad(fileName)
+    if isfile and isfile(fileName) then
+        local success, data = pcall(function() return HttpService:JSONDecode(readfile(fileName)) end)
+        return success and data or {}
+    end
+    return {}
+end
+
+local function RawSave(fileName, data)
+    pcall(function()
+        if writefile then
+            writefile(fileName, HttpService:JSONEncode(data))
+        end
+    end)
+end
+
+-- ==========================================
+-- KHỞI TẠO: Đọc config từ file + Migration từ file cũ
+-- ==========================================
+function ConfigManager.Init()
+    _store = RawLoad(CONFIG_FILE)
+
+    -- Migration: đọc ngược các file JSON cũ nếu chưa có trong config mới
+    -- Farm Position
+    if not _store.Farm then _store.Farm = {} end
+    if not _store.Farm.Position then
+        local oldPos = RawLoad("R_ClientPro_FarmPos.json")
+        if oldPos and oldPos.X then
+            _store.Farm.Position = oldPos
+        end
+    end
+
+    -- Farm Monster Filter
+    if not _store.Farm.MonsterFilter then
+        local oldFilter = RawLoad("R_ClientPro_MonsterFilter.json")
+        if oldFilter and type(oldFilter) == "table" then
+            _store.Farm.MonsterFilter = oldFilter
+        end
+    end
+
+    -- Hop Blacklist
+    if not _store.Server then _store.Server = {} end
+    if not _store.Server.HopBlacklist then
+        local oldBlacklist = RawLoad("RClient_HopBlacklist.json")
+        if oldBlacklist and type(oldBlacklist) == "table" then
+            _store.Server.HopBlacklist = oldBlacklist
+        end
+    end
+
+    -- Lưu lại file mới sau migration
+    RawSave(CONFIG_FILE, _store)
+end
+
+-- ==========================================
+-- API CHÍNH: GET / SET / GETALL
+-- ==========================================
+
+--- Lấy giá trị config theo đường dẫn phân cấp (VD: "Farm.Position")
+--- @param path string Đường dẫn dạng "Section.Key" hoặc "Section.SubSection.Key"
+--- @param default any Giá trị mặc định nếu không tìm thấy
+--- @return any
+function ConfigManager.Get(path, default)
+    local keys = string.split(path, ".")
+    local current = _store
+
+    for _, key in ipairs(keys) do
+        if type(current) ~= "table" then return default end
+        current = current[key]
+        if current == nil then return default end
+    end
+
+    return current
+end
+
+--- Ghi giá trị config và tự động lưu file (debounced)
+--- @param path string Đường dẫn dạng "Section.Key"
+--- @param value any Giá trị cần lưu
+function ConfigManager.Set(path, value)
+    local keys = string.split(path, ".")
+    local current = _store
+
+    -- Duyệt và tạo nested tables nếu chưa tồn tại
+    for i = 1, #keys - 1 do
+        local key = keys[i]
+        if type(current[key]) ~= "table" then
+            current[key] = {}
+        end
+        current = current[key]
+    end
+
+    -- Gán giá trị vào key cuối cùng
+    current[keys[#keys]] = value
+
+    -- Lên lịch lưu file (debounced để tránh ghi liên tục)
+    if not _savePending then
+        _savePending = true
+        task.delay(_saveDelay, function()
+            _savePending = false
+            RawSave(CONFIG_FILE, _store)
+        end)
+    end
+end
+
+--- Lấy toàn bộ settings của một section (VD: "Farm" → {Position=..., MonsterFilter=...})
+--- @param section string Tên section
+--- @return table
+function ConfigManager.GetAll(section)
+    return _store[section] or {}
+end
+
+--- Lưu file ngay lập tức (không debounce) - dùng khi cần đảm bảo dữ liệu được ghi
+function ConfigManager.ForceSave()
+    _savePending = false
+    RawSave(CONFIG_FILE, _store)
+end
+
+-- Tự động khởi tạo khi module được load
+ConfigManager.Init()
+
+return ConfigManager

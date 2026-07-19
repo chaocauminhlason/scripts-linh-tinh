@@ -1,7 +1,10 @@
 -- ====================================================================
 -- MODULE: THEO DÕI NGƯỜI CHƠI & LIVE GPS (V2.2 - TÍCH HỢP ĐIỀU KHIỂN TỔNG)
 -- ====================================================================
-return function(Window, Utils)
+return function(ctx)
+    local Window = ctx.Window
+    local Utils = ctx.Utils
+    local Controller = ctx.Controller
     local Players = game:GetService("Players")
     local RunService = game:GetService("RunService")
     local UserInputService = game:GetService("UserInputService")
@@ -14,8 +17,8 @@ return function(Window, Utils)
 
     -- [ĐĂNG KÝ VỚI SYSTEM CONTROLLER]
     -- Khi nhận lệnh Pause/Resume từ nút STOP/RESUME (hoặc phím P), nó tự cập nhật biến following
-    if _G.SystemController and type(_G.SystemController.registerModule) == "function" then
-        _G.SystemController:registerModule("tracker", function(paused)
+    if Controller and type(Controller.registerModule) == "function" then
+        Controller:registerModule("tracker", function(paused)
             if paused then
                 following = false -- Dừng ép buộc
             else
@@ -105,7 +108,7 @@ return function(Window, Utils)
     task.spawn(function()
         while task.wait(0.5) do
             -- Kiểm tra xem hệ thống có đang bị Pause toàn cục không
-            if _G.SystemController and _G.SystemController.IsPaused then continue end
+            if Controller and Controller.IsPaused then continue end
             
             if following and targetPlayer then
                 pcall(function()
