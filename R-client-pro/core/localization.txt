@@ -378,7 +378,29 @@ local Translations = {
     ["webhook_invalid_msg"] = { en = "Invalid Webhook URL!", vi = "Link Webhook không hợp lệ!" },
     ["webhook_test_sent_msg"] = { en = "Test notification sent to Discord!", vi = "Đã gửi thông báo test qua Discord!" },
     ["webhook_notification_title"] = { en = "🎉 Auto-Farm Update", vi = "🎉 Cập nhật Auto-Farm" },
-    ["webhook_test_payload"] = { en = "🛠️ Webhook Test Successful! R-Client Pro system is running smoothly.", vi = "🛠️ Test Webhook thành công! Hệ thống R-Client Pro đang hoạt động tốt." }
+    ["webhook_test_payload"] = { en = "🛠️ Webhook Test Successful! R-Client Pro system is running smoothly.", vi = "🛠️ Test Webhook thành công! Hệ thống R-Client Pro đang hoạt động tốt." },
+
+    -- Pet Manager keys
+    ["pet_manager"] = { en = "Pet Manager", vi = "Quản Lý Pet" },
+    ["sec_pet_auto"] = { en = "AUTOMATIC PET MANAGEMENT", vi = "QUẢN LÝ PET TỰ ĐỘNG" },
+    ["pet_auto_equip"] = { en = "Auto Equip Best Pets", vi = "Tự Động Trang Bị Pet Tốt Nhất" },
+    ["pet_auto_equip_info"] = { en = "Automatically equips your best pets based on stats.", vi = "Tự động trang bị những pet mạnh nhất theo chỉ số." },
+    ["pet_auto_mount"] = { en = "Auto Ride Mount", vi = "Tự Động Cưỡi Thú" },
+    ["pet_auto_mount_info"] = { en = "Automatically mounts a pet when moving.", vi = "Tự động cưỡi thú khi di chuyển." },
+    ["pet_auto_feed"] = { en = "Auto Feed Pets (Level Up)", vi = "Tự Động Cho Ăn (Tăng Cấp)" },
+    ["pet_auto_feed_info"] = { en = "Automatically feeds selected fodder to level up your pets.", vi = "Tự động dùng pet mồi để cho pet chính ăn tăng cấp." },
+    ["pet_select_fodder"] = { en = "Select Fodder Rarities", vi = "Chọn Độ Hiếm Làm Mồi" },
+    ["pet_select_fodder_info"] = { en = "Select which rarities of pets to use as feeding fodder.", vi = "Chọn các phẩm chất pet sẽ dùng làm mồi tăng cấp." },
+    ["pet_auto_enhance"] = { en = "Auto Enhance Equipped Pets", vi = "Tự Động Cường Hóa Pet" },
+    ["pet_auto_enhance_info"] = { en = "Uses gold and materials to automatically enhance equipped pets.", vi = "Sử dụng vàng và nguyên liệu để tự động cường hóa pet đang trang bị." },
+    ["pet_auto_fuse"] = { en = "Auto Fuse (Evolve) Pets", vi = "Tự Động Ghép (Tiến Hóa)" },
+    ["pet_auto_fuse_info"] = { en = "Merges duplicate pets to evolve them to higher ranks (e.g. B -> A -> S).", vi = "Tự động ghép pet trùng lặp để tiến hóa lên rank cao hơn (B -> A -> S)." },
+    ["pet_auto_sell"] = { en = "Auto Sell Pets", vi = "Tự Động Bán Pet" },
+    ["pet_auto_sell_info"] = { en = "Automatically sells pets with specified qualities.", vi = "Tự động bán pet có phẩm chất được chọn." },
+    ["pet_sell_qualities"] = { en = "Select Sell Qualities", vi = "Chọn Phẩm Chất Bán" },
+    ["pet_sell_qualities_info"] = { en = "Select which pet qualities will be automatically sold.", vi = "Chọn các phẩm chất pet sẽ bị tự động bán." },
+    ["pet_batch_size"] = { en = "Batch Size Control", vi = "Số Lượng Bán Mỗi Lượt" },
+    ["pet_batch_size_info"] = { en = "Number of pets to sell at once in a single request.", vi = "Số lượng pet sẽ bán cùng lúc trong một yêu cầu gửi lên server." }
 }
 
 local currentLang = "en"

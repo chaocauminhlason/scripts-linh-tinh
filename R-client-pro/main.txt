@@ -151,6 +151,9 @@ if Utils then
     local ev = SafeLoad('features/auto_event.txt')
     if ev then ev(ctx) end
 
+    local pm = SafeLoad('features/pet_manager.txt')
+    if pm then pm(ctx) end
+
     --local a = SafeLoad('features/ai_assistant.txt')
     --if a then a(ctx) end
 end

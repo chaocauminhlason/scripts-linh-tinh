@@ -1,0 +1,349 @@
+-- ====================================================================
+-- MODULE: AUTOMATIC PET MANAGER & EVOLUTION SYSTEM
+-- ====================================================================
+return function(ctx)
+    local Window = ctx.Window
+    local Utils = ctx.Utils
+    
+    -- Tạo một Tab mới trên giao diện Rayfield
+    local PetTab = Window:CreateTab(Utils.t("pet_manager"), "dog")
+
+    -- Cấu hình mặc định cho module quản lý Pet
+    local petSettings = {
+        autoEquipBest = false,
+        autoMount = false,
+        autoFeed = false,
+        fodderRarities = {}, -- Danh sách các độ hiếm chọn để làm mồi feed
+        autoEnhance = false,
+        enhanceTypes = {}, -- Loại pet cần cường hóa (ví dụ: Attacker, Defender)
+        autoFuse = false,
+        autoSell = false,
+        sellQualities = {}, -- Danh sách độ hiếm sẽ tự động bán
+        sellBatchSize = 10,
+    }
+
+    -- Hàm can thiệp quyền hạn của Executor
+    local get_thread_id = getthreadcontext or getthreadidentity or getidentity or (syn and syn.get_thread_identity)
+    local set_thread_id = setthreadcontext or setthreadidentity or setidentity or (syn and syn.set_thread_identity)
+
+    -- Phẩm chất / Độ hiếm của Pet hỗ trợ
+    local rarityOptions = {"Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythical"}
+
+    -- ==========================================
+    -- GIAO DIỆN UI (RAYFIELD CONTROLS)
+    -- ==========================================
+    PetTab:CreateSection(" " .. string.upper(Utils.t("sec_pet_auto")) .. " ")
+
+    -- Auto Equip Best Pets
+    PetTab:CreateToggle({
+        Name = Utils.t("pet_auto_equip"),
+        Info = Utils.t("pet_auto_equip_info"),
+        CurrentValue = false,
+        Flag = "AutoEquipBestPets",
+        Callback = function(Value) petSettings.autoEquipBest = Value end
+    })
+
+    -- Auto Ride/Mount
+    PetTab:CreateToggle({
+        Name = Utils.t("pet_auto_mount"),
+        Info = Utils.t("pet_auto_mount_info"),
+        CurrentValue = false,
+        Flag = "AutoRideMount",
+        Callback = function(Value) petSettings.autoMount = Value end
+    })
+
+    -- Auto Feed Pets
+    PetTab:CreateToggle({
+        Name = Utils.t("pet_auto_feed"),
+        Info = Utils.t("pet_auto_feed_info"),
+        CurrentValue = false,
+        Flag = "AutoFeedPets",
+        Callback = function(Value) petSettings.autoFeed = Value end
+    })
+
+    -- Select Fodder Rarities
+    PetTab:CreateDropdown({
+        Name = Utils.t("pet_select_fodder"),
+        Info = Utils.t("pet_select_fodder_info"),
+        Options = rarityOptions,
+        CurrentOption = {},
+        MultipleOptions = true,
+        Flag = "FodderRaritiesDropdown",
+        Callback = function(Options)
+            petSettings.fodderRarities = Options
+        end,
+    })
+
+    -- Auto Enhance
+    PetTab:CreateToggle({
+        Name = Utils.t("pet_auto_enhance"),
+        Info = Utils.t("pet_auto_enhance_info"),
+        CurrentValue = false,
+        Flag = "AutoEnhancePets",
+        Callback = function(Value) petSettings.autoEnhance = Value end
+    })
+
+    -- Auto Fuse (Evolve)
+    PetTab:CreateToggle({
+        Name = Utils.t("pet_auto_fuse"),
+        Info = Utils.t("pet_auto_fuse_info"),
+        CurrentValue = false,
+        Flag = "AutoFusePets",
+        Callback = function(Value) petSettings.autoFuse = Value end
+    })
+
+    -- Auto Sell
+    PetTab:CreateToggle({
+        Name = Utils.t("pet_auto_sell"),
+        Info = Utils.t("pet_auto_sell_info"),
+        CurrentValue = false,
+        Flag = "AutoSellPets",
+        Callback = function(Value) petSettings.autoSell = Value end
+    })
+
+    -- Select Sell Qualities
+    PetTab:CreateDropdown({
+        Name = Utils.t("pet_sell_qualities"),
+        Info = Utils.t("pet_sell_qualities_info"),
+        Options = rarityOptions,
+        CurrentOption = {},
+        MultipleOptions = true,
+        Flag = "SellQualitiesDropdown",
+        Callback = function(Options)
+            petSettings.sellQualities = Options
+        end,
+    })
+
+    -- Batch Size Control
+    PetTab:CreateSlider({
+        Name = Utils.t("pet_batch_size"),
+        Info = Utils.t("pet_batch_size_info"),
+        Min = 1,
+        Max = 50,
+        CurrentValue = 10,
+        Flag = "SellBatchSizeSlider",
+        Callback = function(Value)
+            petSettings.sellBatchSize = tonumber(Value) or 10
+        end,
+    })
+
+    -- ==========================================
+    -- HÀM XỬ LÝ BACKGROUND LOOPS
+    -- ==========================================
+
+    -- Helper check if table contains element
+    local function tableContains(tbl, val)
+        for _, v in ipairs(tbl) do
+            if v == val then return true end
+        end
+        return false
+    end
+
+    -- Loop 1: Auto Equip Best & Auto Mount
+    task.spawn(function()
+        while task.wait(5) do
+            local env = getrenv()._G.PathTool
+            if not env then continue end
+
+            -- Auto Equip Best Pets
+            if petSettings.autoEquipBest then
+                pcall(function()
+                    local player = env.ClientPlayerManager and env.ClientPlayerManager.GetGamePlayer()
+                    local petSystem = env.PetSystem or (env.BossRoomSystemClient and env.BossRoomSystemClient.pet)
+                    if petSystem and type(petSystem.EquipBest) == "function" then
+                        local oldId = get_thread_id()
+                        set_thread_id(2)
+                        petSystem:EquipBest()
+                        set_thread_id(oldId)
+                    end
+                end)
+            end
+
+            -- Auto Mount (Ride)
+            if petSettings.autoMount then
+                pcall(function()
+                    local player = game.Players.LocalPlayer
+                    local char = player.Character
+                    if char and char:FindFirstChild("Humanoid") and char.Humanoid.MoveDirection.Magnitude > 0 then
+                        local petRideSystem = env.PetRideSystem or env.PetSystem
+                        if petRideSystem and type(petRideSystem.Ride) == "function" then
+                            local oldId = get_thread_id()
+                            set_thread_id(2)
+                            petRideSystem:Ride(true)
+                            set_thread_id(oldId)
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+
+    -- Loop 2: Auto Feed (Level Up)
+    task.spawn(function()
+        while task.wait(8) do
+            if not petSettings.autoFeed then continue end
+
+            local env = getrenv()._G.PathTool
+            if not env then continue end
+
+            pcall(function()
+                local player = env.ClientPlayerManager and env.ClientPlayerManager.GetGamePlayer()
+                local petData = player and player.pet
+                local petSystem = env.PetSystem
+                
+                if petData and petSystem and type(petSystem.ClientFeed) == "function" then
+                    -- Tìm pet chính đang được trang bị (ví dụ: pet cấp cao nhất hoặc pet đầu tiên)
+                    local mainPet = nil
+                    local fodders = {}
+
+                    petData:IterItem(function(pet)
+                        local isEquipped = pet:IsEquipped() -- Hoặc phương thức tương tự
+                        local rarity = pet:GetRarityName() or "Common"
+                        
+                        if isEquipped then
+                            if not mainPet or pet:GetLevel() < mainPet:GetLevel() then
+                                mainPet = pet -- Ưu tiên feed cho pet cấp thấp hơn trước
+                            end
+                        else
+                            -- Nếu pet không trang bị và có độ hiếm trùng khớp lựa chọn làm mồi
+                            if tableContains(petSettings.fodderRarities, rarity) then
+                                table.insert(fodders, pet.itemId)
+                            end
+                        end
+                        return true
+                    end)
+
+                    if mainPet and #fodders > 0 then
+                        local oldId = get_thread_id()
+                        set_thread_id(2)
+                        -- Feed tối đa 10 pet một lượt để tránh lỗi request
+                        local batch = {}
+                        for i = 1, math.min(#fodders, 10) do
+                            table.insert(batch, fodders[i])
+                        end
+                        petSystem:ClientFeed(mainPet.itemId, batch)
+                        set_thread_id(oldId)
+                    end
+                end
+            end)
+        end
+    end)
+
+    -- Loop 3: Auto Enhance
+    task.spawn(function()
+        while task.wait(10) do
+            if not petSettings.autoEnhance then continue end
+
+            local env = getrenv()._G.PathTool
+            if not env then continue end
+
+            pcall(function()
+                local player = env.ClientPlayerManager and env.ClientPlayerManager.GetGamePlayer()
+                local petData = player and player.pet
+                local petSystem = env.PetSystem
+
+                if petData and petSystem and type(petSystem.ClientEnhance) == "function" then
+                    petData:IterItem(function(pet)
+                        if pet:IsEquipped() then
+                            -- Gửi lệnh cường hóa bằng Gold/Materials
+                            local oldId = get_thread_id()
+                            set_thread_id(2)
+                            petSystem:ClientEnhance(pet.itemId)
+                            set_thread_id(oldId)
+                        end
+                        return true
+                    end)
+                end
+            end)
+        end
+    end)
+
+    -- Loop 4: Auto Fuse (Evolve)
+    task.spawn(function()
+        while task.wait(12) do
+            if not petSettings.autoFuse then continue end
+
+            local env = getrenv()._G.PathTool
+            if not env then continue end
+
+            pcall(function()
+                local player = env.ClientPlayerManager and env.ClientPlayerManager.GetGamePlayer()
+                local petData = player and player.pet
+                local petSystem = env.PetSystem or env.PetEvolveSystem
+
+                if petData and petSystem and type(petSystem.ClientEvolve) == "function" then
+                    -- Phân loại pet trùng lặp theo Template ID
+                    local petGroups = {}
+                    petData:IterItem(function(pet)
+                        if not pet:IsEquipped() then
+                            local tmplId = pet:GetTmplId()
+                            if tmplId then
+                                petGroups[tmplId] = petGroups[tmplId] or {}
+                                table.insert(petGroups[tmplId], pet.itemId)
+                            end
+                        end
+                        return true
+                    end)
+
+                    for tmplId, itemIds in pairs(petGroups) do
+                        -- Giả sử cơ chế ghép cần 3 pet giống nhau
+                        if #itemIds >= 3 then
+                            local oldId = get_thread_id()
+                            set_thread_id(2)
+                            petSystem:ClientEvolve(itemIds[1], {itemIds[2], itemIds[3]})
+                            set_thread_id(oldId)
+                            task.wait(0.5)
+                        end
+                    end
+                end
+            end)
+        end
+    end)
+
+    -- Loop 5: Auto Sell
+    task.spawn(function()
+        while task.wait(15) do
+            if not petSettings.autoSell then continue end
+
+            local env = getrenv()._G.PathTool
+            if not env then continue end
+
+            pcall(function()
+                local player = env.ClientPlayerManager and env.ClientPlayerManager.GetGamePlayer()
+                local petData = player and player.pet
+                local recycleSystem = env.PetRecycleSystem or env.PetSystem
+
+                if petData and recycleSystem and (type(recycleSystem.ClientRecycle) == "function" or type(recycleSystem.ClientSell) == "function") then
+                    local sellMethod = type(recycleSystem.ClientRecycle) == "function" and "ClientRecycle" or "ClientSell"
+                    local targetList = {}
+
+                    petData:IterItem(function(pet)
+                        if not pet:IsEquipped() then
+                            local rarity = pet:GetRarityName() or "Common"
+                            if tableContains(petSettings.sellQualities, rarity) then
+                                table.insert(targetList, pet.itemId)
+                            end
+                        end
+                        return true
+                    end)
+
+                    if #targetList > 0 then
+                        local oldId = get_thread_id()
+                        set_thread_id(2)
+                        -- Gom nhóm bán theo batch size
+                        for i = 1, #targetList, petSettings.sellBatchSize do
+                            local batch = {}
+                            for j = i, math.min(i + petSettings.sellBatchSize - 1, #targetList) do
+                                table.insert(batch, targetList[j])
+                            end
+                            recycleSystem[sellMethod](recycleSystem, batch)
+                            task.wait(0.5)
+                        end
+                        set_thread_id(oldId)
+                    end
+                end
+            end)
+        end
+    end)
+
+end
