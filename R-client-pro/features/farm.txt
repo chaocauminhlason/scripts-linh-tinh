@@ -714,7 +714,9 @@ return function(ctx)
                 end)
                 charData.RootPart.CFrame = CFrame.lookAt(targetPos, monsterPos)
                 task.wait(0.15)
+                return true
             end
+            return false
         end
 
         -- [Helper] Tìm con quái gần nhất (ưu tiên con khác target hiện tại nếu có)
@@ -772,7 +774,10 @@ return function(ctx)
 
                 -- Teleport đến con quái
                 local telePos = CalcTeleportPosition(target)
-                TeleportToMonster(charData, telePos, target.Position)
+                local didTele = TeleportToMonster(charData, telePos, target.Position)
+                if didTele then
+                    task.wait(0.3) -- Chờ thêm một chút để pet dịch chuyển/gom kịp
+                end
 
                 -- Tấn công liên tục cho đến khi con quái chết hoặc điều kiện thay đổi
                 local attackStartTick = tick()
