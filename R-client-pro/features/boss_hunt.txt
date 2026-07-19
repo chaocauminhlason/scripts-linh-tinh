@@ -65,6 +65,7 @@ return function(Window, Utils)
         engaged           = false,
         scanAttempts      = 0,
     }
+    local wbCycleCompleted = false -- Cờ phân biệt "chưa bắt đầu" vs "vừa kết thúc vòng"
     local wbLastWaveAlertTime = 0
 
     local monsterNameCache     = {}
@@ -229,6 +230,7 @@ return function(Window, Utils)
         wbHuntState.engaged           = false
         wbHuntState.scanAttempts      = 0
         wbHuntState.isActive          = true
+        wbCycleCompleted              = false
     end
 
     BossTab:CreateToggle({
@@ -472,7 +474,9 @@ return function(Window, Utils)
 
         while task.wait(0.2) do
             -- [Tự động kích hoạt khi cấu hình dropdown nạp trễ hơn toggle ở startup]
-            if wbSettings.enabled and not wbHuntState.isActive and #wbSettings.selectedWorlds > 0 then
+            -- Chỉ kích hoạt nếu chưa hoàn thành vòng nào (wbCycleCompleted = false)
+            -- để tránh restart ngay lập tức sau khi hết vòng
+            if wbSettings.enabled and not wbHuntState.isActive and not wbCycleCompleted and #wbSettings.selectedWorlds > 0 then
                 print("🌍 [WORLD BOSS] Phát hiện cấu hình đảo đã được nạp. Tự động kích hoạt luồng săn Boss.")
                 StartWbHuntFromFirstWorld()
             end
@@ -558,6 +562,7 @@ return function(Window, Utils)
 
                         if nextIndex > #wbSettings.selectedWorlds then
                             wbHuntState.isActive = false
+                            wbCycleCompleted     = true -- Đánh dấu đã xong 1 vòng, ngăn auto-restart ngay
                             
                             local isWaveActive, timeLeft = ReadWbWaveTimer()
                             
