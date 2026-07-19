@@ -594,7 +594,7 @@ return function(ctx)
     -- ==========================================
     task.spawn(function()
         DataPullFunc = ReplicatedStorage:WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc")
-
+        repeat task.wait(0.1) until ctx.Ready
         while task.wait(0.5) do
             if Controller and Controller.IsPaused then continue end
             if not riftSettings.enabled or #riftSettings.selectedWorlds == 0 then continue end

@@ -94,6 +94,7 @@ return function(ctx)
 
     -- Auto GC Background thread (Chạy định kỳ mỗi 60 giây)
     task.spawn(function()
+        repeat task.wait(0.1) until ctx.Ready
         while task.wait(60) do
             if autoGcEnabled then
                 pcall(PerformAggressiveClean, true)
@@ -269,6 +270,7 @@ return function(ctx)
     -- VÒNG LẶP KHÓA MỤC TIÊU (0.1s/lần)
     -- ==========================================
     task.spawn(function()
+        repeat task.wait(0.1) until ctx.Ready
         while task.wait(0.1) do
             if isSpoofing then
                 pcall(function()

@@ -666,6 +666,7 @@ return function(ctx)
 
     -- Luồng 1: Auto Attack Thường
     task.spawn(function()
+        repeat task.wait(0.1) until ctx.Ready
         while task.wait(0.2) do
             if IsSystemBusy() or AppState.isHealing or AppState.tpFarmEnabled or not AppState.autoAttack then continue end
             
@@ -686,6 +687,7 @@ return function(ctx)
 
     -- Luồng 2: Auto Catch
     task.spawn(function()
+        repeat task.wait(0.1) until ctx.Ready
         while task.wait(0.5) do
             if IsSystemBusy() or AppState.isHealing or not AppState.autoCatch then continue end
             
@@ -791,6 +793,7 @@ return function(ctx)
         end
 
         local wasRunning = false
+        repeat task.wait(0.1) until ctx.Ready
         while task.wait(0.1) do
             if not AppState.autoAttack or not AppState.tpFarmEnabled or IsSystemBusy() or AppState.isHealing then 
                 if wasRunning then
@@ -919,6 +922,7 @@ return function(ctx)
 
     -- Luồng 4: Smart Auto Heal (Chạy tuần tự với Mutex Lock)
     task.spawn(function()
+        repeat task.wait(0.1) until ctx.Ready
         while task.wait(1) do
             if not AppState.autoHeal or AppState.isHealing then continue end
 
@@ -991,6 +995,7 @@ return function(ctx)
 
     -- Luồng 5: Smart Return (Bám bãi)
     task.spawn(function()
+        repeat task.wait(0.1) until ctx.Ready
         while task.wait(1) do
             if IsSystemBusy() or AppState.isHealing or not AppState.autoReturnToFarm then continue end
             local returnPos = AppState.savedFarmPosition or (AppState.tempFarmPosition and CFrame.new(AppState.tempFarmPosition))

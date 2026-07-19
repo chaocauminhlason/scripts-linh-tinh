@@ -206,6 +206,7 @@ return function(ctx)\r\n    local Window = ctx.Window\r\n    local Utils = ctx.U
 
     -- Core Loop
     task.spawn(function()
+        repeat task.wait(0.1) until ctx.Ready
         while task.wait(0.5) do
             if not eventSettings.enabled then continue end
             
@@ -507,6 +508,7 @@ return function(ctx)\r\n    local Window = ctx.Window\r\n    local Utils = ctx.U
 
     -- X-Ray Thread for Choice/Gift Event Rewards Preview (Hiển thị 3D Billboard xem trước quà ẩn)
     task.spawn(function()
+        repeat task.wait(0.1) until ctx.Ready
         while task.wait(1) do
             if eventSettings.xrayEnabled then
                 pcall(function()

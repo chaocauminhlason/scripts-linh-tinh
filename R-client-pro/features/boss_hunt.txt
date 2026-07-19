@@ -336,7 +336,7 @@ return function(ctx)
     task.spawn(function()
         local localPlayer = game:GetService("Players").LocalPlayer
         local lastProcessedText = ""
-
+        repeat task.wait(0.1) until ctx.Ready
         while task.wait(0.5) do
             pcall(function()
                 local playerGui = localPlayer:FindFirstChild("PlayerGui")
@@ -395,7 +395,7 @@ return function(ctx)
     task.spawn(function()
         local localPlayer = game:GetService("Players").LocalPlayer
         local scanLogCooldown = 0
-
+        repeat task.wait(0.1) until ctx.Ready
         while task.wait(0.1) do
             if not spSettings.enabled or not spHuntState.isActive then 
                 _G.PendingSpecialBoss = false
@@ -474,7 +474,7 @@ return function(ctx)
     -- ==========================================
     task.spawn(function()
         local localPlayer = game:GetService("Players").LocalPlayer
-
+        repeat task.wait(0.1) until ctx.Ready
         while task.wait(0.2) do
             -- [Tự động kích hoạt khi cấu hình dropdown nạp trễ hơn toggle ở startup]
             if wbSettings.enabled and not wbHuntState.isActive and #wbSettings.selectedWorlds > 0 and not wbInitialized then

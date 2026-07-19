@@ -235,6 +235,7 @@ return function(ctx)
     -- LUỒNG 1: THEO DÕI TÚI PET
     -- ==========================================
     task.spawn(function()
+        repeat task.wait(0.1) until ctx.Ready
         while task.wait(1) do
             local env = getrenv()._G.PathTool
             if env and env.BossRoomSystemClient and env.BossRoomSystemClient.gamePlayer and env.BossRoomSystemClient.gamePlayer.pet then
@@ -263,6 +264,7 @@ return function(ctx)
     -- LUỒNG 2: CORE LOGIC & NATIVE UI SYNC
     -- ==========================================
     task.spawn(function()
+        repeat task.wait(0.1) until ctx.Ready
         while task.wait(0.5) do
             if not hatchSettings.autoStart and not hatchSettings.autoClaim then continue end
             

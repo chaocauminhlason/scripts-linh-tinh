@@ -141,6 +141,7 @@ return function(ctx)
 
     -- Loop 1: Auto Equip Best & Auto Mount
     task.spawn(function()
+        repeat task.wait(0.1) until ctx.Ready
         while task.wait(5) do
             local env = getrenv()._G.PathTool
             if not env then continue end
@@ -180,6 +181,7 @@ return function(ctx)
 
     -- Loop 2: Auto Feed (Level Up)
     task.spawn(function()
+        repeat task.wait(0.1) until ctx.Ready
         while task.wait(8) do
             if not petSettings.autoFeed then continue end
 
@@ -231,6 +233,7 @@ return function(ctx)
 
     -- Loop 3: Auto Enhance
     task.spawn(function()
+        repeat task.wait(0.1) until ctx.Ready
         while task.wait(10) do
             if not petSettings.autoEnhance then continue end
 
@@ -260,6 +263,7 @@ return function(ctx)
 
     -- Loop 4: Auto Fuse (Evolve)
     task.spawn(function()
+        repeat task.wait(0.1) until ctx.Ready
         while task.wait(12) do
             if not petSettings.autoFuse then continue end
 
@@ -302,6 +306,7 @@ return function(ctx)
 
     -- Loop 5: Auto Sell
     task.spawn(function()
+        repeat task.wait(0.1) until ctx.Ready
         while task.wait(15) do
             if not petSettings.autoSell then continue end
 

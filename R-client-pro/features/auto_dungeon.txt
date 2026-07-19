@@ -191,6 +191,7 @@ return function(ctx)
     -- VÒNG LẶP CORE 
     -- ==========================================
     task.spawn(function()
+        repeat task.wait(0.1) until ctx.Ready
         while task.wait(0.5) do
             if not masterSwitchEnabled then continue end
 
