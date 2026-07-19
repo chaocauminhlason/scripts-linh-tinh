@@ -35,7 +35,7 @@ end
 setfenv(1, scriptEnv)
 
 -- [!] BIẾN QUẢN LÝ NHÁNH
-local branch = "main"
+local branch = "test/pre-config-manager"
 
 -- ==========================================
 -- BƯỚC 1: LẤY MÃ COMMIT MỚI NHẤT (CACHE BYPASS)
