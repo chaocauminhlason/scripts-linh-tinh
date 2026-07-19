@@ -271,6 +271,56 @@ return function(ctx)
         return deadCount
     end
 
+    -- Kiểm tra xem có Pet nào được trang bị chưa hồi đầy máu (dưới 98%) không
+    local function IsAnyPetNotFullyHealed()
+        local notFullyHealed = false
+        pcall(function()
+            local env = getrenv and getrenv()._G and getrenv()._G.PathTool
+            local petData = env and env.BossRoomSystemClient and env.BossRoomSystemClient.gamePlayer and env.BossRoomSystemClient.gamePlayer.pet
+            local LogicNumber = env and env.LogicNumber
+            if petData and petData._equipedItemMap and LogicNumber then
+                for _, petObj in pairs(petData._equipedItemMap) do
+                    local hp = LogicNumber.ToNumber(petObj:GetHealth())
+                    local maxHp = LogicNumber.ToNumber(petObj:GetMaxHealth())
+                    if hp and maxHp and maxHp > 0 then
+                        local ratio = hp / maxHp
+                        if ratio < 0.98 then
+                            notFullyHealed = true
+                            break
+                        end
+                    end
+                end
+            end
+        end)
+        
+        if notFullyHealed == false then
+            pcall(function()
+                local env = getrenv and getrenv()._G and getrenv()._G.PathTool
+                if env and env.MgrPetClient and env.LogicNumber then
+                    local MgrPetClient = env.MgrPetClient
+                    local LogicNumber = env.LogicNumber
+                    MgrPetClient.IterPet(function(pet)
+                        if pet.PlayerId == LocalPlayer.UserId and pet.EquipedAmount and pet.EquipedAmount > 0 then
+                            local curRaw = pet.HealthValue and pet.HealthValue.Value
+                            local maxRaw = pet.HealthValue and pet.HealthValue:GetAttribute("MaxHealth")
+                            if curRaw and maxRaw then
+                                local curLogic = LogicNumber.FixLogicNumber(curRaw)
+                                local maxLogic = LogicNumber.FixLogicNumber(maxRaw)
+                                local ratio = LogicNumber.ToNumber(LogicNumber.Divide(curLogic, maxLogic))
+                                if ratio < 0.98 then
+                                    notFullyHealed = true
+                                    return false
+                                end
+                            end
+                        end
+                        return true
+                    end)
+                end
+            end)
+        end
+        return notFullyHealed
+    end
+
     -- Xác định tọa độ suối hồi máu gần nhất
     local function LocateNearestHealingSpring(currentPos)
         local bestPos, minDist = nil, math.huge
@@ -903,11 +953,11 @@ return function(ctx)
 
                         charData.RootPart.CFrame = CFrame.new(bestRecoverPos + Vector3.new(0, 3, 0))
                         
-                        -- Tác vụ chạy tuần tự (Sequential Blocking): Đợi máu hồi đầy (tối đa 9 giây)
-                        local healTimeout = tick() + 9
+                        -- Tác vụ chạy tuần tự (Sequential Blocking): Đợi máu hồi đầy (tối đa 12 giây)
+                        local healTimeout = tick() + 12
                         while tick() < healTimeout do
                             task.wait(0.5)
-                            if CalculatePetCasualties() == 0 then
+                            if not IsAnyPetNotFullyHealed() then
                                 break
                             end
                         end
