@@ -1,7 +1,9 @@
 -- ====================================================================
 -- MODULE: SHOPS & GUIS (MỞ GIAO DIỆN XUYÊN TƯỜNG / BYPASS UI)
 -- ====================================================================
-return function(ctx)\r\n    local Window = ctx.Window\r\n    local Utils = ctx.Utils
+return function(ctx)
+    local Window = ctx.Window
+    local Utils = ctx.Utils
     -- Tạo một Tab mới trên giao diện Rayfield
     local GuiTab = Window:CreateTab(Utils.t("gui"), "shopping-cart") 
 

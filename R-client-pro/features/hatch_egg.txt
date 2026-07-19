@@ -1,7 +1,9 @@
 -- ====================================================================
 -- MODULE: SMART AUTO HATCH V9.1 (MULTI-SELECT UPGRADE)
 -- ====================================================================
-return function(ctx)\r\n    local Window = ctx.Window\r\n    local Utils = ctx.Utils
+return function(ctx)
+    local Window = ctx.Window
+    local Utils = ctx.Utils
     local EggTab = Window:CreateTab(Utils.t("autohatch"), "egg")
 
     local hatchSettings = {
