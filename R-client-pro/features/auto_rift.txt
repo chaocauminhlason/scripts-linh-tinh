@@ -504,6 +504,7 @@ return function(ctx)
         local exit_id, exit_team = targetRiftId, currentTeamId
         
         -- Gửi Remote thoát
+        task.wait(0.3)
         pcall(function()
             DataPullFunc:InvokeServer("ArenaLeaveChannel")
             if exit_id and exit_team then 
