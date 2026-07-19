@@ -88,10 +88,9 @@ return function(ctx)
     local CycleStatus = RiftTab:CreateLabel(Utils.t("rift_cycle_not_started"))
 
     RiftTab:CreateSection(" " .. Utils.t("sec_rift_controls") .. " ")
-    RiftTab:CreateToggle({
+    Utils.PersistToggle(RiftTab, {
         Name = Utils.t("rift_master_toggle"), 
         Info = Utils.t("rift_master_toggle_info"),
-        CurrentValue = false, 
         Flag = "AutoRiftMasterToggle",
         Callback = function(Value)
             RiftToggle(Value)
@@ -103,10 +102,10 @@ return function(ctx)
                 cycleState.currentIndex = 1; cycleState.currentLoadedWorld = nil; cycleState.isResting = false; cycleState.lastDynamicActivityTime = 0
             end
         end
-    })
+    }, "Rift.MasterSwitch", Config, false)
 
-    RiftTab:CreateToggle({ Name = Utils.t("rift_dynamic_toggle"), Info = Utils.t("rift_dynamic_toggle_info"), CurrentValue = true, Flag = "ScanDynamicToggle", Callback = function(Value) riftSettings.scanDynamic = Value end })
-    RiftTab:CreateToggle({ Name = Utils.t("rift_static_toggle"), Info = Utils.t("rift_static_toggle_info"), CurrentValue = true, Flag = "ScanStaticToggle", Callback = function(Value) riftSettings.scanStatic = Value end })
+    Utils.PersistToggle(RiftTab, { Name = Utils.t("rift_dynamic_toggle"), Info = Utils.t("rift_dynamic_toggle_info"), Flag = "ScanDynamicToggle", Callback = function(Value) riftSettings.scanDynamic = Value end }, "Rift.ScanDynamic", Config, true)
+    Utils.PersistToggle(RiftTab, { Name = Utils.t("rift_static_toggle"), Info = Utils.t("rift_static_toggle_info"), Flag = "ScanStaticToggle", Callback = function(Value) riftSettings.scanStatic = Value end }, "Rift.ScanStatic", Config, true)
 
     RiftTab:CreateSection(" " .. Utils.t("sec_rift_config") .. " ")
     local TargetLabel = RiftTab:CreateLabel(string.format(Utils.t("rift_selected_worlds_label"), #riftSettings.selectedWorlds))
@@ -160,11 +159,10 @@ return function(ctx)
         currentDisplayOptions = {unpack(colorDisplayOptions)}
     end
 
-    RiftTab:CreateDropdown({
+    Utils.PersistDropdown(RiftTab, {
         Name = Utils.t("rift_select_colors"),
         Info = Utils.t("rift_select_colors_info"),
         Options = colorDisplayOptions,
-        CurrentOption = currentDisplayOptions,
         MultipleOptions = true,
         Flag = "RiftColorDropdown",
         Callback = function(Options)
@@ -180,10 +178,10 @@ return function(ctx)
                 Utils.SaveSelectedAreas(selected, "R_SelectedRiftColors.json")
             end
         end,
-    })
+    }, "Rift.SelectedColors", Config, currentDisplayOptions)
 
-    RiftTab:CreateToggle({ Name = Utils.t("rift_auto_hop"), Info = Utils.t("rift_auto_hop_info"), CurrentValue = false, Flag = "RiftAutoHop", Callback = function(Value) riftSettings.autoHop = Value end })
-    RiftTab:CreateSlider({ Name = Utils.t("rift_rest_time"), Info = Utils.t("rift_rest_time_info"), Range = {1, 60}, Increment = 1, CurrentValue = 5, Flag = "RiftRestTime", Callback = function(Value) riftSettings.restTimeMinutes = Value end })
+    Utils.PersistToggle(RiftTab, { Name = Utils.t("rift_auto_hop"), Info = Utils.t("rift_auto_hop_info"), Flag = "RiftAutoHop", Callback = function(Value) riftSettings.autoHop = Value end }, "Rift.AutoHop", Config, false)
+    Utils.PersistSlider(RiftTab, { Name = Utils.t("rift_rest_time"), Info = Utils.t("rift_rest_time_info"), Range = {1, 60}, Increment = 1, Flag = "RiftRestTime", Callback = function(Value) riftSettings.restTimeMinutes = Value end }, "Rift.RestTime", Config, 5)
 
 
     -- ==========================================

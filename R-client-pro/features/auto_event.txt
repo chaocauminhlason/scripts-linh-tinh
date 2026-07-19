@@ -39,10 +39,9 @@ return function(ctx)\r\n    local Window = ctx.Window\r\n    local Utils = ctx.U
 
     -- CONTROLS
     EventTab:CreateSection(" " .. Utils.t("sec_event_controls") .. " ")
-    EventTab:CreateToggle({
+    Utils.PersistToggle(EventTab, {
         Name = Utils.t("auto_event_toggle"),
         Info = Utils.t("auto_event_info"),
-        CurrentValue = false,
         Flag = "AutoClaimEventItems",
         Callback = function(Value)
             eventSettings.enabled = Value
@@ -53,12 +52,11 @@ return function(ctx)\r\n    local Window = ctx.Window\r\n    local Utils = ctx.U
                 EventStatus:Set(Utils.t("event_status_farming"))
             end
         end
-    })
+    }, "Event.Enabled", Config, false)
 
-    EventTab:CreateToggle({
+    Utils.PersistToggle(EventTab, {
         Name = Utils.t("event_xray_toggle"),
         Info = Utils.t("event_xray_info"),
-        CurrentValue = false,
         Flag = "EventXrayPreview",
         Callback = function(Value)
             eventSettings.xrayEnabled = Value
@@ -72,7 +70,7 @@ return function(ctx)\r\n    local Window = ctx.Window\r\n    local Utils = ctx.U
                 end)
             end
         end
-    })
+    }, "Event.XrayEnabled", Config, false)
 
 
 

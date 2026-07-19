@@ -487,10 +487,9 @@ return function(ctx)
     })
 
     CamTab:CreateSection(" " .. Utils.t("sec_farm_combat") .. " ")
-    CamTab:CreateToggle({
+    Utils.PersistToggle(CamTab, {
         Name = Utils.t("auto_attack"),
         Info = Utils.t("auto_attack_info"),
-        CurrentValue = false,
         Flag = "AutoAttackToggle",
         Callback = function(V)
             AppState.autoAttack = V
@@ -504,11 +503,11 @@ return function(ctx)
                 AppState.tempFarmPosition = nil
             end
         end
-    })
-    CamTab:CreateToggle({
+    }, "Farm.AutoAttack", Config, false)
+
+    Utils.PersistToggle(CamTab, {
         Name = Utils.t("farm_tp_toggle"),
         Info = Utils.t("farm_tp_toggle_info"),
-        CurrentValue = false,
         Flag = "TpFarmToggle",
         Callback = function(V)
             AppState.tpFarmEnabled = V
@@ -520,23 +519,22 @@ return function(ctx)
                 end
             end
         end
-    })
-    CamTab:CreateSlider({ Name = Utils.t("farm_radius"), Info = Utils.t("farm_radius_info"), Range = {10, 2000}, Increment = 10, Suffix = " studs", CurrentValue = 200, Flag = "AttackRadiusSlider", Callback = function(V) AppState.attackRadius = V end })
-    CamTab:CreateToggle({ Name = Utils.t("farm_auto_catch"), Info = Utils.t("farm_auto_catch_info"), CurrentValue = false, Flag = "AutoCatchToggle", Callback = function(V) AppState.autoCatch = V end })
+    }, "Farm.TpFarm", Config, false)
+    Utils.PersistSlider(CamTab, { Name = Utils.t("farm_radius"), Info = Utils.t("farm_radius_info"), Range = {10, 2000}, Increment = 10, Suffix = " studs", Flag = "AttackRadiusSlider", Callback = function(V) AppState.attackRadius = V end }, "Farm.AttackRadius", Config, 200)
+    Utils.PersistToggle(CamTab, { Name = Utils.t("farm_auto_catch"), Info = Utils.t("farm_auto_catch_info"), Flag = "AutoCatchToggle", Callback = function(V) AppState.autoCatch = V end }, "Farm.AutoCatch", Config, false)
 
     CamTab:CreateSection(" " .. Utils.t("sec_farm_survival") .. " ")
-    CamTab:CreateToggle({ Name = Utils.t("farm_auto_heal"), Info = Utils.t("farm_auto_heal_info"), CurrentValue = false, Flag = "AutoHealToggle", Callback = function(V) AppState.autoHeal = V end })
-    CamTab:CreateSlider({ 
+    Utils.PersistToggle(CamTab, { Name = Utils.t("farm_auto_heal"), Info = Utils.t("farm_auto_heal_info"), Flag = "AutoHealToggle", Callback = function(V) AppState.autoHeal = V end }, "Farm.AutoHeal", Config, false)
+    Utils.PersistSlider(CamTab, { 
         Name = Utils.t("farm_heal_threshold"), 
         Info = Utils.t("farm_heal_threshold_info"),
         Range = {1, 3}, 
         Increment = 1, 
         Suffix = (Utils.getLang() == "vi" and " Pet" or " Pets"), 
-        CurrentValue = 1, 
         Flag = "HealThresholdSlider",
         Callback = function(V) AppState.healThreshold = V end 
-    })
-    CamTab:CreateToggle({ Name = Utils.t("farm_smart_return"), Info = Utils.t("farm_smart_return_info"), CurrentValue = false, Flag = "SmartReturnToggle", Callback = function(V) AppState.autoReturnToFarm = V end })
+    }, "Farm.HealThreshold", Config, 1)
+    Utils.PersistToggle(CamTab, { Name = Utils.t("farm_smart_return"), Info = Utils.t("farm_smart_return_info"), Flag = "SmartReturnToggle", Callback = function(V) AppState.autoReturnToFarm = V end }, "Farm.SmartReturn", Config, false)
 
     CamTab:CreateSection(" " .. Utils.t("sec_farm_navigation") .. " ")
     

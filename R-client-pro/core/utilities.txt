@@ -1454,6 +1454,7 @@ function Utils.InitMonsterMemory()
 end
 
 
+
 -- Fallback dịch thuật nếu không load được core/localization.txt
 function Utils.t(key)
     return key
@@ -1461,6 +1462,84 @@ end
 
 function Utils.getLang()
     return "en"
+end
+
+-- ==========================================
+-- HỆ THỐNG LƯU TRẠNG THÁI UI (CROSS-EXECUTOR)
+-- Dùng ConfigManager thay vì Rayfield ConfigurationSaving để tương thích
+-- với mọi executor (Delta mobile, Medium PC, Synapse, Fluxus...)
+-- ==========================================
+
+--- Tạo Toggle có lưu/phục hồi trạng thái qua ConfigManager.
+--- Hoạt động tương tự CreateToggle nhưng tự persist state độc lập với Rayfield.
+--- @param tab         Rayfield Tab object
+--- @param options     Table options giống CreateToggle (Name, Info, Flag, ...)
+--- @param configKey   Đường dẫn lưu trong ConfigManager (VD: "Farm.AutoAttack")
+--- @param Config      ConfigManager object từ ctx.Config
+--- @param default     Giá trị mặc định nếu chưa có dữ liệu lưu (mặc định: false)
+function Utils.PersistToggle(tab, options, configKey, Config, default)
+    if default == nil then default = false end
+    -- Đọc giá trị đã lưu từ ConfigManager (nếu có), fallback về default
+    local savedValue = (Config and Config.Get) and Config.Get(configKey, default) or default
+    -- Đảm bảo kiểu dữ liệu boolean (tránh nil hay string gây lỗi UI)
+    if type(savedValue) ~= "boolean" then savedValue = default end
+    options.CurrentValue = savedValue
+
+    -- Bọc Callback gốc để tự động lưu mỗi khi user thay đổi
+    local originalCallback = options.Callback
+    options.Callback = function(value)
+        pcall(function()
+            if Config and Config.Set then Config.Set(configKey, value) end
+        end)
+        if originalCallback then originalCallback(value) end
+    end
+
+    return tab:CreateToggle(options)
+end
+
+--- Tạo Slider có lưu/phục hồi giá trị qua ConfigManager.
+--- @param tab         Rayfield Tab object
+--- @param options     Table options giống CreateSlider (Name, Range, Increment, ...)
+--- @param configKey   Đường dẫn lưu trong ConfigManager (VD: "Farm.AttackRadius")
+--- @param Config      ConfigManager object từ ctx.Config
+--- @param default     Giá trị mặc định số nếu chưa có dữ liệu lưu
+function Utils.PersistSlider(tab, options, configKey, Config, default)
+    if default == nil then default = options.CurrentValue or 0 end
+    local savedValue = (Config and Config.Get) and Config.Get(configKey, default) or default
+    if type(savedValue) ~= "number" then savedValue = default end
+    options.CurrentValue = savedValue
+
+    local originalCallback = options.Callback
+    options.Callback = function(value)
+        pcall(function()
+            if Config and Config.Set then Config.Set(configKey, value) end
+        end)
+        if originalCallback then originalCallback(value) end
+    end
+
+    return tab:CreateSlider(options)
+end
+
+--- Tạo Dropdown có lưu/phục hồi giá trị qua ConfigManager.
+--- @param tab         Rayfield Tab object
+--- @param options     Table options giống CreateDropdown
+--- @param configKey   Đường dẫn lưu trong ConfigManager
+--- @param Config      ConfigManager object từ ctx.Config
+--- @param default     Giá trị mặc định (string hoặc table)
+function Utils.PersistDropdown(tab, options, configKey, Config, default)
+    if default == nil then default = options.CurrentOption end
+    local savedValue = (Config and Config.Get) and Config.Get(configKey, default) or default
+    if savedValue ~= nil then options.CurrentOption = savedValue end
+
+    local originalCallback = options.Callback
+    options.Callback = function(value)
+        pcall(function()
+            if Config and Config.Set then Config.Set(configKey, value) end
+        end)
+        if originalCallback then originalCallback(value) end
+    end
+
+    return tab:CreateDropdown(options)
 end
 
 -- Trả về bảng Utils

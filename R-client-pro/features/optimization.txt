@@ -113,18 +113,16 @@ return function(ctx)
     -- TẠO GIAO DIỆN
     local OptimizationTab = Window:CreateTab(Utils.t("optimization"), "zap")
 
-    OptimizationTab:CreateToggle({ 
+    Utils.PersistToggle(OptimizationTab, { 
         Name = Utils.t("anti_afk"), 
         Info = Utils.t("anti_afk_info"),
-        CurrentValue = true,
         Flag = "AntiAfk", 
         Callback = function(Value) antiAfkEnabled = Value end 
-    })
+    }, "Opt.AntiAfk", Config, true)
 
-    OptimizationTab:CreateToggle({ 
+    Utils.PersistToggle(OptimizationTab, { 
         Name = Utils.t("potato_mode"), 
         Info = Utils.t("potato_mode_info"),
-        CurrentValue = false,
         Flag = "PotatoModeRealTime",
         Callback = function(Value)
             potatoEnabled = Value
@@ -157,10 +155,9 @@ return function(ctx)
         end 
     })
 
-    OptimizationTab:CreateToggle({
+    Utils.PersistToggle(OptimizationTab, {
         Name = Utils.t("clean_vfx"),
         Info = Utils.t("clean_vfx_info"),
-        CurrentValue = false,
         Flag = "CleanVfxDebris",
         Callback = function(Value)
             cleanVfxEnabled = Value
@@ -172,12 +169,11 @@ return function(ctx)
                 end)
             end
         end
-    })
+    }, "Opt.CleanVfx", Config, false)
 
-    OptimizationTab:CreateToggle({
+    Utils.PersistToggle(OptimizationTab, {
         Name = Utils.t("auto_gc"),
         Info = Utils.t("auto_gc_info"),
-        CurrentValue = false,
         Flag = "AutoGcMemory",
         Callback = function(Value)
             autoGcEnabled = Value
@@ -185,7 +181,7 @@ return function(ctx)
                 pcall(collectgarbage, "collect")
             end
         end
-    })
+    }, "Opt.AutoGc", Config, false)
 
     OptimizationTab:CreateButton({
         Name = Utils.t("btn_clear_now"),
@@ -195,25 +191,23 @@ return function(ctx)
         end
     })
 
-    OptimizationTab:CreateToggle({ 
+    Utils.PersistToggle(OptimizationTab, { 
         Name = Utils.t("limit_fps"), 
         Info = Utils.t("limit_fps_info"),
-        CurrentValue = false, 
         Flag = "FpsLimiter", 
         Callback = function(Value) 
             if setfpscap then setfpscap(Value and 15 or originalFPS) end 
         end 
-    })
+    }, "Opt.FpsLimiter", Config, false)
 
-    OptimizationTab:CreateToggle({ 
+    Utils.PersistToggle(OptimizationTab, { 
         Name = Utils.t("disable_3d"), 
         Info = Utils.t("disable_3d_info"),
-        CurrentValue = false, 
         Flag = "Disable3D", 
         Callback = function(Value) 
             pcall(function() RunService:Set3dRenderingEnabled(not Value) end) 
         end 
-    })
+    }, "Opt.Disable3D", Config, false)
     local _streamerName = "Streamer" -- Tên mặc định
     local isSpoofing = false
 
@@ -235,10 +229,9 @@ return function(ctx)
         end,
     })
 
-    StreamerTab:CreateToggle({
+    Utils.PersistToggle(StreamerTab, {
         Name = Utils.t("streamer_mode"),
         Info = Utils.t("streamer_mode_info"),
-        CurrentValue = false,
         Flag = "StreamerSpoofToggle",
         Callback = function(Value)
             isSpoofing = Value

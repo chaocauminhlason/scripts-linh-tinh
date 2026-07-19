@@ -198,10 +198,9 @@ return function(ctx)
     BossTab:CreateSection(" " .. Utils.t("sec_sp_boss") .. " ")
     local spStatusLabel = BossTab:CreateLabel(Utils.t("sp_boss_idle"))
 
-    BossTab:CreateToggle({
+    Utils.PersistToggle(BossTab, {
         Name = Utils.t("auto_sp_boss"),
         Info = Utils.t("auto_sp_boss_info"),
-        CurrentValue = false,
         Flag = "EnableSpecialBoss",
         Callback = function(isEnabled) 
             spSettings.enabled = isEnabled 
@@ -210,7 +209,7 @@ return function(ctx)
                 TryReleaseLock()
             end
         end,
-    })
+    }, "Boss.EnableSpecialBoss", Config, false)
 
     local spAllowedWorldIds = {}
     for worldId in pairs(SPECIAL_BOSS_MAPPING) do table.insert(spAllowedWorldIds, worldId) end
@@ -235,10 +234,9 @@ return function(ctx)
         wbInitialized                 = true
     end
 
-    BossTab:CreateToggle({
+    Utils.PersistToggle(BossTab, {
         Name = Utils.t("auto_wb_boss"),
         Info = Utils.t("auto_wb_boss_info"),
-        CurrentValue = false,
         Flag = "EnableWorldBoss",
         Callback = function(isEnabled)
             wbSettings.enabled = isEnabled
@@ -259,7 +257,7 @@ return function(ctx)
                 TryReleaseLock()
             end
         end,
-    })
+    }, "Boss.EnableWorldBoss", Config, false)
 
     local wbAllowedWorldIds = {}
     for worldId in pairs(WORLD_BOSS_MAPPING) do table.insert(wbAllowedWorldIds, worldId) end
@@ -270,13 +268,12 @@ return function(ctx)
         callback = function(selectedIds) wbSettings.selectedWorlds = selectedIds end,
     })
 
-    BossTab:CreateToggle({
+    Utils.PersistToggle(BossTab, {
         Name = Utils.t("auto_hop_boss"),
         Info = Utils.t("auto_hop_boss_info"),
-        CurrentValue = false,
         Flag = "WbAutoHop",
         Callback = function(isEnabled) wbSettings.autoHop = isEnabled end,
-    })
+    }, "Boss.AutoHop", Config, false)
 
     -- ==========================================
     -- HÀM LOGIC QUÉT
