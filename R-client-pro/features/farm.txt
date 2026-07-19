@@ -824,9 +824,18 @@ return function(ctx)
 
                 -- Teleport đến con quái
                 local telePos = CalcTeleportPosition(target)
+                local dist = (charData.RootPart.Position - telePos).Magnitude
                 local didTele = TeleportToMonster(charData, telePos, target.Position)
                 if didTele then
-                    task.wait(0.3) -- Chờ thêm một chút để pet dịch chuyển/gom kịp
+                    local delayTime = 0.2
+                    if dist > 300 then
+                        delayTime = 0.7
+                    elseif dist > 150 then
+                        delayTime = 0.5
+                    elseif dist > 50 then
+                        delayTime = 0.35
+                    end
+                    task.wait(delayTime) -- Chờ động tùy khoảng cách để model kịp load và pet gom lại
                 end
 
                 -- Tấn công liên tục cho đến khi con quái chết hoặc điều kiện thay đổi
