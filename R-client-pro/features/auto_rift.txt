@@ -666,7 +666,11 @@ return function(ctx)
                 -- Xử lý thời gian nghỉ ngơi
                 if cycleState.isResting then
                     if riftSettings.autoHop then
-                        pcall(function() Utils.HopServer("Hoàn tất 1 vòng quét Rift") end)
+                        if Utils.RequestHop then
+                            Utils.RequestHop("Rift_AutoHop", 1)
+                        else
+                            pcall(function() Utils.HopServer("Hoàn tất 1 vòng quét Rift") end)
+                        end
                         task.wait(5)
                         continue
                     else

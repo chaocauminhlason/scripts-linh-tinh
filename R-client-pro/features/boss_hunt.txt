@@ -225,6 +225,7 @@ return function(ctx)
     local wbStatusLabel = BossTab:CreateLabel(Utils.t("wb_boss_idle"))
 
     local function StartWbHuntFromFirstWorld()
+        SaveWbWaveEndTime() -- Lưu cờ thời gian sóng 5 phút ngay khi nhận tín hiệu
         wbHuntState.currentWorldIndex = 1
         wbHuntState.currentWorldId    = tonumber(wbSettings.selectedWorlds[1])
         wbHuntState.hasTeleported     = false
@@ -372,7 +373,6 @@ return function(ctx)
                     if wbWorldId then
                         if os.time() - wbLastWaveAlertTime >= WB_WAVE_COOLDOWN_SECS then
                             wbLastWaveAlertTime = os.time()
-                            SaveWbWaveEndTime()
                             
                             if #wbSettings.selectedWorlds > 0 then
                                 print("⚔️ [SÓNG WORLD BOSS] Kích hoạt càn quét (Tín hiệu: " .. currentText .. ")")
@@ -518,8 +518,6 @@ return function(ctx)
                 if not wbHuntState.engaged then
                     print("🎯 [WORLD] Thấy Boss '" .. boss.Name .. "' tại đảo " .. wbHuntState.currentWorldId)
                     wbHuntState.engaged = true
-                    local isWaveActive, _ = ReadWbWaveTimer()
-                    if not isWaveActive then SaveWbWaveEndTime() end
                 end
 
                 wbStatusLabel:Set(Utils.t("wb_defeating") .. boss.Name)
