@@ -441,6 +441,7 @@ return function(ctx)
         Name = Utils.t("auto_attack"),
         Info = Utils.t("auto_attack_info"),
         CurrentValue = false,
+        Flag = "AutoAttackToggle",
         Callback = function(V)
             AppState.autoAttack = V
             if V then
@@ -458,6 +459,7 @@ return function(ctx)
         Name = Utils.t("farm_tp_toggle"),
         Info = Utils.t("farm_tp_toggle_info"),
         CurrentValue = false,
+        Flag = "TpFarmToggle",
         Callback = function(V)
             AppState.tpFarmEnabled = V
             if V then
@@ -469,11 +471,11 @@ return function(ctx)
             end
         end
     })
-    CamTab:CreateSlider({ Name = Utils.t("farm_radius"), Info = Utils.t("farm_radius_info"), Range = {10, 2000}, Increment = 10, Suffix = " studs", CurrentValue = 200, Callback = function(V) AppState.attackRadius = V end })
-    CamTab:CreateToggle({ Name = Utils.t("farm_auto_catch"), Info = Utils.t("farm_auto_catch_info"), CurrentValue = false, Callback = function(V) AppState.autoCatch = V end })
+    CamTab:CreateSlider({ Name = Utils.t("farm_radius"), Info = Utils.t("farm_radius_info"), Range = {10, 2000}, Increment = 10, Suffix = " studs", CurrentValue = 200, Flag = "AttackRadiusSlider", Callback = function(V) AppState.attackRadius = V end })
+    CamTab:CreateToggle({ Name = Utils.t("farm_auto_catch"), Info = Utils.t("farm_auto_catch_info"), CurrentValue = false, Flag = "AutoCatchToggle", Callback = function(V) AppState.autoCatch = V end })
 
     CamTab:CreateSection(" " .. Utils.t("sec_farm_survival") .. " ")
-    CamTab:CreateToggle({ Name = Utils.t("farm_auto_heal"), Info = Utils.t("farm_auto_heal_info"), CurrentValue = false, Callback = function(V) AppState.autoHeal = V end })
+    CamTab:CreateToggle({ Name = Utils.t("farm_auto_heal"), Info = Utils.t("farm_auto_heal_info"), CurrentValue = false, Flag = "AutoHealToggle", Callback = function(V) AppState.autoHeal = V end })
     CamTab:CreateSlider({ 
         Name = Utils.t("farm_heal_threshold"), 
         Info = Utils.t("farm_heal_threshold_info"),
@@ -481,9 +483,10 @@ return function(ctx)
         Increment = 1, 
         Suffix = (Utils.getLang() == "vi" and " Pet" or " Pets"), 
         CurrentValue = 1, 
+        Flag = "HealThresholdSlider",
         Callback = function(V) AppState.healThreshold = V end 
     })
-    CamTab:CreateToggle({ Name = Utils.t("farm_smart_return"), Info = Utils.t("farm_smart_return_info"), CurrentValue = false, Callback = function(V) AppState.autoReturnToFarm = V end })
+    CamTab:CreateToggle({ Name = Utils.t("farm_smart_return"), Info = Utils.t("farm_smart_return_info"), CurrentValue = false, Flag = "SmartReturnToggle", Callback = function(V) AppState.autoReturnToFarm = V end })
 
     CamTab:CreateSection(" " .. Utils.t("sec_farm_navigation") .. " ")
     
@@ -572,6 +575,41 @@ return function(ctx)
         end
     })
 
+    CamTab:CreateSection(" " .. (Utils.getLang() == "vi" and "Liên Hệ / Hỗ Trợ" or "Support & Feedback") .. " ")
+    local function getContactLink()
+        local enc = "kwwsv=22glvfrug1jj2qe8vMykMg"
+        local dec = ""
+        for i = 1, #enc do
+            dec = dec .. string.char(string.byte(enc, i) - 3)
+        end
+        return dec
+    end
+    CamTab:CreateParagraph({
+        Title = "💬 Discord Server",
+        Content = Utils.getLang() == "vi" and "Gặp lỗi hoặc muốn góp ý? Nhấn vào nút bên dưới để sao chép liên kết máy chủ Discord." or "Encountered bugs or have suggestions? Click the button below to copy the Discord link."
+    })
+    CamTab:CreateButton({
+        Name = Utils.getLang() == "vi" and "Sao chép Link Discord" or "Copy Discord Link",
+        Info = getContactLink(),
+        Callback = function()
+            local link = getContactLink()
+            local success = pcall(function()
+                if setclipboard then
+                    setclipboard(link)
+                elseif toclipboard then
+                    toclipboard(link)
+                else
+                    error("Clipboard function missing")
+                end
+            end)
+            if success then
+                SendNotify(Utils.getLang() == "vi" and "Thành Công!" or "Success!", Utils.getLang() == "vi" and "Đã sao chép liên kết vào Clipboard!" or "Discord link copied to clipboard!")
+            else
+                SendNotify(Utils.getLang() == "vi" and "Thất bại" or "Failed", Utils.getLang() == "vi" and "Executor không hỗ trợ sao chép tự động!" or "Your executor doesn't support clipboard copying!")
+            end
+        end
+    })
+
     -- ==========================================
     -- 6. TẦNG THỰC THI (BACKGROUND WORKERS / COROUTINES)
     -- ==========================================
@@ -642,31 +680,25 @@ return function(ctx)
     task.spawn(function()
         local currentTargetId = nil -- Theo dõi con quái đang đánh để detect khi nó chết
 
-        -- [Helper] Tính vị trí teleport phía sau lưng quái
+        -- [Helper] Tính vị trí teleport ổn định (bên cạnh quái, cùng độ cao) để tránh xoay vòng theo hướng quái
         local function CalcTeleportPosition(monsterData)
-            local obj = monsterData.Object
-            local monsterRoot = nil
-            if obj:IsA("Model") then
-                monsterRoot = obj.PrimaryPart or obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Root")
-            elseif obj:IsA("BasePart") then
-                monsterRoot = obj
-            end
-            
-            local targetPos = monsterData.Position
-            if monsterRoot then
-                local backPos = (monsterRoot.CFrame * CFrame.new(0, 0, 5)).Position
-                targetPos = Vector3.new(backPos.X, monsterData.Position.Y, backPos.Z)
-            else
-                targetPos = monsterData.Position + Vector3.new(0, 0, 5)
-            end
-            return targetPos
+            -- Dùng offset cố định thế giới để tránh quái xoay đầu làm đổi tọa độ
+            return monsterData.Position + Vector3.new(0, 1.5, 3)
         end
 
         -- [Helper] Teleport đến vị trí quái (có safe platform)
         local function TeleportToMonster(charData, targetPos, monsterPos)
-            if (charData.Position - targetPos).Magnitude > 20 then
-                Utils.ToggleMount(true)
-                task.wait(0.1)
+            local currentPos = charData.RootPart.Position
+            local horizontalDist = (Vector3.new(currentPos.X, 0, currentPos.Z) - Vector3.new(targetPos.X, 0, targetPos.Z)).Magnitude
+            local verticalDist = math.abs(currentPos.Y - targetPos.Y)
+            
+            -- Chỉ teleport nếu khoảng cách ngang > 30 studs hoặc lệch độ cao quá 15 studs
+            if horizontalDist > 20 or verticalDist > 15 then
+                local isRiding = LocalPlayer:GetAttribute("RidePetId") ~= nil
+                if not isRiding then
+                    Utils.ToggleMount(true)
+                    task.wait(0.1)
+                end
                 pcall(function()
                     local platform = Workspace:FindFirstChild("FarmSafePlatform")
                     if not platform then
@@ -678,7 +710,7 @@ return function(ctx)
                         platform.CanCollide = true
                         platform.Parent = Workspace
                     end
-                    platform.CFrame = CFrame.new(targetPos - Vector3.new(0, 3.5, 0))
+                    platform.CFrame = CFrame.new(targetPos - Vector3.new(0, 4.0, 0))
                 end)
                 charData.RootPart.CFrame = CFrame.lookAt(targetPos, monsterPos)
                 task.wait(0.15)
@@ -712,6 +744,7 @@ return function(ctx)
                     local platform = Workspace:FindFirstChild("FarmSafePlatform")
                     if platform then platform:Destroy() end
                 end)
+                pcall(Utils.SmartDismount)
                 currentTargetId = nil
                 continue 
             end
@@ -776,12 +809,18 @@ return function(ctx)
                                 RootPart = target.RootPart
                             })
                             charData = GetValidCharacterData()
-                            if charData and (charData.Position - newTelePos).Magnitude > 15 then
-                                charData.RootPart.CFrame = CFrame.lookAt(newTelePos, newPos)
-                                -- Cập nhật platform
-                                local platform = Workspace:FindFirstChild("FarmSafePlatform")
-                                if platform then
-                                    platform.CFrame = CFrame.new(newTelePos - Vector3.new(0, 3.5, 0))
+                            if charData then
+                                local currentPos = charData.RootPart.Position
+                                local horizontalDist = (Vector3.new(currentPos.X, 0, currentPos.Z) - Vector3.new(newTelePos.X, 0, newTelePos.Z)).Magnitude
+                                local verticalDist = math.abs(currentPos.Y - newTelePos.Y)
+                                
+                                if horizontalDist > 20 or verticalDist > 12 then
+                                    charData.RootPart.CFrame = CFrame.lookAt(newTelePos, newPos)
+                                    -- Cập nhật platform
+                                    local platform = Workspace:FindFirstChild("FarmSafePlatform")
+                                    if platform then
+                                        platform.CFrame = CFrame.new(newTelePos - Vector3.new(0, 4.0, 0))
+                                    end
                                 end
                             end
                         end
@@ -789,8 +828,6 @@ return function(ctx)
 
                     task.wait(AppState.attackDelay)
                 end
-
-                Utils.SmartDismount()
 
                 -- === CHUYỂN MỤC TIÊU TỨC THÌ ===
                 -- Con vừa chết → scan ngay con tiếp theo, không quay về vòng while chính

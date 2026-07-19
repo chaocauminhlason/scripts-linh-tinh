@@ -633,9 +633,11 @@ end
             if monstersFolder then
                 for _, monster in pairs(monstersFolder:GetChildren()) do
                     if monster:IsA("Model") or monster:IsA("BasePart") then
-                        
-                        -- Lọc theo tên UI
-                        if finalFilter and not finalFilter(monster) then continue end
+                         -- Bỏ qua các model rác hoặc quái đã chết bị xóa hết attribute (không có TmplId)
+                         if not monster:GetAttribute("TmplId") then continue end
+
+                         -- Lọc theo tên UI
+                         if finalFilter and not finalFilter(monster) then continue end
 
                         -- Tìm Root
                         local root = nil
@@ -646,42 +648,41 @@ end
                         end
                         if not (root and root:IsA("BasePart")) then continue end
 
-                        -- Đã bắt xong thì bỏ qua
-                        if monster:GetAttribute("CatchEndTick") ~= nil or root:GetAttribute("CatchEndTick") ~= nil then 
-                            continue 
-                        end
-
-                        local isValid = false
+                         local isValid = false
 
                         -- PHÂN NHÁNH LOGIC THEO MODE
                         if scanMode == "Catch" then
-                            local catchTaken = monster:GetAttribute("CatchTakenPlayerId")
+                            local catchTaken = monster:GetAttribute("CatchTakenPlayerId") or root:GetAttribute("CatchTakenPlayerId")
                             if catchTaken and catchTaken == playerId then isValid = true end
                         else
-                            -- Chế độ Attack: Check máu >= 1 (Chống lừa BigNum)
-                            local hum_monster = monster:FindFirstChildOfClass("Humanoid")
-                            if hum_monster then
-                                if hum_monster.Health >= 1 then isValid = true end
-                            else
-                                local hpVal = monster:FindFirstChild("Health")
-                                if hpVal and hpVal:IsA("StringValue") then
-                                    local rawStr = hpVal.Value
-                                    local tryDec = tonumber((string.gsub(rawStr, ",", ".")))
-                                    local hpNum = 0
-                                    
-                                    if tryDec then hpNum = tryDec
-                                    else
-                                        local parts = string.split(rawStr, ",")
-                                        if #parts == 2 then
-                                            local base = tonumber(parts[1])
-                                            local exp = tonumber(parts[2])
-                                            if base and exp then hpNum = base * (10 ^ exp) end
-                                        end
-                                    end
-                                    if hpNum >= 1 then isValid = true end
+                            -- Chế độ Attack: Bỏ qua nếu quái đang chờ bắt (đã bị hạ gục)
+                            local catchTaken = monster:GetAttribute("CatchTakenPlayerId") or root:GetAttribute("CatchTakenPlayerId")
+                            if not catchTaken then
+                                -- Check máu >= 1 (Chống lừa BigNum)
+                                local hum_monster = monster:FindFirstChildOfClass("Humanoid")
+                                if hum_monster then
+                                    if hum_monster.Health >= 1 then isValid = true end
                                 else
-                                    -- Mặc định nếu không tìm thấy thanh máu (đặc biệt là Boss), coi như còn sống
-                                    isValid = true
+                                    local hpVal = monster:FindFirstChild("Health")
+                                    if hpVal and hpVal:IsA("StringValue") then
+                                        local rawStr = hpVal.Value
+                                        local tryDec = tonumber((string.gsub(rawStr, ",", ".")))
+                                        local hpNum = 0
+                                        
+                                        if tryDec then hpNum = tryDec
+                                        else
+                                            local parts = string.split(rawStr, ",")
+                                            if #parts == 2 then
+                                                local base = tonumber(parts[1])
+                                                local exp = tonumber(parts[2])
+                                                if base and exp then hpNum = base * (10 ^ exp) end
+                                            end
+                                        end
+                                        if hpNum >= 1 then isValid = true end
+                                    else
+                                        -- Mặc định nếu không tìm thấy thanh máu (đặc biệt là Boss), coi như còn sống
+                                        isValid = true
+                                    end
                                 end
                             end
                         end
@@ -713,6 +714,17 @@ end
 function Utils.IsMonsterAlive(monsterObj)
     if not monsterObj then return false end
     
+    -- Nếu quái đã bị dọn dẹp các attribute (ví dụ mất TmplId) thì coi như đã chết
+    if not monsterObj:GetAttribute("TmplId") then
+        return false
+    end
+    
+    -- Nếu quái đang trong trạng thái chờ bắt (đã bị hạ gục), coi như đã chết
+    local root = monsterObj:FindFirstChild("HumanoidRootPart") or monsterObj:FindFirstChild("Root") or monsterObj
+    if monsterObj:GetAttribute("CatchTakenPlayerId") or (root and root:GetAttribute("CatchTakenPlayerId")) then
+        return false
+    end
+    
     -- 1. Ưu tiên kiểm tra Humanoid (Quái thường)
     local hum = monsterObj:FindFirstChildOfClass("Humanoid")
     if hum then
@@ -740,8 +752,8 @@ function Utils.IsMonsterAlive(monsterObj)
         return (hpNum and hpNum >= 1) or false
     end
     
-    -- Mặc định trả về false nếu không tìm thấy thanh máu
-    return false
+    -- Mặc định trả về true nếu không tìm thấy thanh máu (Đồng bộ với SmartScanMonsters)
+    return true
 end
 
 -- ==========================================

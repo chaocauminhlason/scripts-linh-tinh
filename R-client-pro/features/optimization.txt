@@ -36,14 +36,16 @@ return function(ctx)
         end
     end
 
-    -- Real-time optimization listener
+    -- Real-time optimization listener (deferred to prevent locking main thread during streaming/teleportation)
     Workspace.DescendantAdded:Connect(function(v)
-        if potatoEnabled then
-            pcall(applyPotatoToPart, v)
-        end
-        if cleanVfxEnabled then
-            pcall(applyVfxClean, v)
-        end
+        task.defer(function()
+            if potatoEnabled then
+                pcall(applyPotatoToPart, v)
+            end
+            if cleanVfxEnabled then
+                pcall(applyVfxClean, v)
+            end
+        end)
     end)
 
     local function PerformAggressiveClean(silent)
@@ -333,25 +335,45 @@ return function(ctx)
         end
     end)
 
-    -- Luồng quét định kỳ quét sạch tên thật trên toàn bộ giao diện màn hình (PlayerGui)
-    task.spawn(function()
-        while task.wait(0.5) do
-            if isSpoofing then
-                pcall(function()
-                    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-                    if playerGui then
-                        for _, v in ipairs(playerGui:GetDescendants()) do
-                            if v:IsA("TextLabel") or v:IsA("TextButton") then
-                                if string.find(v.Text, realName) or string.find(v.Text, realDisplayName) then
-                                    local txt = v.Text
-                                    txt = string.gsub(txt, realName, _streamerName)
-                                    txt = string.gsub(txt, realDisplayName, _streamerName)
-                                    v.Text = txt
-                                end
-                            end
-                        end
-                    end
-                end)
+    -- Hàm kiểm tra và đổi tên hiển thị
+    local function checkAndReplaceText(v)
+        if v:IsA("TextLabel") or v:IsA("TextButton") then
+            local txt = v.Text
+            local modified = false
+            if string.find(txt, realName) then
+                txt = string.gsub(txt, realName, _streamerName)
+                modified = true
+            end
+            if string.find(txt, realDisplayName) then
+                txt = string.gsub(txt, realDisplayName, _streamerName)
+                modified = true
+            end
+            if modified then
+                v.Text = txt
+            end
+        end
+    end
+
+    local function setupSpoof(v)
+        if v:IsA("TextLabel") or v:IsA("TextButton") then
+            checkAndReplaceText(v)
+            v:GetPropertyChangedSignal("Text"):Connect(function()
+                if isSpoofing then
+                    checkAndReplaceText(v)
+                end
+            end)
+        end
+    end
+
+    -- Đăng ký lắng nghe sự kiện thay đổi UI thay vì quét toàn bộ cây UI định kỳ
+    pcall(function()
+        local playerGui = LocalPlayer:WaitForChild("PlayerGui", 5)
+        if playerGui then
+            playerGui.DescendantAdded:Connect(function(v)
+                setupSpoof(v)
+            end)
+            for _, v in ipairs(playerGui:GetDescendants()) do
+                setupSpoof(v)
             end
         end
     end)
