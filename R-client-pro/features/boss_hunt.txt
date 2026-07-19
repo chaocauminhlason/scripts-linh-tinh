@@ -82,20 +82,21 @@ return function(ctx)
         if Controller then
             if Controller.CurrentLock == "BossHunt" then return true end
             
-            pcall(function()
+            local success, requested = pcall(function()
                 if type(Controller.RequestLock) == "function" then
-                    Controller.RequestLock("BossHunt")
+                    return Controller.RequestLock("BossHunt")
                 end
+                return false
             end)
             
-            return Controller.CurrentLock == "BossHunt"
+            return requested or Controller.CurrentLock == "BossHunt"
         end
         return true 
     end
 
-    local function TryReleaseLock()
-        -- 1. Chặn trả cờ nếu 1 trong 2 luồng Săn Boss vẫn đang hoạt động
-        if spHuntState.isActive or wbHuntState.isActive then return end
+    local function TryReleaseLock(force)
+        -- 1. Chặn trả cờ nếu 1 trong 2 luồng Săn Boss vẫn đang hoạt động (trừ khi ép buộc tắt hẳn)
+        if not force and (spHuntState.isActive or wbHuntState.isActive) then return end
         
         _G.PendingBossHunt = false
         _G.PendingSpecialBoss = false
@@ -207,7 +208,7 @@ return function(ctx)
             spSettings.enabled = isEnabled 
             if not isEnabled then 
                 spHuntState.isActive = false
-                TryReleaseLock()
+                TryReleaseLock(true)
             end
         end,
     })
@@ -256,7 +257,7 @@ return function(ctx)
                 wbInitialized = false
                 wbHuntState.isActive = false
                 wbStatusLabel:Set(Utils.t("tracker_stopped"))
-                TryReleaseLock()
+                TryReleaseLock(true)
             end
         end,
     })
