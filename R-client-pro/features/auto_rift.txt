@@ -120,7 +120,7 @@ return function(ctx)
                 TargetLabel:Set(string.format(Utils.t("rift_selected_worlds_label"), #selectedIds))
             end
         end
-    })
+    }, Config)
 
     local colorDisplayOptions = {
         Utils.t("color_blue"),
@@ -711,6 +711,7 @@ return function(ctx)
                         cycleState.isResting = true
                         cycleState.restEndTime = os.time() + (riftSettings.restTimeMinutes * 60)
                         cycleState.currentLoadedWorld = nil
+                        cycleState.currentIndex = 1 -- Reset index để khi hết nghỉ ngơi quét lại từ đầu
                         
                         -- Giải phóng cờ AutoRift trong suốt thời gian nghỉ
                         if controller and controller.CurrentLock == "AutoRift" then

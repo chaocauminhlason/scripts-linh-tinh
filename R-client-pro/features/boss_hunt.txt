@@ -175,7 +175,7 @@ return function(ctx)
     local function SharedTeleportToBoss(hrp, bossPosition)
         Utils.ToggleMount(true)
         task.wait(0.5)
-        hrp.CFrame = CFrame.new(bossPosition + Vector3.new(0, 8, 0))
+        pcall(function() Utils.TeleportToBoss(bossPosition, 8) end)
     end
 
     local function SaveWbWaveEndTime()
@@ -218,7 +218,7 @@ return function(ctx)
         flag = "SpBossWorldSelect",
         allowedIds = spAllowedWorldIds,
         callback = function(selectedIds) spSettings.selectedWorlds = selectedIds end,
-    })
+    }, Config)
 
     -- [UI] WORLD BOSS
     BossTab:CreateSection(" " .. Utils.t("sec_wb_boss") .. " ")
@@ -267,7 +267,7 @@ return function(ctx)
         flag = "WbBossWorldSelect",
         allowedIds = wbAllowedWorldIds,
         callback = function(selectedIds) wbSettings.selectedWorlds = selectedIds end,
-    })
+    }, Config)
 
     Utils.PersistToggle(BossTab, {
         Name = Utils.t("auto_hop_boss"),
