@@ -4,7 +4,6 @@
 return function(ctx)
     local Window = ctx.Window
     local Utils = ctx.Utils
-    local Config = ctx.Config
     
     -- Tạo một Tab mới trên giao diện Rayfield
     local PetTab = Window:CreateTab(Utils.t("pet_manager"), "dog")
@@ -36,88 +35,97 @@ return function(ctx)
     PetTab:CreateSection(" " .. string.upper(Utils.t("sec_pet_auto")) .. " ")
 
     -- Auto Equip Best Pets
-    Utils.PersistToggle(PetTab, {
+    PetTab:CreateToggle({
         Name = Utils.t("pet_auto_equip"),
         Info = Utils.t("pet_auto_equip_info"),
+        CurrentValue = false,
         Flag = "AutoEquipBestPets",
         Callback = function(Value) petSettings.autoEquipBest = Value end
-    }, "Pet.AutoEquipBest", Config, false)
+    })
 
     -- Auto Ride/Mount
-    Utils.PersistToggle(PetTab, {
+    PetTab:CreateToggle({
         Name = Utils.t("pet_auto_mount"),
         Info = Utils.t("pet_auto_mount_info"),
+        CurrentValue = false,
         Flag = "AutoRideMount",
         Callback = function(Value) petSettings.autoMount = Value end
-    }, "Pet.AutoMount", Config, false)
+    })
 
     -- Auto Feed Pets
-    Utils.PersistToggle(PetTab, {
+    PetTab:CreateToggle({
         Name = Utils.t("pet_auto_feed"),
         Info = Utils.t("pet_auto_feed_info"),
+        CurrentValue = false,
         Flag = "AutoFeedPets",
         Callback = function(Value) petSettings.autoFeed = Value end
-    }, "Pet.AutoFeed", Config, false)
+    })
 
     -- Select Fodder Rarities
-    Utils.PersistDropdown(PetTab, {
+    PetTab:CreateDropdown({
         Name = Utils.t("pet_select_fodder"),
         Info = Utils.t("pet_select_fodder_info"),
         Options = rarityOptions,
+        CurrentOption = {},
         MultipleOptions = true,
         Flag = "FodderRaritiesDropdown",
         Callback = function(Options)
             petSettings.fodderRarities = Options
         end,
-    }, "Pet.FodderRarities", Config, {})
+    })
 
     -- Auto Enhance
-    Utils.PersistToggle(PetTab, {
+    PetTab:CreateToggle({
         Name = Utils.t("pet_auto_enhance"),
         Info = Utils.t("pet_auto_enhance_info"),
+        CurrentValue = false,
         Flag = "AutoEnhancePets",
         Callback = function(Value) petSettings.autoEnhance = Value end
-    }, "Pet.AutoEnhance", Config, false)
+    })
 
     -- Auto Fuse (Evolve)
-    Utils.PersistToggle(PetTab, {
+    PetTab:CreateToggle({
         Name = Utils.t("pet_auto_fuse"),
         Info = Utils.t("pet_auto_fuse_info"),
+        CurrentValue = false,
         Flag = "AutoFusePets",
         Callback = function(Value) petSettings.autoFuse = Value end
-    }, "Pet.AutoFuse", Config, false)
+    })
 
     -- Auto Sell
-    Utils.PersistToggle(PetTab, {
+    PetTab:CreateToggle({
         Name = Utils.t("pet_auto_sell"),
         Info = Utils.t("pet_auto_sell_info"),
+        CurrentValue = false,
         Flag = "AutoSellPets",
         Callback = function(Value) petSettings.autoSell = Value end
-    }, "Pet.AutoSell", Config, false)
+    })
 
     -- Select Sell Qualities
-    Utils.PersistDropdown(PetTab, {
+    PetTab:CreateDropdown({
         Name = Utils.t("pet_sell_qualities"),
         Info = Utils.t("pet_sell_qualities_info"),
         Options = rarityOptions,
+        CurrentOption = {},
         MultipleOptions = true,
         Flag = "SellQualitiesDropdown",
         Callback = function(Options)
             petSettings.sellQualities = Options
         end,
-    }, "Pet.SellQualities", Config, {})
+    })
 
     -- Batch Size Control
-    Utils.PersistSlider(PetTab, {
+    PetTab:CreateSlider({
         Name = Utils.t("pet_batch_size"),
         Info = Utils.t("pet_batch_size_info"),
-        Range = {1, 50}, -- Rayfield dùng Range thay vì Min/Max
-        Increment = 1,
+        Min = 1,
+        Max = 50,
+        CurrentValue = 10,
         Flag = "SellBatchSizeSlider",
         Callback = function(Value)
             petSettings.sellBatchSize = tonumber(Value) or 10
         end,
-    }, "Pet.SellBatchSize", Config, 10)
+    })
 
     -- ==========================================
     -- HÀM XỬ LÝ BACKGROUND LOOPS

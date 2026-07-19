@@ -4,7 +4,6 @@
 return function(ctx)
     local Window = ctx.Window
     local Utils = ctx.Utils
-    local Config = ctx.Config
     local EggTab = Window:CreateTab(Utils.t("autohatch"), "egg")
 
     local hatchSettings = {
@@ -67,10 +66,11 @@ return function(ctx)
 
 
     EggTab:CreateSection(" " .. string.upper(Utils.t("select_eggs")) .. " ")
-    local EggDropdown = Utils.PersistDropdown(EggTab, {
+    local EggDropdown = EggTab:CreateDropdown({
         Name = Utils.t("select_eggs"),
         Info = Utils.t("select_eggs_info"),
         Options = eggOptions,
+        CurrentOption = {eggOptions[1]},
         MultipleOptions = true, -- Bật tính năng chọn nhiều
         Flag = "EggSelectDropdown",
         Callback = function(Options)
@@ -82,7 +82,7 @@ return function(ctx)
                 end
             end
         end,
-    }, "Hatch.Eggs", Config, {eggOptions[1]})
+    })
 
     EggTab:CreateButton({
         Name = Utils.t("refresh_eggs"),
@@ -98,27 +98,30 @@ return function(ctx)
 
     EggTab:CreateSection(" " .. string.upper(Utils.t("auto_hatch_tab")) .. " ")
     
-    local ToggleStart = Utils.PersistToggle(EggTab, {
+    local ToggleStart = EggTab:CreateToggle({
         Name = Utils.t("auto_start"),
         Info = Utils.t("auto_start_info"),
+        CurrentValue = false,
         Flag = "AutoStartEgg",
         Callback = function(Value) hatchSettings.autoStart = Value end
-    }, "Hatch.AutoStart", Config, false)
+    })
 
-    local ToggleClaim = Utils.PersistToggle(EggTab, {
+    local ToggleClaim = EggTab:CreateToggle({
         Name = Utils.t("auto_claim"),
         Info = Utils.t("auto_claim_info"),
+        CurrentValue = false,
         Flag = "AutoClaimEgg",
         Callback = function(Value) hatchSettings.autoClaim = Value end
-    }, "Hatch.AutoClaim", Config, false)
+    })
 
     EggTab:CreateSection(" " .. string.upper(Utils.t("stop_if_full")) .. " ")
-    Utils.PersistToggle(EggTab, {
+    EggTab:CreateToggle({
         Name = Utils.t("stop_if_full"),
         Info = Utils.t("stop_if_full_info"),
+        CurrentValue = true,
         Flag = "StopIfFull",
         Callback = function(Value) hatchSettings.stopIfBagFull = Value end
-    }, "Hatch.StopIfFull", Config, true)
+    })
 
     EggTab:CreateSection(" " .. string.upper(Utils.t("auto_breed")) .. " ")
     
@@ -171,30 +174,33 @@ return function(ctx)
     table.sort(maleNames)
     table.sort(femaleNames)
 
-    local ToggleBreed = Utils.PersistToggle(EggTab, {
+    local ToggleBreed = EggTab:CreateToggle({
         Name = Utils.t("auto_breed"),
         Info = Utils.t("auto_breed_info"),
+        CurrentValue = false,
         Flag = "AutoBreedPets",
         Callback = function(Value) hatchSettings.autoBreed = Value end
-    }, "Hatch.AutoBreed", Config, false)
+    })
 
-    local FatherDropdown = Utils.PersistDropdown(EggTab, {
+    local FatherDropdown = EggTab:CreateDropdown({
         Name = Utils.t("breed_father"),
         Options = maleNames,
+        CurrentOption = {"Any"},
         Flag = "BreedFatherDropdown",
         Callback = function(Options)
             hatchSettings.breedFather = Options[1] or "Any"
         end
-    }, "Hatch.BreedFather", Config, {"Any"})
+    })
 
-    local MotherDropdown = Utils.PersistDropdown(EggTab, {
+    local MotherDropdown = EggTab:CreateDropdown({
         Name = Utils.t("breed_mother"),
         Options = femaleNames,
+        CurrentOption = {"Any"},
         Flag = "BreedMotherDropdown",
         Callback = function(Options)
             hatchSettings.breedMother = Options[1] or "Any"
         end
-    }, "Hatch.BreedMother", Config, {"Any"})
+    })
 
     EggTab:CreateButton({
         Name = "🔄 Refresh Pet List",

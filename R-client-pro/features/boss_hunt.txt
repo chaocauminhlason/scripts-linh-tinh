@@ -51,11 +51,6 @@ return function(ctx)
     -- TRẠNG THÁI (STATE)
     -- ==========================================
     local spSettings = { enabled = false, selectedWorlds = {} }
-    pcall(function()
-        if Config then
-            spSettings.selectedWorlds = Config.Get("MultiSelect.SpBossWorldSelect", {})
-        end
-    end)
     local spHuntState = {
         isActive      = false,
         targetBoss    = "",
@@ -66,11 +61,6 @@ return function(ctx)
     }
 
     local wbSettings = { enabled = false, autoHop = false, selectedWorlds = {} }
-    pcall(function()
-        if Config then
-            wbSettings.selectedWorlds = Config.Get("MultiSelect.WbBossWorldSelect", {})
-        end
-    end)
     local wbHuntState = {
         isActive          = false,
         currentWorldIndex = 1,
@@ -185,7 +175,7 @@ return function(ctx)
     local function SharedTeleportToBoss(hrp, bossPosition)
         Utils.ToggleMount(true)
         task.wait(0.5)
-        pcall(function() Utils.TeleportToBoss(bossPosition, 8) end)
+        hrp.CFrame = CFrame.new(bossPosition + Vector3.new(0, 8, 0))
     end
 
     local function SaveWbWaveEndTime()
@@ -208,9 +198,10 @@ return function(ctx)
     BossTab:CreateSection(" " .. Utils.t("sec_sp_boss") .. " ")
     local spStatusLabel = BossTab:CreateLabel(Utils.t("sp_boss_idle"))
 
-    Utils.PersistToggle(BossTab, {
+    BossTab:CreateToggle({
         Name = Utils.t("auto_sp_boss"),
         Info = Utils.t("auto_sp_boss_info"),
+        CurrentValue = false,
         Flag = "EnableSpecialBoss",
         Callback = function(isEnabled) 
             spSettings.enabled = isEnabled 
@@ -219,7 +210,7 @@ return function(ctx)
                 TryReleaseLock()
             end
         end,
-    }, "Boss.EnableSpecialBoss", Config, false)
+    })
 
     local spAllowedWorldIds = {}
     for worldId in pairs(SPECIAL_BOSS_MAPPING) do table.insert(spAllowedWorldIds, worldId) end
@@ -228,25 +219,26 @@ return function(ctx)
         flag = "SpBossWorldSelect",
         allowedIds = spAllowedWorldIds,
         callback = function(selectedIds) spSettings.selectedWorlds = selectedIds end,
-    }, Config)
+    })
 
     -- [UI] WORLD BOSS
     BossTab:CreateSection(" " .. Utils.t("sec_wb_boss") .. " ")
     local wbStatusLabel = BossTab:CreateLabel(Utils.t("wb_boss_idle"))
 
     local function StartWbHuntFromFirstWorld()
-        SaveWbWaveEndTime() -- Lưu cờ thời gian sóng 5 phút ngay khi nhận tín hiệu
         wbHuntState.currentWorldIndex = 1
         wbHuntState.currentWorldId    = tonumber(wbSettings.selectedWorlds[1])
         wbHuntState.hasTeleported     = false
         wbHuntState.engaged           = false
         wbHuntState.scanAttempts      = 0
         wbHuntState.isActive          = true
+        wbInitialized                 = true
     end
 
-    Utils.PersistToggle(BossTab, {
+    BossTab:CreateToggle({
         Name = Utils.t("auto_wb_boss"),
         Info = Utils.t("auto_wb_boss_info"),
+        CurrentValue = false,
         Flag = "EnableWorldBoss",
         Callback = function(isEnabled)
             wbSettings.enabled = isEnabled
@@ -267,7 +259,7 @@ return function(ctx)
                 TryReleaseLock()
             end
         end,
-    }, "Boss.EnableWorldBoss", Config, false)
+    })
 
     local wbAllowedWorldIds = {}
     for worldId in pairs(WORLD_BOSS_MAPPING) do table.insert(wbAllowedWorldIds, worldId) end
@@ -276,14 +268,15 @@ return function(ctx)
         flag = "WbBossWorldSelect",
         allowedIds = wbAllowedWorldIds,
         callback = function(selectedIds) wbSettings.selectedWorlds = selectedIds end,
-    }, Config)
+    })
 
-    Utils.PersistToggle(BossTab, {
+    BossTab:CreateToggle({
         Name = Utils.t("auto_hop_boss"),
         Info = Utils.t("auto_hop_boss_info"),
+        CurrentValue = false,
         Flag = "WbAutoHop",
         Callback = function(isEnabled) wbSettings.autoHop = isEnabled end,
-    }, "Boss.AutoHop", Config, false)
+    })
 
     -- ==========================================
     -- HÀM LOGIC QUÉT
@@ -382,6 +375,7 @@ return function(ctx)
                     if wbWorldId then
                         if os.time() - wbLastWaveAlertTime >= WB_WAVE_COOLDOWN_SECS then
                             wbLastWaveAlertTime = os.time()
+                            SaveWbWaveEndTime()
                             
                             if #wbSettings.selectedWorlds > 0 then
                                 print("⚔️ [SÓNG WORLD BOSS] Kích hoạt càn quét (Tín hiệu: " .. currentText .. ")")
@@ -527,6 +521,8 @@ return function(ctx)
                 if not wbHuntState.engaged then
                     print("🎯 [WORLD] Thấy Boss '" .. boss.Name .. "' tại đảo " .. wbHuntState.currentWorldId)
                     wbHuntState.engaged = true
+                    local isWaveActive, _ = ReadWbWaveTimer()
+                    if not isWaveActive then SaveWbWaveEndTime() end
                 end
 
                 wbStatusLabel:Set(Utils.t("wb_defeating") .. boss.Name)

@@ -809,7 +809,7 @@ local AreaData = {
 -- ==========================================
 -- 1.5 TẠO DROPDOWN ĐA CHỌN (BẢN LỌC - VERSION 2)
 -- ==========================================
-function Utils.CreateFilteredAreaMultiSelect(tab, config, ConfigObj)
+function Utils.CreateFilteredAreaMultiSelect(tab, config)
     config = config or {}
     local allowedIds = config.allowedIds or {}
     
@@ -836,37 +836,16 @@ function Utils.CreateFilteredAreaMultiSelect(tab, config, ConfigObj)
         end
     end
     
-    -- Đọc giá trị đã lưu nếu có ConfigObj
-    local configKey = "MultiSelect." .. (config.flag or "AreaMultiSelectFiltered")
-    if ConfigObj then
-        local savedOption = ConfigObj.Get(configKey, defaultOptions)
-        if type(savedOption) == "table" then
-            defaultOptions = savedOption
-            -- Đồng bộ ngay trạng thái ban đầu bằng callback
-            task.spawn(function()
-                local selectedIds = {}
-                for _, areaName in ipairs(defaultOptions) do
-                    if nameToIdMap[areaName] then
-                        table.insert(selectedIds, nameToIdMap[areaName])
-                    end
-                end
-                if config.callback then config.callback(selectedIds, defaultOptions) end
-            end)
-        end
-    end
-    
-    local dropdownOptions = {
+    local dropdown = tab:CreateDropdown({
         Name = config.name or "Chọn Khu Vực",
         Options = options,
         CurrentOption = defaultOptions,
         MultipleOptions = true,
         Flag = config.flag or "AreaMultiSelectFiltered",
         Callback = function(selectedOptions)
-            if ConfigObj then
-                pcall(function() ConfigObj.Set(configKey, selectedOptions) end)
-            end
             if config.callback then
                 local selectedIds = {}
+                -- Trả về trực tiếp mảng ID cho script xử lý
                 for _, areaName in ipairs(selectedOptions) do
                     if nameToIdMap[areaName] then
                         table.insert(selectedIds, nameToIdMap[areaName])
@@ -875,16 +854,14 @@ function Utils.CreateFilteredAreaMultiSelect(tab, config, ConfigObj)
                 config.callback(selectedIds, selectedOptions)
             end
         end
-    }
-
-    local dropdown = tab:CreateDropdown(dropdownOptions)
+    })
+    
     return dropdown
 end
-
 -- ==========================================
 -- 1. TẠO DROPDOWN ĐA CHỌN KHU VỰC
 -- ==========================================
-function Utils.CreateAreaMultiSelect(tab, config, ConfigObj)
+function Utils.CreateAreaMultiSelect(tab, config)
     config = config or {}
     
     local options = {}
@@ -909,38 +886,15 @@ function Utils.CreateAreaMultiSelect(tab, config, ConfigObj)
         defaultOptions = options
     end
     
-    local configKey = "MultiSelect." .. (config.flag or "AreaMultiSelect")
-    if ConfigObj then
-        local savedOption = ConfigObj.Get(configKey, defaultOptions)
-        if type(savedOption) == "table" then
-            defaultOptions = savedOption
-            -- Đồng bộ ngay trạng thái ban đầu bằng callback
-            task.spawn(function()
-                local selectedIds = {}
-                for _, areaName in ipairs(defaultOptions) do
-                    for _, area in ipairs(AreaData) do
-                        if area.name == areaName then
-                            table.insert(selectedIds, area.id)
-                            break
-                        end
-                    end
-                end
-                if config.callback then config.callback(selectedIds, defaultOptions) end
-            end)
-        end
-    end
-    
-    local dropdownOptions = {
+    local dropdown = tab:CreateDropdown({
         Name = config.name or "Chọn Khu Vực",
         Options = options,
         CurrentOption = defaultOptions,
         MultipleOptions = true,
         Flag = config.flag or "AreaMultiSelect",
         Callback = function(selectedOptions)
-            if ConfigObj then
-                pcall(function() ConfigObj.Set(configKey, selectedOptions) end)
-            end
             if config.callback then
+                -- Chuyển đổi tên → ID
                 local selectedIds = {}
                 for _, areaName in ipairs(selectedOptions) do
                     for _, area in ipairs(AreaData) do
@@ -953,9 +907,8 @@ function Utils.CreateAreaMultiSelect(tab, config, ConfigObj)
                 config.callback(selectedIds, selectedOptions)
             end
         end
-    }
-
-    local dropdown = tab:CreateDropdown(dropdownOptions)
+    })
+    
     return dropdown
 end
 
@@ -1501,7 +1454,6 @@ function Utils.InitMonsterMemory()
 end
 
 
-
 -- Fallback dịch thuật nếu không load được core/localization.txt
 function Utils.t(key)
     return key
@@ -1509,84 +1461,6 @@ end
 
 function Utils.getLang()
     return "en"
-end
-
--- ==========================================
--- HỆ THỐNG LƯU TRẠNG THÁI UI (CROSS-EXECUTOR)
--- Dùng ConfigManager thay vì Rayfield ConfigurationSaving để tương thích
--- với mọi executor (Delta mobile, Medium PC, Synapse, Fluxus...)
--- ==========================================
-
---- Tạo Toggle có lưu/phục hồi trạng thái qua ConfigManager.
---- Hoạt động tương tự CreateToggle nhưng tự persist state độc lập với Rayfield.
---- @param tab         Rayfield Tab object
---- @param options     Table options giống CreateToggle (Name, Info, Flag, ...)
---- @param configKey   Đường dẫn lưu trong ConfigManager (VD: "Farm.AutoAttack")
---- @param Config      ConfigManager object từ ctx.Config
---- @param default     Giá trị mặc định nếu chưa có dữ liệu lưu (mặc định: false)
-function Utils.PersistToggle(tab, options, configKey, Config, default)
-    if default == nil then default = false end
-    -- Đọc giá trị đã lưu từ ConfigManager (nếu có), fallback về default
-    local savedValue = (Config and Config.Get) and Config.Get(configKey, default) or default
-    -- Đảm bảo kiểu dữ liệu boolean (tránh nil hay string gây lỗi UI)
-    if type(savedValue) ~= "boolean" then savedValue = default end
-    options.CurrentValue = savedValue
-
-    -- Bọc Callback gốc để tự động lưu mỗi khi user thay đổi
-    local originalCallback = options.Callback
-    options.Callback = function(value)
-        pcall(function()
-            if Config and Config.Set then Config.Set(configKey, value) end
-        end)
-        if originalCallback then originalCallback(value) end
-    end
-
-    return tab:CreateToggle(options)
-end
-
---- Tạo Slider có lưu/phục hồi giá trị qua ConfigManager.
---- @param tab         Rayfield Tab object
---- @param options     Table options giống CreateSlider (Name, Range, Increment, ...)
---- @param configKey   Đường dẫn lưu trong ConfigManager (VD: "Farm.AttackRadius")
---- @param Config      ConfigManager object từ ctx.Config
---- @param default     Giá trị mặc định số nếu chưa có dữ liệu lưu
-function Utils.PersistSlider(tab, options, configKey, Config, default)
-    if default == nil then default = options.CurrentValue or 0 end
-    local savedValue = (Config and Config.Get) and Config.Get(configKey, default) or default
-    if type(savedValue) ~= "number" then savedValue = default end
-    options.CurrentValue = savedValue
-
-    local originalCallback = options.Callback
-    options.Callback = function(value)
-        pcall(function()
-            if Config and Config.Set then Config.Set(configKey, value) end
-        end)
-        if originalCallback then originalCallback(value) end
-    end
-
-    return tab:CreateSlider(options)
-end
-
---- Tạo Dropdown có lưu/phục hồi giá trị qua ConfigManager.
---- @param tab         Rayfield Tab object
---- @param options     Table options giống CreateDropdown
---- @param configKey   Đường dẫn lưu trong ConfigManager
---- @param Config      ConfigManager object từ ctx.Config
---- @param default     Giá trị mặc định (string hoặc table)
-function Utils.PersistDropdown(tab, options, configKey, Config, default)
-    if default == nil then default = options.CurrentOption end
-    local savedValue = (Config and Config.Get) and Config.Get(configKey, default) or default
-    if savedValue ~= nil then options.CurrentOption = savedValue end
-
-    local originalCallback = options.Callback
-    options.Callback = function(value)
-        pcall(function()
-            if Config and Config.Set then Config.Set(configKey, value) end
-        end)
-        if originalCallback then originalCallback(value) end
-    end
-
-    return tab:CreateDropdown(options)
 end
 
 -- Trả về bảng Utils
