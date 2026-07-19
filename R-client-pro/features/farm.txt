@@ -790,16 +790,21 @@ return function(ctx)
             return best
         end
 
+        local wasRunning = false
         while task.wait(0.1) do
             if not AppState.autoAttack or not AppState.tpFarmEnabled or IsSystemBusy() or AppState.isHealing then 
-                pcall(function()
-                    local platform = Workspace:FindFirstChild("FarmSafePlatform")
-                    if platform then platform:Destroy() end
-                end)
-                pcall(Utils.SmartDismount)
-                currentTargetId = nil
+                if wasRunning then
+                    wasRunning = false
+                    pcall(function()
+                        local platform = Workspace:FindFirstChild("FarmSafePlatform")
+                        if platform then platform:Destroy() end
+                    end)
+                    pcall(Utils.SmartDismount)
+                    currentTargetId = nil
+                end
                 continue 
             end
+            wasRunning = true
 
             local charData = GetValidCharacterData()
             if not charData then task.wait(1); continue end
