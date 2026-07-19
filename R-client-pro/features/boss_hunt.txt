@@ -51,6 +51,11 @@ return function(ctx)
     -- TRẠNG THÁI (STATE)
     -- ==========================================
     local spSettings = { enabled = false, selectedWorlds = {} }
+    pcall(function()
+        if Config then
+            spSettings.selectedWorlds = Config.Get("MultiSelect.SpBossWorldSelect", {})
+        end
+    end)
     local spHuntState = {
         isActive      = false,
         targetBoss    = "",
@@ -61,6 +66,11 @@ return function(ctx)
     }
 
     local wbSettings = { enabled = false, autoHop = false, selectedWorlds = {} }
+    pcall(function()
+        if Config then
+            wbSettings.selectedWorlds = Config.Get("MultiSelect.WbBossWorldSelect", {})
+        end
+    end)
     local wbHuntState = {
         isActive          = false,
         currentWorldIndex = 1,
@@ -232,7 +242,6 @@ return function(ctx)
         wbHuntState.engaged           = false
         wbHuntState.scanAttempts      = 0
         wbHuntState.isActive          = true
-        wbInitialized                 = true
     end
 
     Utils.PersistToggle(BossTab, {
