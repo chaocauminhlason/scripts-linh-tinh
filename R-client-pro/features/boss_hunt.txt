@@ -475,6 +475,47 @@ return function(ctx)
     task.spawn(function()
         local localPlayer = game:GetService("Players").LocalPlayer
         repeat task.wait(0.1) until ctx.Ready
+        
+        -- Khôi phục trạng thái danh sách đảo từ file config gốc của Rayfield
+        pcall(function()
+            local folderName = "AutoFarmConfig"
+            local fileName = folderName .. "/WbBossWorldSelect.txt"
+            if isfile and isfile(fileName) then
+                local data = readfile(fileName)
+                local success, decoded = pcall(function() return game:GetService("HttpService"):JSONDecode(data) end)
+                if success and type(decoded) == "table" and type(decoded.CurrentOption) == "table" then
+                    local selectedIds = {}
+                    for _, areaName in ipairs(decoded.CurrentOption) do
+                        for _, area in ipairs(Utils.GetAllAreas()) do
+                            if area.name == areaName then
+                                table.insert(selectedIds, area.id)
+                                break
+                            end
+                        end
+                    end
+                    wbSettings.selectedWorlds = selectedIds
+                end
+            end
+            
+            local spFileName = folderName .. "/SpBossWorldSelect.txt"
+            if isfile and isfile(spFileName) then
+                local data = readfile(spFileName)
+                local success, decoded = pcall(function() return game:GetService("HttpService"):JSONDecode(data) end)
+                if success and type(decoded) == "table" and type(decoded.CurrentOption) == "table" then
+                    local selectedIds = {}
+                    for _, areaName in ipairs(decoded.CurrentOption) do
+                        for _, area in ipairs(Utils.GetAllAreas()) do
+                            if area.name == areaName then
+                                table.insert(selectedIds, area.id)
+                                break
+                            end
+                        end
+                    end
+                    spSettings.selectedWorlds = selectedIds
+                end
+            end
+        end)
+
         while task.wait(0.2) do
             -- [Tự động kích hoạt khi cấu hình dropdown nạp trễ hơn toggle ở startup]
             if wbSettings.enabled and not wbHuntState.isActive and #wbSettings.selectedWorlds > 0 and not wbInitialized then

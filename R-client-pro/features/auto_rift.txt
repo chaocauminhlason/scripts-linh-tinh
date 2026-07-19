@@ -595,6 +595,30 @@ return function(ctx)
     task.spawn(function()
         DataPullFunc = ReplicatedStorage:WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc")
         repeat task.wait(0.1) until ctx.Ready
+        
+        -- Khôi phục trạng thái danh sách đảo từ file config gốc của Rayfield
+        pcall(function()
+            local folderName = "AutoFarmConfig"
+            local fileName = folderName .. "/RiftWorldSelect.txt"
+            if isfile and isfile(fileName) then
+                local data = readfile(fileName)
+                local success, decoded = pcall(function() return game:GetService("HttpService"):JSONDecode(data) end)
+                if success and type(decoded) == "table" and type(decoded.CurrentOption) == "table" then
+                    local selectedIds = {}
+                    for _, areaName in ipairs(decoded.CurrentOption) do
+                        for _, area in ipairs(Utils.GetAllAreas()) do
+                            if area.name == areaName then
+                                table.insert(selectedIds, area.id)
+                                break
+                            end
+                        end
+                    end
+                    riftSettings.selectedWorlds = selectedIds
+                    TargetLabel:Set(string.format(Utils.t("rift_selected_worlds_label"), #selectedIds))
+                end
+            end
+        end)
+
         while task.wait(0.5) do
             if Controller and Controller.IsPaused then continue end
             if not riftSettings.enabled or #riftSettings.selectedWorlds == 0 then continue end
