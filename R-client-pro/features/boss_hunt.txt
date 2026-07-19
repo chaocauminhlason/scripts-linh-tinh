@@ -70,6 +70,7 @@ return function(ctx)
         scanAttempts      = 0,
     }
     local wbLastWaveAlertTime = 0
+    local wbInitialized = false
 
     local monsterNameCache     = {}
     local internalMonsterTable = nil 
@@ -231,6 +232,7 @@ return function(ctx)
         wbHuntState.engaged           = false
         wbHuntState.scanAttempts      = 0
         wbHuntState.isActive          = true
+        wbInitialized                 = true
     end
 
     BossTab:CreateToggle({
@@ -251,6 +253,7 @@ return function(ctx)
                     wbHuntState.isActive = false
                 end
             else
+                wbInitialized = false
                 wbHuntState.isActive = false
                 wbStatusLabel:Set(Utils.t("tracker_stopped"))
                 TryReleaseLock()
@@ -474,7 +477,8 @@ return function(ctx)
 
         while task.wait(0.2) do
             -- [Tự động kích hoạt khi cấu hình dropdown nạp trễ hơn toggle ở startup]
-            if wbSettings.enabled and not wbHuntState.isActive and #wbSettings.selectedWorlds > 0 then
+            if wbSettings.enabled and not wbHuntState.isActive and #wbSettings.selectedWorlds > 0 and not wbInitialized then
+                wbInitialized = true
                 print("🌍 [WORLD BOSS] Phát hiện cấu hình đảo đã được nạp. Tự động kích hoạt luồng săn Boss.")
                 StartWbHuntFromFirstWorld()
             end

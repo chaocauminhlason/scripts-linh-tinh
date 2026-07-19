@@ -6,6 +6,7 @@ return function(ctx)
     local Window = ctx.Window
     local Utils = ctx.Utils
     local Controller = ctx.Controller
+    local controller = Controller
     local Players = game:GetService("Players")
     local Workspace = game:GetService("Workspace")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
