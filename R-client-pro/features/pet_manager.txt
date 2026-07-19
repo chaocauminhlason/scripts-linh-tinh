@@ -4,6 +4,7 @@
 return function(ctx)
     local Window = ctx.Window
     local Utils = ctx.Utils
+    local Config = ctx.Config
     
     -- Tạo một Tab mới trên giao diện Rayfield
     local PetTab = Window:CreateTab(Utils.t("pet_manager"), "dog")

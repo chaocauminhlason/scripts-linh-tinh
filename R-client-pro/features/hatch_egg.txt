@@ -4,6 +4,7 @@
 return function(ctx)
     local Window = ctx.Window
     local Utils = ctx.Utils
+    local Config = ctx.Config
     local EggTab = Window:CreateTab(Utils.t("autohatch"), "egg")
 
     local hatchSettings = {

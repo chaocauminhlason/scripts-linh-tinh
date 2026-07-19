@@ -7,6 +7,7 @@ return function(ctx)
     local Utils = ctx.Utils
     local Controller = ctx.Controller
     local WebhookModule = ctx.Webhook
+    local Config = ctx.Config
     local Players = game:GetService("Players")
     local Workspace = game:GetService("Workspace")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
