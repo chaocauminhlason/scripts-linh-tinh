@@ -730,15 +730,29 @@ return function(Window, Utils)
             return false
         end
 
+        -- [Blacklist] Lưu vết các quái vật đã chết/vừa đánh xong để tránh desync chọn lại
+        local deadMonstersBlacklist = {}
+        local function CleanDeadMonstersBlacklist()
+            local now = tick()
+            for id, expireTime in pairs(deadMonstersBlacklist) do
+                if now > expireTime then
+                    deadMonstersBlacklist[id] = nil
+                end
+            end
+        end
+
         -- [Helper] Tìm con quái gần nhất (ưu tiên con khác target hiện tại nếu có)
         local function FindNextTarget(centerPos, charPos, excludeId)
+            CleanDeadMonstersBlacklist()
             local allMonsters = Utils.SmartScanMonsters(centerPos, AppState.attackRadius, "Attack", IsMonsterInFilter)
             if not allMonsters or #allMonsters == 0 then return nil end
 
             local best, bestDist = nil, math.huge
             for _, m in ipairs(allMonsters) do
-                -- Bỏ qua con đang đánh (nếu nó vẫn còn trong list vì delay server)
+                -- Bỏ qua con đang đánh hoặc đã nằm trong blacklist quái chết
                 if excludeId and m.Id == excludeId then continue end
+                if m.Id and deadMonstersBlacklist[m.Id] then continue end
+                
                 local d = (charPos - m.Position).Magnitude
                 if d < bestDist then
                     bestDist, best = d, m
@@ -747,7 +761,12 @@ return function(Window, Utils)
 
             -- Fallback: nếu chỉ có đúng 1 con (con đang đánh), vẫn trả về nó
             if not best and #allMonsters > 0 then
-                best = allMonsters[1]
+                -- Nếu con duy nhất này bị blacklist thì thôi không trả về
+                local fallback = allMonsters[1]
+                if fallback.Id and deadMonstersBlacklist[fallback.Id] then
+                    return nil
+                end
+                best = fallback
             end
             return best
         end
@@ -763,6 +782,7 @@ return function(Window, Utils)
                     end)
                     pcall(Utils.SmartDismount)
                     currentTargetId = nil
+                    deadMonstersBlacklist = {} -- Xóa sạch blacklist khi tắt farm
                 end
                 continue 
             end
@@ -858,6 +878,11 @@ return function(Window, Utils)
                     end)
 
                     task.wait(AppState.attackDelay)
+                end
+
+                -- Ghi nhận quái đã chết vào blacklist để tránh desync teleport lại xác của nó
+                if target.Id then
+                    deadMonstersBlacklist[target.Id] = tick() + 3.5
                 end
 
                 -- === CHUYỂN MỤC TIÊU TỨC THÌ ===
