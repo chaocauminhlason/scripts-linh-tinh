@@ -1,0 +1,713 @@
+-- ================================================
+--   | KEY SYSTEM
+-- ================================================
+
+local SCRIPT_NAME   = "Catch a monster Scripts"
+local DISCORD_LINK  = "https://discord.gg/PqBwSpQhz"
+local TELEGRAM_LINK = ""
+local GETKEY_LINK   = "https://loot-link.com/s?n1B65oYM"
+
+-- ── PlatoBoost Config ───────────────────────────
+local service    = 27272
+local secret     = "48b6842e-5f8b-474d-a5ac-dcd90c8d6d54"
+local useNonce   = true
+local key_file   = "key_cache.txt"
+
+-- ── Services ────────────────────────────────────
+local Players      = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService   = game:GetService("RunService")
+local Debris       = game:GetService("Debris")
+local Lighting     = game:GetService("Lighting")
+local HttpService  = game:GetService("HttpService")
+local StarterGui   = game:GetService("StarterGui")
+
+repeat task.wait(1) until game:IsLoaded() or Players.LocalPlayer
+
+local player = Players.LocalPlayer
+local pGui   = player:WaitForChild("PlayerGui")
+
+if pGui:FindFirstChild("LaithKeyUI") then pGui.LaithKeyUI:Destroy() end
+
+-- ── PlatoBoost Internals ────────────────────────
+local requestSending = false
+local fSetClipboard  = setclipboard or toclipboard
+local fRequest       = request or http_request or (http and http.request) or (syn and syn.request) or (fluxus and fluxus.request)
+local fStringChar    = string.char
+local fToString      = tostring
+local fStringSub     = string.sub
+local fOsTime        = os.time
+local fMathRandom    = math.random
+local fMathFloor     = math.floor
+local rawHwid = gethwid
+local fGetHwid = function()
+    if type(rawHwid) == "function" then
+        local success, val = pcall(rawHwid)
+        if success and val then return tostring(val) end
+    elseif type(rawHwid) == "string" then
+        return rawHwid
+    end
+    return tostring(Players.LocalPlayer.UserId)
+end
+
+local cachedLink, cachedTime = "", 0
+
+local function lEncode(data)  return HttpService:JSONEncode(data)  end
+local function lDecode(data)  return HttpService:JSONDecode(data)  end
+
+local function lDigest(input)
+    local inputStr = tostring(input)
+    local hash = {}
+    for i = 1, #inputStr do
+        table.insert(hash, string.byte(inputStr, i))
+    end
+    local hashHex = ""
+    for _, byte in ipairs(hash) do
+        hashHex = hashHex .. string.format("%02x", byte)
+    end
+    return hashHex
+end
+
+-- Pick fastest host
+local host = "https://api.platoboost.com"
+local useProxy = false
+
+if fRequest then
+    local success, hostResponse = pcall(function()
+        return fRequest({ Url = host .. "/public/connectivity", Method = "GET" })
+    end)
+    -- Nếu không kết nối được domain chính .com
+    if not success or not hostResponse or (hostResponse.StatusCode ~= 200 and hostResponse.StatusCode ~= 429) then
+        host = "https://api.platoboost.net"
+        local successNet, hostResponseNet = pcall(function()
+            return fRequest({ Url = host .. "/public/connectivity", Method = "GET" })
+        end)
+        -- Nếu domain phụ .net cũng tịt -> Kích hoạt Proxy trung gian để bypass DNS chặn
+        if not successNet or not hostResponseNet or (hostResponseNet.StatusCode ~= 200 and hostResponseNet.StatusCode ~= 429) then
+            warn("[KeySystem] Platoboost domain blocked. Activating public CORS proxy bypass...")
+            useProxy = true
+            host = "https://corsproxy.io/?https://api.platoboost.com"
+        end
+    end
+else
+    -- Nếu không có fRequest thì cũng dự phòng sẵn Proxy
+    useProxy = true
+    host = "https://corsproxy.io/?https://api.platoboost.com"
+end
+
+local function cacheLink()
+    if not fRequest then
+        return false, "Executor not supported (HTTP request API missing)."
+    end
+    if cachedTime + (10*60) < fOsTime() then
+        local success, response = pcall(function()
+            return fRequest({
+                Url    = host .. "/public/start",
+                Method = "POST",
+                Body   = lEncode({
+                    service    = service,
+                    identifier = lDigest(fGetHwid())
+                }),
+                Headers = { ["Content-Type"] = "application/json" }
+            })
+        end)
+        if not success then
+            return false, "pcall error: " .. tostring(response)
+        end
+        if not response then
+            return false, "Response from request is nil."
+        end
+        if response.StatusCode == 200 then
+            local decoded = lDecode(response.Body)
+            if decoded.success == true then
+                cachedLink = decoded.data.url
+                cachedTime = fOsTime()
+                return true, cachedLink
+            else
+                return false, decoded.message
+            end
+        elseif response.StatusCode == 429 then
+            return false, "Rate limited. Wait 20 seconds."
+        end
+        return false, "Failed to get link."
+    else
+        return true, cachedLink
+    end
+end
+
+cacheLink()
+
+local generateNonce = function()
+    local str = ""
+    for _ = 1, 16 do
+        str = str .. fStringChar(fMathFloor(fMathRandom() * (122 - 97 + 1)) + 97)
+    end
+    return str
+end
+
+-- Validate nonce generator
+for _ = 1, 5 do
+    local oNonce = generateNonce()
+    task.wait(0.2)
+    if generateNonce() == oNonce then
+        error("platoboost nonce error.")
+    end
+end
+
+local function redeemKey(key)
+    if not fRequest then
+        return false, "Executor not supported (HTTP request API missing)."
+    end
+    local nonce    = generateNonce()
+    local endpoint = host .. "/public/redeem/" .. fToString(service)
+    local body     = { identifier = lDigest(fGetHwid()), key = key }
+    if useNonce then body.nonce = nonce end
+
+    local success, response = pcall(function()
+        return fRequest({
+            Url     = endpoint,
+            Method  = "POST",
+            Body    = lEncode(body),
+            Headers = { ["Content-Type"] = "application/json" }
+        })
+    end)
+
+    if not success then
+        return false, "pcall error: " .. tostring(response)
+    end
+    if not response then
+        return false, "Response from request is nil."
+    end
+
+    if response.StatusCode == 200 then
+        local decoded = lDecode(response.Body)
+        if decoded.success == true then
+            if decoded.data.valid == true then
+                if useNonce then
+                    if decoded.data.hash == lDigest("true" .. "-" .. nonce .. "-" .. secret) then
+                        return true
+                    else
+                        return false, "failed to verify integrity."
+                    end
+                else
+                    return true
+                end
+            else
+                return false, "key is invalid."
+            end
+        else
+            if fStringSub(decoded.message, 1, 27) == "unique constraint violation" then
+                return false, "you already have an active key."
+            else
+                return false, decoded.message
+            end
+        end
+    elseif response.StatusCode == 429 then
+        return false, "Rate limited. Wait 20 seconds."
+    else
+        return false, "Server error. Try again later."
+    end
+end
+
+local function verifyKey(key)
+    if not fRequest then
+        return false, "Executor not supported (HTTP request API missing)."
+    end
+    if requestSending then
+        return false, "A request is already sending."
+    end
+    requestSending = true
+
+    local nonce    = generateNonce()
+    local endpoint = host .. "/public/whitelist/" .. fToString(service)
+        .. "?identifier=" .. lDigest(fGetHwid()) .. "&key=" .. key
+    if useNonce then
+        endpoint = endpoint .. "&nonce=" .. nonce
+    end
+
+    local success, response = pcall(function()
+        return fRequest({ Url = endpoint, Method = "GET" })
+    end)
+    requestSending = false
+
+    if not success then
+        return false, "pcall error: " .. tostring(response)
+    end
+    if not response then
+        return false, "Response from request is nil."
+    end
+
+    if response.StatusCode == 200 then
+        local decoded = lDecode(response.Body)
+        if decoded.success == true then
+            if decoded.data.valid == true then
+                return true
+            else
+                    return redeemKey(key)
+            end
+        else
+            return false, decoded.message
+        end
+    elseif response.StatusCode == 429 then
+        return false, "Rate limited. Wait 20 seconds."
+    else
+        return false, "Server error. Try again later."
+    end
+end
+
+-- ── Blur ────────────────────────────────────────
+local blur = Instance.new("BlurEffect")
+blur.Size = 0; blur.Parent = Lighting
+
+local Si    = Enum.EasingStyle.Sine
+local Qt    = Enum.EasingStyle.Quint
+local Out   = Enum.EasingDirection.Out
+local InOut = Enum.EasingDirection.InOut
+
+local function tw(o, t, p, s, d)
+    TweenService:Create(o, TweenInfo.new(t, s or Qt, d or Out), p):Play()
+end
+local function newF(parent, props)
+    local f = Instance.new("Frame"); f.BorderSizePixel = 0
+    for k,v in pairs(props) do f[k]=v end; f.Parent=parent; return f
+end
+local function newL(parent, props)
+    local l = Instance.new("TextLabel")
+    l.BackgroundTransparency=1; l.BorderSizePixel=0
+    for k,v in pairs(props) do l[k]=v end; l.Parent=parent; return l
+end
+local function newC(p, r)
+    local c=Instance.new("UICorner"); c.CornerRadius=UDim.new(0,r); c.Parent=p
+end
+local function newS(p, col, th, tr)
+    local s=Instance.new("UIStroke"); s.Color=col
+    s.Thickness=th or 1; s.Transparency=tr or 0; s.Parent=p; return s
+end
+
+-- ── ScreenGui ───────────────────────────────────
+local sg = Instance.new("ScreenGui")
+sg.Name="LaithKeyUI"; sg.ResetOnSpawn=false
+sg.IgnoreGuiInset=true; sg.ZIndexBehavior=Enum.ZIndexBehavior.Sibling
+sg.DisplayOrder=999
+sg.Parent=pGui
+
+-- ── Background ──────────────────────────────────
+local bg = newF(sg, {
+    Size=UDim2.new(1,0,1,0),
+    BackgroundColor3=Color3.fromRGB(7,9,13), ZIndex=100
+})
+
+local orb = newF(bg, {
+    Size=UDim2.new(0,520,0,520),
+    Position=UDim2.new(0.5,-260,0.42,-260),
+    BackgroundColor3=Color3.fromRGB(11,18,46),
+    BackgroundTransparency=0.2, ZIndex=101,
+    ClipsDescendants=false,
+})
+newC(orb, 9999)
+
+-- ── TITLE ───────────────────────────────────────
+local titleLbl = newL(bg, {
+    Size=UDim2.new(1,0,0,75),
+    Position=UDim2.new(0,0,0.28,0),
+    Text=SCRIPT_NAME,
+    TextColor3=Color3.fromRGB(255,255,255),
+    TextSize=58, Font=Enum.Font.GothamBlack,
+    TextXAlignment=Enum.TextXAlignment.Center,
+    TextTransparency=1, ZIndex=110,
+})
+
+-- ── DIVIDER ─────────────────────────────────────
+local divLine = newF(bg, {
+    Size=UDim2.new(0,0,0,1),
+    Position=UDim2.new(0.5,0,0.465,0),
+    AnchorPoint=Vector2.new(0.5,0),
+    BackgroundColor3=Color3.fromRGB(24,82,210),
+    ZIndex=110,
+})
+
+-- ── SUBTITLE ────────────────────────────────────
+local subFrame = newF(bg, {
+    Size=UDim2.new(0,440,0,32),
+    Position=UDim2.new(0.5,-220,0.478,0),
+    BackgroundTransparency=1, ZIndex=110,
+})
+local lineL = newF(subFrame, {
+    Size=UDim2.new(0,0,0,2), Position=UDim2.new(0,0,0.5,-1),
+    BackgroundColor3=Color3.fromRGB(24,82,210), ZIndex=111,
+})
+local lineR = newF(subFrame, {
+    Size=UDim2.new(0,0,0,2), Position=UDim2.new(1,0,0.5,-1),
+    AnchorPoint=Vector2.new(1,0),
+    BackgroundColor3=Color3.fromRGB(24,82,210), ZIndex=111,
+})
+local subLabel = newL(subFrame, {
+    Size=UDim2.new(1,0,1,0), Text="Key System",
+    TextColor3=Color3.fromRGB(36,112,255), TextSize=19,
+    Font=Enum.Font.GothamBold,
+    TextXAlignment=Enum.TextXAlignment.Center,
+    TextTransparency=1, ZIndex=112,
+})
+
+-- ── PANEL ───────────────────────────────────────
+local panel = newF(bg, {
+    Size=UDim2.new(0,360,0,228),
+    Position=UDim2.new(0.5,-180,0.535,0),
+    BackgroundColor3=Color3.fromRGB(0,0,0),
+    BackgroundTransparency=1, ZIndex=110,
+    ClipsDescendants=false,
+})
+newC(panel, 12)
+local panelStroke = newS(panel, Color3.fromRGB(22,60,170), 1.5, 1)
+
+-- Input
+local inputF = newF(panel, {
+    Size=UDim2.new(1,-28,0,44), Position=UDim2.new(0,14,0,14),
+    BackgroundColor3=Color3.fromRGB(10,12,22),
+    BackgroundTransparency=1, ZIndex=111,
+})
+newC(inputF, 7)
+local inputStroke = newS(inputF, Color3.fromRGB(26,60,160), 1, 1)
+
+local keyTB = Instance.new("TextBox")
+keyTB.Size=UDim2.new(1,-20,1,0); keyTB.Position=UDim2.new(0,12,0,0)
+keyTB.BackgroundTransparency=1; keyTB.PlaceholderText="Enter your key..."
+keyTB.Text=""; keyTB.TextColor3=Color3.fromRGB(175,195,255)
+keyTB.PlaceholderColor3=Color3.fromRGB(45,60,110)
+keyTB.TextSize=14; keyTB.Font=Enum.Font.GothamMedium
+keyTB.TextXAlignment=Enum.TextXAlignment.Left
+keyTB.ClearTextOnFocus=false; keyTB.ZIndex=112
+keyTB.TextTransparency=1; keyTB.Parent=inputF
+
+keyTB.Focused:Connect(function()
+    tw(inputStroke,.2,{Color=Color3.fromRGB(40,120,255),Thickness=1.5,Transparency=0})
+end)
+keyTB.FocusLost:Connect(function()
+    tw(inputStroke,.2,{Color=Color3.fromRGB(26,60,160),Thickness=1,Transparency=0})
+end)
+
+-- ── VERIFY BUTTON ───────────────────────────────
+local vBtn = Instance.new("TextButton")
+vBtn.Size=UDim2.new(1,-28,0,42); vBtn.Position=UDim2.new(0,14,0,68)
+vBtn.BackgroundColor3=Color3.fromRGB(20,82,210); vBtn.Text=""
+vBtn.BorderSizePixel=0; vBtn.AutoButtonColor=false
+vBtn.ClipsDescendants=true; vBtn.ZIndex=111
+vBtn.BackgroundTransparency=1; vBtn.Parent=panel
+newC(vBtn, 7)
+
+local gloss = newF(vBtn, {
+    Size=UDim2.new(1,0,0.5,0), Position=UDim2.new(0,0,0,0),
+    BackgroundColor3=Color3.fromRGB(255,255,255),
+    BackgroundTransparency=1, ZIndex=113,
+})
+newC(gloss, 7)
+
+local shim = newF(vBtn, {
+    Size=UDim2.new(0,48,1.4,0), Position=UDim2.new(-0.3,0,-0.2,0),
+    BackgroundColor3=Color3.fromRGB(255,255,255),
+    BackgroundTransparency=1, ZIndex=112,
+})
+shim.Rotation=18; newC(shim, 4)
+
+local vBtnLbl = newL(vBtn, {
+    Size=UDim2.new(1,0,1,0), Text="VERIFY KEY",
+    TextColor3=Color3.fromRGB(255,255,255),
+    TextTransparency=1, TextSize=12,
+    Font=Enum.Font.GothamBold, ZIndex=114,
+})
+
+vBtn.MouseEnter:Connect(function() tw(vBtn,.15,{BackgroundColor3=Color3.fromRGB(38,108,245)}) end)
+vBtn.MouseLeave:Connect(function() tw(vBtn,.15,{BackgroundColor3=Color3.fromRGB(20,82,210)}) end)
+vBtn.MouseButton1Down:Connect(function()
+    tw(vBtn,.07,{Size=UDim2.new(1,-32,0,40),Position=UDim2.new(0,16,0,69)})
+end)
+vBtn.MouseButton1Up:Connect(function()
+    tw(vBtn,.1,{Size=UDim2.new(1,-28,0,42),Position=UDim2.new(0,14,0,68)})
+end)
+
+-- ── STATUS ──────────────────────────────────────
+local statusLbl = newL(panel, {
+    Size=UDim2.new(1,-28,0,17), Position=UDim2.new(0,14,0,160),
+    Text="", TextColor3=Color3.fromRGB(255,55,55),
+    TextTransparency=1, TextSize=12, Font=Enum.Font.Gotham,
+    TextXAlignment=Enum.TextXAlignment.Center, ZIndex=111,
+})
+
+-- ── GET KEY BUTTON ───────────────────────────────
+local gBtn = Instance.new("TextButton")
+gBtn.Size=UDim2.new(1,-28,0,30); gBtn.Position=UDim2.new(0,14,0,120)
+gBtn.BackgroundColor3=Color3.fromRGB(10,12,22); gBtn.Text=""
+gBtn.BorderSizePixel=0; gBtn.AutoButtonColor=false
+gBtn.ZIndex=111; gBtn.BackgroundTransparency=1; gBtn.Parent=panel
+newC(gBtn, 7)
+newS(gBtn, Color3.fromRGB(22,60,170), 1)
+
+local gBtnLbl = newL(gBtn, {
+    Size=UDim2.new(1,0,1,0), Text="GET KEY",
+    TextColor3=Color3.fromRGB(100,150,255),
+    TextTransparency=1, TextSize=11,
+    Font=Enum.Font.GothamBold, ZIndex=112,
+})
+
+gBtn.MouseEnter:Connect(function()
+    tw(gBtn,.15,{BackgroundColor3=Color3.fromRGB(16,20,45)})
+    tw(gBtnLbl,.15,{TextColor3=Color3.fromRGB(140,185,255)})
+end)
+gBtn.MouseLeave:Connect(function()
+    tw(gBtn,.15,{BackgroundColor3=Color3.fromRGB(10,12,22)})
+    tw(gBtnLbl,.15,{TextColor3=Color3.fromRGB(100,150,255)})
+end)
+gBtn.MouseButton1Down:Connect(function()
+    tw(gBtn,.07,{Size=UDim2.new(1,-32,0,28),Position=UDim2.new(0,16,0,121)})
+end)
+gBtn.MouseButton1Up:Connect(function()
+    tw(gBtn,.1,{Size=UDim2.new(1,-28,0,30),Position=UDim2.new(0,14,0,120)})
+end)
+gBtn.MouseButton1Click:Connect(function()
+    -- Uses PlatoBoost cacheLink to get the personalized checkpoint URL
+    local success, link = cacheLink()
+    if success then
+        fSetClipboard(link)
+        statusLbl.TextTransparency=0
+        statusLbl.TextColor3=Color3.fromRGB(40,210,100)
+        statusLbl.Text="Link Copied!"
+        print("[KeySystem] Copied Platoboost link: " .. tostring(link))
+    else
+        -- Fallback to static Lootlabs link
+        fSetClipboard(GETKEY_LINK)
+        statusLbl.TextTransparency=0
+        statusLbl.TextColor3=Color3.fromRGB(255,180,50)
+        statusLbl.Text="Lootlabs Copied! (Check F9 Console)"
+        warn("[KeySystem] Platoboost cacheLink failed: " .. tostring(link))
+    end
+    task.delay(5, function() statusLbl.Text="" end)
+end)
+
+-- ── DISCORD ─────────────────────────────────────
+local discBtn = Instance.new("TextButton")
+discBtn.Size=UDim2.new(1,-28,0,17); discBtn.Position=UDim2.new(0,14,0,184)
+discBtn.BackgroundTransparency=1; discBtn.Text="-- Discord --"
+discBtn.TextColor3=Color3.fromRGB(28,70,170); discBtn.TextSize=12
+discBtn.TextTransparency=1; discBtn.Font=Enum.Font.Gotham
+discBtn.TextXAlignment=Enum.TextXAlignment.Center
+discBtn.AutoButtonColor=false; discBtn.ZIndex=111; discBtn.Parent=panel
+discBtn.MouseEnter:Connect(function() tw(discBtn,.15,{TextColor3=Color3.fromRGB(55,130,255)}) end)
+discBtn.MouseLeave:Connect(function() tw(discBtn,.15,{TextColor3=Color3.fromRGB(28,70,170)}) end)
+discBtn.MouseButton1Click:Connect(function()
+    fSetClipboard(DISCORD_LINK)
+    statusLbl.TextTransparency=0
+    statusLbl.TextColor3=Color3.fromRGB(40,210,100)
+    statusLbl.Text="Discord link copied!"
+    task.delay(2.5,function() statusLbl.Text="" end)
+end)
+
+-- ── TELEGRAM ────────────────────────────────────
+local teleBtn = Instance.new("TextButton")
+teleBtn.Size=UDim2.new(1,-28,0,17); teleBtn.Position=UDim2.new(0,14,0,205)
+teleBtn.BackgroundTransparency=1; teleBtn.Text="-- Telegram --"
+teleBtn.TextColor3=Color3.fromRGB(28,120,170); teleBtn.TextSize=12
+teleBtn.TextTransparency=1; teleBtn.Font=Enum.Font.Gotham
+teleBtn.TextXAlignment=Enum.TextXAlignment.Center
+teleBtn.AutoButtonColor=false; teleBtn.ZIndex=111; teleBtn.Parent=panel
+teleBtn.MouseEnter:Connect(function() tw(teleBtn,.15,{TextColor3=Color3.fromRGB(55,190,255)}) end)
+teleBtn.MouseLeave:Connect(function() tw(teleBtn,.15,{TextColor3=Color3.fromRGB(28,120,170)}) end)
+teleBtn.MouseButton1Click:Connect(function()
+    fSetClipboard(TELEGRAM_LINK)
+    statusLbl.TextTransparency=0
+    statusLbl.TextColor3=Color3.fromRGB(40,210,100)
+    statusLbl.Text="Telegram link copied!"
+    task.delay(2.5,function() statusLbl.Text="" end)
+end)
+
+-- ── INTRO ───────────────────────────────────────
+local function runIntro()
+    tw(blur, 0.7, { Size = 12 })
+    titleLbl.Position = UDim2.new(0,0,0.32,0)
+    task.delay(0.2, function()
+        tw(titleLbl, 0.7, { TextTransparency=0, Position=UDim2.new(0,0,0.28,0) })
+    end)
+    task.delay(0.65, function()
+        tw(divLine, 0.5, { Size=UDim2.new(0.58,0,0,1) })
+    end)
+    task.delay(0.85, function()
+        tw(subLabel, 0.38, { TextTransparency=0 })
+        tw(lineL, 0.5, { Size=UDim2.new(0,110,0,2) })
+        tw(lineR, 0.5, { Size=UDim2.new(0,110,0,2) })
+    end)
+    task.delay(1.1, function()
+        tw(panel,       0.45, { BackgroundTransparency=0 })
+        tw(panelStroke, 0.45, { Transparency=0 })
+        tw(inputF,      0.45, { BackgroundTransparency=0 })
+        tw(inputStroke, 0.45, { Transparency=0 })
+        tw(keyTB,       0.45, { TextTransparency=0 })
+        tw(vBtn,        0.45, { BackgroundTransparency=0 })
+        tw(gloss,       0.45, { BackgroundTransparency=0.84 })
+        tw(shim,        0.45, { BackgroundTransparency=0.6 })
+        tw(vBtnLbl,     0.45, { TextTransparency=0 })
+        tw(gBtn,        0.45, { BackgroundTransparency=0 })
+        tw(gBtnLbl,     0.45, { TextTransparency=0 })
+        tw(discBtn,     0.45, { TextTransparency=0 })
+        tw(teleBtn,     0.45, { TextTransparency=0 })
+        tw(statusLbl,   0.45, { TextTransparency=1 }) -- stays hidden until needed
+    end)
+end
+
+-- ── AMBIENT ─────────────────────────────────────
+task.spawn(function()
+    while orb.Parent do
+        tw(orb,5,{BackgroundTransparency=0.38},Si,InOut); task.wait(5)
+        tw(orb,5,{BackgroundTransparency=0.18},Si,InOut); task.wait(5)
+    end
+end)
+task.spawn(function()
+    task.wait(1.8)
+    while titleLbl.Parent do
+        tw(titleLbl,5,{Position=UDim2.new(0,0,0.275,0)},Si,InOut); task.wait(5)
+        tw(titleLbl,5,{Position=UDim2.new(0,0,0.285,0)},Si,InOut); task.wait(5)
+    end
+end)
+
+-- ── HELPERS ─────────────────────────────────────
+local function screenFlash(col, alpha)
+    local f=newF(bg,{Size=UDim2.new(1,0,1,0),BackgroundColor3=col,
+        BackgroundTransparency=1-alpha,ZIndex=150})
+    tw(f,.6,{BackgroundTransparency=1}); Debris:AddItem(f,.7)
+end
+
+local function doShake()
+    for _,x in ipairs({9,-9,7,-7,5,-4,2,0}) do
+        bg.Position=UDim2.new(0,x,0,0); task.wait(.042)
+    end
+    bg.Position=UDim2.new(0,0,0,0)
+end
+
+local function doFail(msg)
+    doShake(); screenFlash(Color3.fromRGB(180,15,15),.14)
+    statusLbl.TextTransparency=0
+    statusLbl.TextColor3=Color3.fromRGB(255,55,55)
+    statusLbl.Text = msg or "Invalid key"
+    tw(inputStroke,.15,{Color=Color3.fromRGB(190,30,30),Transparency=0})
+    task.delay(2,function()
+        tw(inputStroke,.3,{Color=Color3.fromRGB(26,60,160),Transparency=0})
+    end)
+end
+
+local function doSuccess()
+    tw(vBtn,.3,{BackgroundColor3=Color3.fromRGB(18,148,60)})
+    vBtnLbl.Text="ACCESS GRANTED"
+    statusLbl.TextTransparency=0
+    statusLbl.TextColor3=Color3.fromRGB(36,210,90)
+    statusLbl.Text="Key verified — loading..."
+    screenFlash(Color3.fromRGB(255,255,255),.28)
+    task.wait(1.7)
+    local outro=newF(bg,{Size=UDim2.new(1,0,1,0),
+        BackgroundColor3=Color3.fromRGB(0,0,0),BackgroundTransparency=1,ZIndex=300})
+    tw(outro,.9,{BackgroundTransparency=0}); tw(blur,.9,{Size=0})
+    task.wait(1); sg:Destroy(); blur:Destroy()
+    
+    -- ĐÃ THAY ĐỔI DÒNG NÀY THÀNH LINK SCRIPT CỦA BẠN (CÓ CHỐNG CACHE GITHUB 5 PHÚT)
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/test/pre-config-manager/R-client-pro/auto_execute.txt?t=" .. tostring(os.time())))()
+end
+
+-- ── VERIFY ──────────────────────────────────────
+local busy = false
+vBtn.MouseButton1Click:Connect(function()
+    if busy then return end; busy = true
+
+    local entered = keyTB.Text:match("^%s*(.-)%s*$")
+    statusLbl.TextTransparency = 0
+    statusLbl.Text = ""; statusLbl.TextColor3 = Color3.fromRGB(255,55,55)
+
+    if entered == "" then
+        statusLbl.Text = "Please enter your key"
+        busy = false; return
+    end
+
+    -- Animated dots while checking
+    local dots, conn = 0, nil
+    conn = RunService.Heartbeat:Connect(function()
+        dots=(dots+1)%4; vBtnLbl.Text="CHECKING"..string.rep(".",dots)
+    end)
+
+    -- Run PlatoBoost verification in a separate thread so UI stays responsive
+    local valid, errMsg
+    task.spawn(function()
+        valid, errMsg = verifyKey(entered)
+    end)
+    -- Wait for verifyKey to finish (max 10 seconds)
+    local waited = 0
+    while valid == nil and waited < 10 do
+        task.wait(0.1)
+        waited = waited + 0.1
+    end
+
+    conn:Disconnect()
+    vBtnLbl.Text = "VERIFY KEY"
+
+    if valid == true then
+        if writefile then
+            pcall(function() writefile(key_file, entered) end)
+        end
+        doSuccess()
+    elseif waited >= 10 then
+        statusLbl.TextColor3 = Color3.fromRGB(255,180,0)
+        statusLbl.Text = "Server timeout. Try again"
+        warn("[KeySystem] Verification timed out (10s)")
+        doShake(); busy = false
+    else
+        doFail(errMsg or "Invalid or expired key")
+        warn("[KeySystem] Verification failed: " .. tostring(errMsg))
+        busy = false
+    end
+end)
+
+-- ── AUTO LOGIN CHECK ────────────────────────────
+task.spawn(function()
+    if isfile and readfile and isfile(key_file) then
+        local cachedKey = readfile(key_file)
+        if cachedKey and cachedKey:match("%S") then
+            cachedKey = cachedKey:match("^%s*(.-)%s*$")
+            keyTB.Text = cachedKey
+            
+            -- Wait a brief moment for intro animation to complete/progress
+            task.wait(1.5)
+            if not busy then
+                busy = true
+                statusLbl.TextTransparency = 0
+                statusLbl.Text = "Checking cached key..."
+                statusLbl.TextColor3 = Color3.fromRGB(100,150,255)
+                
+                local dots, conn = 0, nil
+                conn = RunService.Heartbeat:Connect(function()
+                    dots=(dots+1)%4; vBtnLbl.Text="CHECKING"..string.rep(".",dots)
+                end)
+                
+                local valid, errMsg
+                task.spawn(function()
+                    valid, errMsg = verifyKey(cachedKey)
+                end)
+                
+                local waited = 0
+                while valid == nil and waited < 10 do
+                    task.wait(0.1)
+                    waited = waited + 0.1
+                end
+                
+                conn:Disconnect()
+                vBtnLbl.Text = "VERIFY KEY"
+                
+                if valid == true then
+                    doSuccess()
+                else
+                    busy = false
+                    statusLbl.Text = "Cached key expired or invalid"
+                    statusLbl.TextColor3 = Color3.fromRGB(255,180,0)
+                    keyTB.Text = ""
+                    if delfile then pcall(function() delfile(key_file) end) end
+                end
+            end
+        end
+    end
+end)
+
+runIntro()
