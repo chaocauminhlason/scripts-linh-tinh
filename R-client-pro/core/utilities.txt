@@ -650,6 +650,9 @@ end
                 for _, monster in pairs(monstersFolder:GetChildren()) do
                     if monster:IsA("Model") or monster:IsA("BasePart") then
                         
+                        -- Bỏ qua các model rác hoặc quái đã chết bị xóa hết attribute (không có TmplId)
+                        if not monster:GetAttribute("TmplId") then continue end
+
                         -- Lọc theo tên UI
                         if finalFilter and not finalFilter(monster) then continue end
 
@@ -662,21 +665,19 @@ end
                         end
                         if not (root and root:IsA("BasePart")) then continue end
 
-                        -- Đã bắt xong thì bỏ qua
-                        if monster:GetAttribute("CatchEndTick") ~= nil or root:GetAttribute("CatchEndTick") ~= nil then 
-                            continue 
-                        end
-
                         local isValid = false
 
                         -- PHÂN NHÁNH LOGIC THEO MODE
                         if scanMode == "Catch" then
-                            local catchTaken = monster:GetAttribute("CatchTakenPlayerId")
+                            local catchTaken = monster:GetAttribute("CatchTakenPlayerId") or root:GetAttribute("CatchTakenPlayerId")
                             if catchTaken and catchTaken == playerId then isValid = true end
                         else
-                            -- Chế độ Attack: Check máu và UI hiển thị thông qua hàm dùng chung
-                            if Utils.IsMonsterAlive(monster) then 
-                                isValid = true 
+                            -- Chế độ Attack: Bỏ qua nếu quái đang chờ bắt (đã bị hạ gục bởi người khác)
+                            local catchTaken = monster:GetAttribute("CatchTakenPlayerId") or root:GetAttribute("CatchTakenPlayerId")
+                            if not catchTaken then
+                                if Utils.IsMonsterAlive(monster) then 
+                                    isValid = true 
+                                end
                             end
                         end
 
@@ -706,6 +707,17 @@ end
 -- ==========================================
 function Utils.IsMonsterAlive(monsterObj)
     if not monsterObj then return false end
+    
+    -- Nếu quái đã bị dọn dẹp các attribute (ví dụ mất TmplId) thì coi như đã chết
+    if not monsterObj:GetAttribute("TmplId") then
+        return false
+    end
+    
+    -- Nếu quái đang trong trạng thái chờ bắt (đã bị hạ gục), coi như đã chết đối với Attack
+    local root = monsterObj:FindFirstChild("HumanoidRootPart") or monsterObj:FindFirstChild("Root") or monsterObj
+    if monsterObj:GetAttribute("CatchTakenPlayerId") or (root and root:GetAttribute("CatchTakenPlayerId")) then
+        return false
+    end
     
     -- 0. Kiểm tra nhanh qua BillboardGui hiển thị thanh máu/tên quái.
     -- Khi quái chết, BillboardGui (hoặc các TextLabel hiển thị tên/máu bên trong nó) sẽ bị ẩn đi (Visible = false) ngay lập tức.
