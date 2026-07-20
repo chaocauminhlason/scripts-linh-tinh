@@ -817,16 +817,16 @@ return function(Window, Utils)
                 local dist = (charData.RootPart.Position - telePos).Magnitude
                 local didTele = TeleportToMonster(charData, telePos, target.Position)
                 if didTele then
-                    -- Timing động dựa trên khoảng cách (chờ model & map render)
-                    local delayTime = 0.25
+                    -- Timing động dựa trên khoảng cách (chờ model & map render) - đã tăng 0.1s cho mỗi mốc
+                    local delayTime = 0.35
                     if dist > 500 then
-                        delayTime = 0.85
+                        delayTime = 0.95
                     elseif dist > 300 then
-                        delayTime = 0.65
+                        delayTime = 0.75
                     elseif dist > 150 then
-                        delayTime = 0.45
+                        delayTime = 0.55
                     elseif dist > 50 then
-                        delayTime = 0.3
+                        delayTime = 0.4
                     end
                     task.wait(delayTime)
                 end
@@ -883,7 +883,9 @@ return function(Window, Utils)
                         end
                     end)
 
-                    task.wait(AppState.attackDelay)
+                    -- Đảm bảo khoảng cách nghỉ tối thiểu giữa các đòn đánh là 0.3s (giảm tần suất spam remote)
+                    local finalAttackDelay = math.max(AppState.attackDelay or 0.2, 0.3)
+                    task.wait(finalAttackDelay)
                 end
 
                 -- Ghi nhận quái đã chết vào blacklist để tránh desync teleport lại xác của nó
