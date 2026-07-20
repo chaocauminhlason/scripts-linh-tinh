@@ -820,11 +820,11 @@ return function(Window, Utils)
                     -- Timing động dựa trên khoảng cách (chờ model & map render) - đã tăng 0.1s cho mỗi mốc
                     local delayTime = 0.35
                     if dist > 500 then
-                        delayTime = 0.95
+                        delayTime = 1.05
                     elseif dist > 300 then
-                        delayTime = 0.75
+                        delayTime = 0.85
                     elseif dist > 150 then
-                        delayTime = 0.55
+                        delayTime = 0.65
                     elseif dist > 50 then
                         delayTime = 0.4
                     end
