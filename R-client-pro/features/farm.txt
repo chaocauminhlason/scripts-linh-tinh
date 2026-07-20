@@ -1014,7 +1014,7 @@ return function(Window, Utils)
                 -- Check Double-lock ngay trước khi bay
                 if not IsSystemBusy() then
                     SendNotify("📍 Smart Return", "Hệ thống rảnh rỗi. Đang quay về tâm bãi Farm...")
-                    if type(returnPos) == "userdata" and returnPos:IsA("CFrame") then
+                    if typeof(returnPos) == "CFrame" then
                         charData.RootPart.CFrame = returnPos
                     else
                         Utils.SafeTeleport(returnPos, 5)
