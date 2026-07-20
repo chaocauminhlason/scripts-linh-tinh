@@ -719,30 +719,6 @@ function Utils.IsMonsterAlive(monsterObj)
         return false
     end
     
-    -- 0. Kiểm tra nhanh qua BillboardGui hiển thị thanh máu/tên quái.
-    -- Khi quái chết, BillboardGui (hoặc các TextLabel hiển thị tên/máu bên trong nó) sẽ bị ẩn đi (Visible = false) ngay lập tức.
-    local hasVisibleBillboard = false
-    local hasBillboardCheck = false
-    for _, child in ipairs(monsterObj:GetDescendants()) do
-        if child:IsA("BillboardGui") then
-            hasBillboardCheck = true
-            if child.Enabled then
-                -- Kiểm tra xem có TextLabel nào hiển thị tên và Visible = true không
-                for _, subChild in ipairs(child:GetDescendants()) do
-                    if subChild:IsA("TextLabel") and subChild.Visible and subChild.Text ~= "" then
-                        hasVisibleBillboard = true
-                        break
-                    end
-                end
-            end
-            if hasVisibleBillboard then break end
-        end
-    end
-    -- Nếu tìm thấy BillboardGui nhưng nó bị ẩn, chắc chắn quái đã chết/ẩn đi
-    if hasBillboardCheck and not hasVisibleBillboard then
-        return false
-    end
-
     -- 1. Ưu tiên kiểm tra Humanoid (Quái thường)
     local hum = monsterObj:FindFirstChildOfClass("Humanoid")
     if hum then

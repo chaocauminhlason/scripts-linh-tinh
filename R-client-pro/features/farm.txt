@@ -853,9 +853,9 @@ return function(Window, Utils)
                     end)
                     
                     if not stillAlive then
-                        -- Con quái vừa chết → Ghi nhận ngay vào blacklist để chặn nháy target
+                        -- Con quái vừa chết → Ghi nhận ngay vào blacklist 1.5s để chặn nháy target
                         if target.Id then
-                            deadMonstersBlacklist[target.Id] = tick() + 3.5
+                            deadMonstersBlacklist[target.Id] = tick() + 1.5
                         end
                         -- Thoát inner loop để tìm con mới NGAY LẬP TỨC
                         break
