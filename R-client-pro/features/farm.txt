@@ -817,15 +817,18 @@ return function(Window, Utils)
                 local dist = (charData.RootPart.Position - telePos).Magnitude
                 local didTele = TeleportToMonster(charData, telePos, target.Position)
                 if didTele then
-                    local delayTime = 0.2
-                    if dist > 300 then
-                        delayTime = 0.7
+                    -- Timing động dựa trên khoảng cách (chờ model & map render)
+                    local delayTime = 0.25
+                    if dist > 500 then
+                        delayTime = 0.85
+                    elseif dist > 300 then
+                        delayTime = 0.65
                     elseif dist > 150 then
-                        delayTime = 0.5
+                        delayTime = 0.45
                     elseif dist > 50 then
-                        delayTime = 0.35
+                        delayTime = 0.3
                     end
-                    task.wait(delayTime) -- Chờ động tùy khoảng cách để model kịp load và pet gom lại
+                    task.wait(delayTime)
                 end
 
                 -- Tấn công liên tục cho đến khi con quái chết hoặc điều kiện thay đổi
