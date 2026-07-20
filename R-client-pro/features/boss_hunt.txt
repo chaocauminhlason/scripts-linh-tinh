@@ -581,7 +581,8 @@ return function(Window, Utils)
                             if wbSettings.autoHop and isWaveActive then
                                 wbStatusLabel:Set(Utils.t("wb_loop_done_hop") .. math.floor(timeLeft) .. "s")
                                 print("🔄 [WORLD BOSS] Còn thời gian, gửi lệnh Hop Server...")
-                                if Utils.RequestHop then Utils.RequestHop("Boss_AutoHop", 2) end
+                                TryReleaseLock()
+                                pcall(function() Utils.HopServer("Săn World Boss") end)
                             else
                                 wbStatusLabel:Set(Utils.t("wb_loop_done_wait"))
                                 print("💤 [WORLD BOSS] Sóng kết thúc, dừng Hop.")
