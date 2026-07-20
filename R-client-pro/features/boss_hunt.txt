@@ -370,12 +370,21 @@ return function(Window, Utils)
                 if wbSettings.enabled and not wbHuntState.isActive then
                     local wbWorldId = IdentifyWbWorldByBossName(currentText)
                     if wbWorldId then
-                        if os.time() - wbLastWaveAlertTime >= WB_WAVE_COOLDOWN_SECS then
-                            wbLastWaveAlertTime = os.time()
-                            SaveWbWaveEndTime()
-                            
-                            if #wbSettings.selectedWorlds > 0 then
-                                print("⚔️ [SÓNG WORLD BOSS] Kích hoạt càn quét (Tín hiệu: " .. currentText .. ")")
+                        -- Kiểm tra xem Đảo phát ra tín hiệu có nằm trong danh sách Đảo người chơi đã chọn không
+                        local isWorldSelected = false
+                        for _, aId in ipairs(wbSettings.selectedWorlds) do
+                            if tonumber(aId) == tonumber(wbWorldId) then
+                                isWorldSelected = true
+                                break
+                            end
+                        end
+
+                        if isWorldSelected then
+                            if os.time() - wbLastWaveAlertTime >= WB_WAVE_COOLDOWN_SECS then
+                                wbLastWaveAlertTime = os.time()
+                                SaveWbWaveEndTime()
+                                
+                                print("⚔️ [SÓNG WORLD BOSS] Kích hoạt càn quét từ Đảo chọn " .. tostring(wbWorldId) .. " (Tín hiệu: " .. currentText .. ")")
                                 StartWbHuntFromFirstWorld()
                                 wbStatusLabel:Set(Utils.t("wb_wave_start"))
                             end
@@ -474,11 +483,13 @@ return function(Window, Utils)
 
         while task.wait(0.2) do
             -- [Tự động kích hoạt khi cấu hình dropdown nạp trễ hơn toggle ở startup]
-            -- Chỉ kích hoạt nếu chưa hoàn thành vòng nào (wbCycleCompleted = false)
-            -- để tránh restart ngay lập tức sau khi hết vòng
+            -- Chỉ kích hoạt nếu sóng Boss đang diễn ra (ReadWbWaveTimer) và chưa hoàn thành vòng (wbCycleCompleted = false)
             if wbSettings.enabled and not wbHuntState.isActive and not wbCycleCompleted and #wbSettings.selectedWorlds > 0 then
-                print("🌍 [WORLD BOSS] Phát hiện cấu hình đảo đã được nạp. Tự động kích hoạt luồng săn Boss.")
-                StartWbHuntFromFirstWorld()
+                local isWaveActive, _ = ReadWbWaveTimer()
+                if isWaveActive then
+                    print("🌍 [WORLD BOSS] Phát hiện sóng Boss đang diễn ra. Tự động kích hoạt luồng săn Boss.")
+                    StartWbHuntFromFirstWorld()
+                end
             end
 
             if not wbSettings.enabled or not wbHuntState.isActive then 
@@ -539,6 +550,7 @@ return function(Window, Utils)
                     wbStatusLabel:Set(Utils.t("wb_yield_sp"))
                     continue
                 end
+                task.wait(0.8)
                 Utils.AttackMonster(boss.Id)
                 task.wait(WB_ATTACK_INTERVAL)
                 wbHuntState.scanAttempts = 0
