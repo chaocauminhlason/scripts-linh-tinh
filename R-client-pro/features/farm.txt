@@ -702,7 +702,7 @@ return function(Window, Utils)
             local currentPos = charData.RootPart.Position
             local horizontalDist = (Vector3.new(currentPos.X, 0, currentPos.Z) - Vector3.new(targetPos.X, 0, targetPos.Z)).Magnitude
             local verticalDist = math.abs(currentPos.Y - targetPos.Y)
-            
+
             -- Chỉ teleport nếu khoảng cách ngang > 20 studs hoặc lệch độ cao quá 15 studs
             if horizontalDist > 20 or verticalDist > 15 then
                 local isRiding = LocalPlayer:GetAttribute("RidePetId") ~= nil
@@ -730,9 +730,18 @@ return function(Window, Utils)
             return false
         end
 
-        -- [Helper] Tìm con quái gần nhất (ưu tiên con khác target hiện tại nếu có)
+        -- [Helper] Tìm con quái gần nhất (có cache danh sách quái để tránh scan liên tục)
+        local cachedMonsters = nil
+        local cacheTime = 0
+        local CACHE_TTL = 0.5 -- Làm mới danh sách tối đa mỗi 0.5s
+
         local function FindNextTarget(centerPos, charPos, excludeId)
-            local allMonsters = Utils.SmartScanMonsters(centerPos, AppState.attackRadius, "Attack", IsMonsterInFilter)
+            -- Chỉ gọi SmartScanMonsters khi cache hết hạn
+            if not cachedMonsters or (tick() - cacheTime) > CACHE_TTL then
+                cachedMonsters = Utils.SmartScanMonsters(centerPos, AppState.attackRadius, "Attack", IsMonsterInFilter)
+                cacheTime = tick()
+            end
+            local allMonsters = cachedMonsters
             if not allMonsters or #allMonsters == 0 then return nil end
 
             local best, bestDist = nil, math.huge
@@ -757,6 +766,7 @@ return function(Window, Utils)
             if not AppState.autoAttack or not AppState.tpFarmEnabled or IsSystemBusy() or AppState.isHealing then 
                 if wasRunning then
                     wasRunning = false
+                    cachedMonsters = nil -- Xóa cache khi dừng để lần tiếp theo scan mới
                     pcall(function()
                         local platform = Workspace:FindFirstChild("FarmSafePlatform")
                         if platform then platform:Destroy() end
