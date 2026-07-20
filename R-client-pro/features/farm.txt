@@ -764,14 +764,15 @@ return function(Window, Utils)
                 end
             end
 
-            -- Fallback: nếu chỉ có đúng 1 con (con đang đánh), vẫn trả về nó
+            -- Loại bỏ hoàn toàn Fallback trả về quái bị exclude/blacklist
             if not best and #allMonsters > 0 then
-                -- Nếu con duy nhất này bị blacklist thì thôi không trả về
-                local fallback = allMonsters[1]
-                if fallback.Id and deadMonstersBlacklist[fallback.Id] then
-                    return nil
+                for _, m in ipairs(allMonsters) do
+                    if m.Id and (m.Id == excludeId or deadMonstersBlacklist[m.Id]) then
+                        continue
+                    end
+                    best = m
+                    break
                 end
-                best = fallback
             end
             return best
         end
@@ -852,7 +853,11 @@ return function(Window, Utils)
                     end)
                     
                     if not stillAlive then
-                        -- Con quái vừa chết → Thoát inner loop để tìm con mới NGAY LẬP TỨC
+                        -- Con quái vừa chết → Ghi nhận ngay vào blacklist để chặn nháy target
+                        if target.Id then
+                            deadMonstersBlacklist[target.Id] = tick() + 3.5
+                        end
+                        -- Thoát inner loop để tìm con mới NGAY LẬP TỨC
                         break
                     end
 
