@@ -489,14 +489,19 @@ end
 -- ==========================================
 -- DỊCH TÊN QUÁI TỪ DỮ LIỆU GAME (CfgMonster)
 -- ==========================================
+local monsterNameCache = {}
 function Utils.ResolveMonsterName(monsterObj)
     if not monsterObj then return "Unknown" end
     local originalName = monsterObj.Name
     
-    -- Cách 1: Giải mã qua CfgMonster từ game env
     local uidStr = string.match(originalName, "Monster_(%d+)")
-    if uidStr then
-        local uidNum = tonumber(uidStr)
+    local uidNum = uidStr and tonumber(uidStr) or nil
+    if uidNum and monsterNameCache[uidNum] then
+        return monsterNameCache[uidNum]
+    end
+    
+    -- Cách 1: Giải mã qua CfgMonster từ game env
+    if uidNum then
         local env = getrenv and getrenv()._G and getrenv()._G.PathTool
         if env and env.MgrMonsterClient and env.CfgMonster then
             local success, info = pcall(function() return env.MgrMonsterClient:GetMonsterInfo(uidNum) end)
@@ -505,7 +510,10 @@ function Utils.ResolveMonsterName(monsterObj)
                 local cfgData = env.CfgMonster.Tmpls[tostring(tmplId)] or env.CfgMonster.Tmpls[tonumber(tmplId)]
                 if cfgData then
                     local name = cfgData.Name or cfgData.name or cfgData.Title
-                    if name then return name end
+                    if name then 
+                        monsterNameCache[uidNum] = name
+                        return name 
+                    end
                 end
             end
         end
@@ -521,6 +529,7 @@ function Utils.ResolveMonsterName(monsterObj)
                 cleaned = string.gsub(cleaned, "%s*%[%s*Lv%.%s*%d+%s*%]", "")
                 cleaned = string.gsub(cleaned, "^%s*(.-)%s*$", "%1") -- Trim space
                 if cleaned ~= "" and not tonumber(cleaned) then
+                    if uidNum then monsterNameCache[uidNum] = cleaned end
                     return cleaned
                 end
             end
@@ -533,15 +542,22 @@ function Utils.ResolveMonsterName(monsterObj)
         local cleaned = string.gsub(hum.DisplayName, "%s*Lv%.%s*%d+", "")
         cleaned = string.gsub(cleaned, "%s*%[%s*Lv%.%s*%d+%s*%]", "")
         cleaned = string.gsub(cleaned, "^%s*(.-)%s*$", "%1")
-        if cleaned ~= "" then return cleaned end
+        if cleaned ~= "" then
+            if uidNum then monsterNameCache[uidNum] = cleaned end
+            return cleaned
+        end
     end
 
     -- Cách 4: Cắt bỏ tiền tố "Monster_" nếu có
     if uidStr then
         local cleanName = string.gsub(originalName, "Monster_%d+", "")
-        if cleanName ~= "" then return cleanName end
+        if cleanName ~= "" then
+            if uidNum then monsterNameCache[uidNum] = cleanName end
+            return cleanName
+        end
     end
 
+    if uidNum then monsterNameCache[uidNum] = originalName end
     return originalName
 end
 
