@@ -610,12 +610,14 @@ return function(Window, Utils)
                         
                         charData = GetValidCharacterData()
                         if charData then
-                            Utils.SafeTeleport(AppState.savedFarmPosition, 5)
+                            -- Đưa trực tiếp về CFrame chuẩn đã lưu để tránh Raycast ép Y gây độn thổ
+                            charData.RootPart.CFrame = AppState.savedFarmPosition
                             SendNotify(Utils.t("tele_spot_title"), Utils.t("tele_spot_success_msg"))
                         end
                     else
                         SendNotify(Utils.t("tele_spot_title"), Utils.t("tele_spot_flying_msg"))
-                        Utils.SafeTeleport(AppState.savedFarmPosition, 5)
+                        -- Đưa trực tiếp về CFrame chuẩn đã lưu để tránh Raycast ép Y gây độn thổ
+                        charData.RootPart.CFrame = AppState.savedFarmPosition
                     end
                 end
             else
@@ -819,12 +821,15 @@ return function(Window, Utils)
                 if didTele then
                     -- Timing động dựa trên khoảng cách (chờ model & map render) - đã tăng 0.1s cho mỗi mốc
                     local delayTime = 0.35
-                    if dist > 500 then
-                        delayTime = 1.05
+
+                    if dist > 800 then
+                        delayTime = 1.25
+                    elseif dist > 500 then
+                        delayTime = 1.05    
                     elseif dist > 300 then
                         delayTime = 0.85
                     elseif dist > 150 then
-                        delayTime = 0.65
+                        delayTime = 0.75
                     elseif dist > 50 then
                         delayTime = 0.4
                     end
@@ -972,7 +977,11 @@ return function(Window, Utils)
                         end
                         
                         platform:Destroy()
-                        Utils.SafeTeleport(safeReturnPos, 5)
+                        if AppState.savedFarmPosition then
+                            charData.RootPart.CFrame = AppState.savedFarmPosition
+                        else
+                            Utils.SafeTeleport(safeReturnPos, 5)
+                        end
                         SendNotify("✅ Hoàn Tất", "Đã khôi phục sinh lực Pet và về bãi farm!")
                     end
                 end
@@ -1000,7 +1009,11 @@ return function(Window, Utils)
                 -- Check Double-lock ngay trước khi bay
                 if not IsSystemBusy() then
                     SendNotify("📍 Smart Return", "Hệ thống rảnh rỗi. Đang quay về tâm bãi Farm...")
-                    Utils.SafeTeleport(returnPos, 5)
+                    if type(returnPos) == "userdata" and returnPos:IsA("CFrame") then
+                        charData.RootPart.CFrame = returnPos
+                    else
+                        Utils.SafeTeleport(returnPos, 5)
+                    end
                     task.wait(2)
                 end
             end
