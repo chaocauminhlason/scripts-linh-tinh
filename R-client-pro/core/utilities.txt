@@ -434,44 +434,34 @@ end
 -- HỆ THỐNG CHIẾN ĐẤU & TƯƠNG TÁC REMOTE
 -- ==========================================
 
--- 1. Lên / Xuống thú cưỡi (Ưu tiên Native Manager MgrPetMountClient)
+-- 1. Lên / Xuống thú cưỡi (Kế hợp Remote Server + UI Click tức thì)
 function Utils.ToggleMount(state)
     local isRiding = LocalPlayer:GetAttribute("RidePetId") ~= nil
     if (state and isRiding) or (not state and not isRiding) then
         return
     end
 
-    -- Sử dụng trực tiếp Native Manager MgrPetMountClient từ Memory
+    -- 1. Gửi Remote kích hoạt từ Server
+    local remote = GetDataPullFunc()
+    if remote then
+        pcall(function() remote:InvokeServer("PetSwitchRideStatusChannel", state) end)
+    end
+
+    -- 2. Nhấp nút UI Ride trên QuickBar để tạo hiệu ứng nhấp màn hình chuẩn
     pcall(function()
-        local env = getrenv and getrenv()._G and getrenv()._G.PathTool
-        local mgrMount = env and env.MgrPetMountClient
-        if mgrMount then
-            if state and type(mgrMount.Mount) == "function" then
-                mgrMount:Mount()
-            elseif not state and type(mgrMount.Unmount) == "function" then
-                mgrMount:Unmount()
+        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+        local mainGui = playerGui and playerGui:FindFirstChild("MainGui")
+        local screenGui = mainGui and mainGui:FindFirstChild("ScreenGui")
+        local quickBar = screenGui and screenGui:FindFirstChild("MainQuickBarView")
+        local buttonList = quickBar and quickBar:FindFirstChild("ButtonList")
+        local rideButton = buttonList and buttonList:FindFirstChild("Ride")
+
+        if rideButton and rideButton.Visible then
+            if Utils and type(Utils.ClickButtonExact) == "function" then
+                Utils.ClickButtonExact(rideButton, "Ride")
             end
         end
     end)
-
-    -- [CÁCH DỰ PHÒNG 1: CLICK NÚT UI VẬT LÝ]
-    -- pcall(function()
-    --     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-    --     local mainGui = playerGui and playerGui:FindFirstChild("MainGui")
-    --     local screenGui = mainGui and mainGui:FindFirstChild("ScreenGui")
-    --     local quickBar = screenGui and screenGui:FindFirstChild("MainQuickBarView")
-    --     local buttonList = quickBar and quickBar:FindFirstChild("ButtonList")
-    --     local rideButton = buttonList and buttonList:FindFirstChild("Ride")
-    --     if rideButton and rideButton.Visible then
-    --         Utils.ClickButtonExact(rideButton, "Ride")
-    --     end
-    -- end)
-
-    -- [CÁCH DỰ PHÒNG 2: TRUYỀN REMOTE SERVER]
-    -- local remote = GetDataPullFunc()
-    -- if remote then
-    --     pcall(function() remote:InvokeServer("PetSwitchRideStatusChannel", state) end)
-    -- end
 end
 
 -- 2. Tự động nhảy xuống thú an toàn
