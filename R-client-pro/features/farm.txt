@@ -713,13 +713,15 @@ return function(Window, Utils)
             local horizontalDist = (Vector3.new(currentPos.X, 0, currentPos.Z) - Vector3.new(targetPos.X, 0, targetPos.Z)).Magnitude
             local verticalDist = math.abs(currentPos.Y - targetPos.Y)
 
-            -- Chỉ teleport nếu khoảng cách ngang > 20 studs hoặc lệch độ cao quá 15 studs
+            -- Đảm bảo luôn bật Cưỡi Thú nếu nhân vật chưa cưỡi
+            local isRiding = LocalPlayer:GetAttribute("RidePetId") ~= nil
+            if not isRiding then
+                Utils.ToggleMount(true)
+                task.wait(0.2)
+            end
+
+            -- Chỉ dịch chuyển vị trí nếu khoảng cách ngang > 20 studs hoặc lệch độ cao quá 15 studs
             if horizontalDist > 20 or verticalDist > 15 then
-                local isRiding = LocalPlayer:GetAttribute("RidePetId") ~= nil
-                if not isRiding then
-                    Utils.ToggleMount(true)
-                    task.wait(0.1)
-                end
                 pcall(function()
                     local platform = Workspace:FindFirstChild("FarmSafePlatform")
                     if not platform then
@@ -791,7 +793,7 @@ return function(Window, Utils)
                         local platform = Workspace:FindFirstChild("FarmSafePlatform")
                         if platform then platform:Destroy() end
                     end)
-                    pcall(Utils.SmartDismount)
+                    --Utils.SmartDismount
                     currentTargetId = nil
                     deadMonstersBlacklist = {} -- Xóa sạch blacklist khi tắt farm
                 end
