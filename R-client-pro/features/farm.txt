@@ -1019,10 +1019,20 @@ return function(Window, Utils)
                 -- Check Double-lock ngay trước khi bay
                 if not IsSystemBusy() then
                     SendNotify("📍 Smart Return", "Hệ thống rảnh rỗi. Đang quay về tâm bãi Farm...")
-                    if typeof(returnPos) == "CFrame" then
-                        charData.RootPart.CFrame = returnPos
-                    else
-                        Utils.SafeTeleport(returnPos, 5)
+                    
+                    local currentAreaId = Utils.GetCurrentAreaId()
+                    if AppState.savedFarmAreaId and currentAreaId ~= AppState.savedFarmAreaId and type(AppState.savedFarmAreaId) == "number" then
+                        pcall(function() Utils.TeleportToArea(AppState.savedFarmAreaId) end)
+                        task.wait(5)
+                    end
+
+                    charData = GetValidCharacterData()
+                    if charData then
+                        if typeof(returnPos) == "CFrame" then
+                            charData.RootPart.CFrame = returnPos
+                        else
+                            Utils.SafeTeleport(returnPos, 5)
+                        end
                     end
                     task.wait(2)
                 end
