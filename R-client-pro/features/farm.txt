@@ -845,25 +845,25 @@ return function(Window, Utils)
                 local dist = (charData.RootPart.Position - telePos).Magnitude
                 local didTele = TeleportToMonster(charData, telePos, target.Position)
                 if didTele then
-                    -- Timing động dựa trên khoảng cách (chờ model & map render) - đã tăng 0.1s cho mỗi mốc
-                    local delayTime = 0.5
+                    -- Timing động dựa trên khoảng cách (chờ model & UI & map render xong 100%)
+                    local delayTime = 0.6
 
                     if dist > 800 then
-                        delayTime = 1.2
+                        delayTime = 1.35
                     elseif dist > 500 then
-                        delayTime = 1.0   
---                    elseif dist > 300 then
---                        delayTime = 0.85
---                    elseif dist > 150 then
---                        delayTime = 0.75
+                        delayTime = 1.15
+                    elseif dist > 300 then
+                        delayTime = 0.95
+                    elseif dist > 150 then
+                        delayTime = 0.85
                     elseif dist > 50 then
-                        delayTime = 0.8
+                        delayTime = 0.7
                     end
                     task.wait(delayTime)
                 end
 
                 -- Đảm bảo nhảy xuống thú cưỡi trước khi bắt đầu tung đòn tấn công
-                pcall(function() Utils.SmartDismount() end)
+                --pcall(function() Utils.SmartDismount() end)
 
                 -- Tấn công liên tục cho đến khi con quái chết hoặc điều kiện thay đổi
                 local attackStartTick = tick()
