@@ -1,0 +1,96 @@
+-- ===================================================================
+-- 🎣 SCRIPT AUTO FISHING SOL'S RNG (STANDALONE DRAFT)
+-- Dự án: Draff / Auto Fishing Sol's RNG
+-- Tách biệt hoàn toàn với hệ thống R-client-pro
+-- ===================================================================
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+-- [1] NẠP CÁC MODULE PACKETS VÀ FISH UI GỐC CỦA GAME
+local Packets = ReplicatedStorage:WaitForChild("Packets", 10)
+local FishingPacket = Packets and require(Packets:WaitForChild("Fishing", 10))
+
+local ReplicatedFirst = game:GetService("ReplicatedFirst")
+local ClientHandlers = ReplicatedFirst:WaitForChild("ClientHandlers", 10)
+local FishingClient = ClientHandlers and ClientHandlers:WaitForChild("FishingClient", 10)
+local FishUI = FishingClient and require(FishingClient:WaitForChild("FishUI", 10))
+
+if not (FishingPacket and FishUI) then
+    warn("❌ [AutoFishing] Không tìm thấy module Fishing / FishUI của Sol's RNG!")
+    return
+end
+
+print("✅ [AutoFishing] Đã liên kết thành công với hệ thống Fishing của Sol's RNG!")
+
+-- [2] CẤU HÌNH AUTO FISHING
+local AutoFishingConfig = {
+    Enabled = true,          -- Bật / Tắt Auto Fishing
+    CastDelay = 1.0,         -- Thời gian chờ quăng cần tiếp theo (giây)
+    RodId = "Basic"          -- ID cần câu mặc định (Basic, Merchant,...)
+}
+
+local isFishingLoopActive = false
+local minigameConnection = nil
+
+-- [3] HÀM TỰ ĐỘNG GIẢI MINIGAME CÂU CÁ (SOLVE MINIGAME PERFECTLY)
+local function StartAutoMinigameSolver()
+    if minigameConnection then minigameConnection:Disconnect() end
+
+    minigameConnection = RunService.Heartbeat:Connect(function()
+        if not AutoFishingConfig.Enabled then return end
+
+        if FishUI.isMinigameMode and FishUI.isMinigameStarted then
+            -- Tự động giữ thanh catchProgress ở mức hoàn hảo (Full 100%)
+            -- Khớp vị trí vẹt catch thanh ngang và ép kết quả Catch thành công
+            FishUI.fishProgress = FishUI.successPosition or 0.5
+            FishUI.catchProgress = 100
+        end
+    end)
+end
+
+-- [4] LUỒNG TỰ ĐỘNG QUĂNG CẦN & BẮT ĐẦU CÂU CÁ (MAIN AUTO LOOP)
+local function StartAutoFishingLoop()
+    if isFishingLoopActive then return end
+    isFishingLoopActive = true
+
+    StartAutoMinigameSolver()
+
+    task.spawn(function()
+        while AutoFishingConfig.Enabled do
+            -- Nếu chưa ở trong trạng thái câu cá hoặc minigame
+            if not FishUI.isFishing and not FishUI.isMinigameMode then
+                print("🎣 [AutoFishing] Đang tự động thả câu (Rod: " .. tostring(AutoFishingConfig.RodId) .. ")...")
+                pcall(function()
+                    FishingPacket.start.send(AutoFishingConfig.RodId)
+                end)
+                task.wait(1.5)
+            end
+
+            -- Nếu đang trong Minigame -> Chờ Minigame kết thúc
+            if FishUI.isMinigameMode then
+                -- Chờ cho đến khi Minigame hoàn thành
+                repeat
+                    task.wait(0.2)
+                until not FishUI.isMinigameMode or not AutoFishingConfig.Enabled
+                
+                print("🐟 [AutoFishing] Đã câu thành công! Đang chờ câu lượt tiếp theo...")
+                task.wait(AutoFishingConfig.CastDelay)
+            end
+
+            task.wait(0.5)
+        end
+
+        if minigameConnection then
+            minigameConnection:Disconnect()
+            minigameConnection = nil
+        end
+        isFishingLoopActive = false
+        print("🛑 [AutoFishing] Đã dừng luồng tự động câu cá.")
+    end)
+end
+
+-- [5] KÍCH HOẠT HỆ THỐNG
+StartAutoFishingLoop()
