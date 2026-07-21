@@ -434,57 +434,44 @@ end
 -- HỆ THỐNG CHIẾN ĐẤU & TƯƠNG TÁC REMOTE
 -- ==========================================
 
--- 1. Lên / Xuống thú cưỡi (Đa tầng: UI Button Click + Native Manager + Remote Fallback)
+-- 1. Lên / Xuống thú cưỡi (Ưu tiên Native Manager MgrPetMountClient)
 function Utils.ToggleMount(state)
     local isRiding = LocalPlayer:GetAttribute("RidePetId") ~= nil
-    -- Nếu trạng thái mong muốn đã khớp với trạng thái hiện tại thì không cần làm gì
     if (state and isRiding) or (not state and not isRiding) then
         return
     end
 
-    local success = false
-
-    -- [Tầng 1]: Nhấp nút UI Cưỡi thú vật lý trên màn hình QuickBar (MainQuickBarView.ButtonList.Ride)
+    -- Sử dụng trực tiếp Native Manager MgrPetMountClient từ Memory
     pcall(function()
-        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-        local mainGui = playerGui and playerGui:FindFirstChild("MainGui")
-        local screenGui = mainGui and mainGui:FindFirstChild("ScreenGui")
-        local quickBar = screenGui and screenGui:FindFirstChild("MainQuickBarView")
-        local buttonList = quickBar and quickBar:FindFirstChild("ButtonList")
-        local rideButton = buttonList and buttonList:FindFirstChild("Ride")
-
-        if rideButton and rideButton.Visible then
-            if Utils and type(Utils.ClickButtonExact) == "function" then
-                Utils.ClickButtonExact(rideButton, "Nút Cưỡi Thú (Ride)")
-                success = true
+        local env = getrenv and getrenv()._G and getrenv()._G.PathTool
+        local mgrMount = env and env.MgrPetMountClient
+        if mgrMount then
+            if state and type(mgrMount.Mount) == "function" then
+                mgrMount:Mount()
+            elseif not state and type(mgrMount.Unmount) == "function" then
+                mgrMount:Unmount()
             end
         end
     end)
 
-    -- [Tầng 2]: Nếu click UI chưa đáp ứng, gọi Native Manager MgrPetMountClient trong Memory
-    if not success then
-        pcall(function()
-            local env = getrenv and getrenv()._G and getrenv()._G.PathTool
-            local mgrMount = env and env.MgrPetMountClient
-            if mgrMount then
-                if state and type(mgrMount.Mount) == "function" then
-                    mgrMount:Mount()
-                    success = true
-                elseif not state and type(mgrMount.Unmount) == "function" then
-                    mgrMount:Unmount()
-                    success = true
-                end
-            end
-        end)
-    end
+    -- [CÁCH DỰ PHÒNG 1: CLICK NÚT UI VẬT LÝ]
+    -- pcall(function()
+    --     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+    --     local mainGui = playerGui and playerGui:FindFirstChild("MainGui")
+    --     local screenGui = mainGui and mainGui:FindFirstChild("ScreenGui")
+    --     local quickBar = screenGui and screenGui:FindFirstChild("MainQuickBarView")
+    --     local buttonList = quickBar and quickBar:FindFirstChild("ButtonList")
+    --     local rideButton = buttonList and buttonList:FindFirstChild("Ride")
+    --     if rideButton and rideButton.Visible then
+    --         Utils.ClickButtonExact(rideButton, "Ride")
+    --     end
+    -- end)
 
-    -- [Tầng 3]: Fallback truyền Remote Server như phương án dự phòng cuối cùng
-    if not success then
-        local remote = GetDataPullFunc()
-        if remote then
-            pcall(function() remote:InvokeServer("PetSwitchRideStatusChannel", state) end)
-        end
-    end
+    -- [CÁCH DỰ PHÒNG 2: TRUYỀN REMOTE SERVER]
+    -- local remote = GetDataPullFunc()
+    -- if remote then
+    --     pcall(function() remote:InvokeServer("PetSwitchRideStatusChannel", state) end)
+    -- end
 end
 
 -- 2. Tự động nhảy xuống thú an toàn
