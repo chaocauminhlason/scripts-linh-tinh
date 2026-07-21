@@ -507,25 +507,21 @@ return function(Window, Utils)
             end
         end)
         
-        -- Nhấp nút quay về vật lý (nếu có trên màn hình)
+        -- Nhấp nút thoát phó bản vật lý BgLeave (nếu có trên màn hình)
         pcall(function()
             local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
             local mainGui = playerGui and playerGui:FindFirstChild("MainGui")
             local screenGui = mainGui and mainGui:FindFirstChild("ScreenGui")
-            local mainRightView = screenGui and screenGui:FindFirstChild("MainRightView")
-            local fmReturn = mainRightView and mainRightView:FindFirstChild("FmReturn")
-            local btReturn = fmReturn and fmReturn:FindFirstChild("BtReturn")
-            
-            if btReturn and btReturn.Visible then
-                local VirtualInputManager = game:GetService("VirtualInputManager")
-                local absPos = btReturn.AbsolutePosition
-                local absSize = btReturn.AbsoluteSize
-                local centerX = absPos.X + (absSize.X / 2)
-                local centerY = absPos.Y + (absSize.Y / 2)
-                VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, true, game, 1)
-                task.wait(0.1)
-                VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 1)
-                print("[AutoRift] Đã click nút BtReturn vật lý để thoát Rift!")
+            if screenGui then
+                local arenaRightView = screenGui:FindFirstChild("ArenaMainRightView") or screenGui:FindFirstChild("AbyssMainRightView")
+                local buttonList = arenaRightView and arenaRightView:FindFirstChild("ButtonList")
+                local bgLeave = buttonList and buttonList:FindFirstChild("BgLeave")
+                
+                if bgLeave and bgLeave.Visible then
+                    if Utils and type(Utils.ClickButtonExact) == "function" then
+                        Utils.ClickButtonExact(bgLeave, "Thoát Rift (BgLeave)")
+                    end
+                end
             end
         end)
         
