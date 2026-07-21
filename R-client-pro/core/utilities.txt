@@ -116,19 +116,9 @@ function Utils.TeleportToArea(areaId)
     end
 end
 
--- ==========================================
--- 2. DỊCH CHUYỂN ĐẾN STARTER ISLAND (ID: 1)
--- ==========================================
-function Utils.TeleportToStarterIsland()
-    return Utils.TeleportToArea(1)
-end
 
--- ==========================================
--- 3. DỊCH CHUYỂN ĐẾN VOLCANO (ID: 2)
--- ==========================================
-function Utils.TeleportToVolcano()
-    return Utils.TeleportToArea(2)
-end
+
+
 
 -- ==========================================
 -- 4. DỊCH CHUYỂN ĐẾN KHU VỰC THEO TÊN
@@ -444,11 +434,56 @@ end
 -- HỆ THỐNG CHIẾN ĐẤU & TƯƠNG TÁC REMOTE
 -- ==========================================
 
--- 1. Lên / Xuống thú cưỡi
+-- 1. Lên / Xuống thú cưỡi (Đa tầng: UI Button Click + Native Manager + Remote Fallback)
 function Utils.ToggleMount(state)
-    local remote = GetDataPullFunc()
-    if remote then
-        pcall(function() remote:InvokeServer("PetSwitchRideStatusChannel", state) end)
+    local isRiding = LocalPlayer:GetAttribute("RidePetId") ~= nil
+    -- Nếu trạng thái mong muốn đã khớp với trạng thái hiện tại thì không cần làm gì
+    if (state and isRiding) or (not state and not isRiding) then
+        return
+    end
+
+    local success = false
+
+    -- [Tầng 1]: Nhấp nút UI Cưỡi thú vật lý trên màn hình QuickBar (MainQuickBarView.ButtonList.Ride)
+    pcall(function()
+        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+        local mainGui = playerGui and playerGui:FindFirstChild("MainGui")
+        local screenGui = mainGui and mainGui:FindFirstChild("ScreenGui")
+        local quickBar = screenGui and screenGui:FindFirstChild("MainQuickBarView")
+        local buttonList = quickBar and quickBar:FindFirstChild("ButtonList")
+        local rideButton = buttonList and buttonList:FindFirstChild("Ride")
+
+        if rideButton and rideButton.Visible then
+            if Utils and type(Utils.ClickButtonExact) == "function" then
+                Utils.ClickButtonExact(rideButton, "Nút Cưỡi Thú (Ride)")
+                success = true
+            end
+        end
+    end)
+
+    -- [Tầng 2]: Nếu click UI chưa đáp ứng, gọi Native Manager MgrPetMountClient trong Memory
+    if not success then
+        pcall(function()
+            local env = getrenv and getrenv()._G and getrenv()._G.PathTool
+            local mgrMount = env and env.MgrPetMountClient
+            if mgrMount then
+                if state and type(mgrMount.Mount) == "function" then
+                    mgrMount:Mount()
+                    success = true
+                elseif not state and type(mgrMount.Unmount) == "function" then
+                    mgrMount:Unmount()
+                    success = true
+                end
+            end
+        end)
+    end
+
+    -- [Tầng 3]: Fallback truyền Remote Server như phương án dự phòng cuối cùng
+    if not success then
+        local remote = GetDataPullFunc()
+        if remote then
+            pcall(function() remote:InvokeServer("PetSwitchRideStatusChannel", state) end)
+        end
     end
 end
 
@@ -457,7 +492,7 @@ function Utils.SmartDismount()
     local isRiding = LocalPlayer:GetAttribute("RidePetId") ~= nil
     if isRiding then
         Utils.ToggleMount(false)
-        task.wait(0.3)
+        task.wait(0.2)
         local char = LocalPlayer.Character
         local humanoid = char and char:FindFirstChild("Humanoid")
         if humanoid then humanoid.Jump = true end
