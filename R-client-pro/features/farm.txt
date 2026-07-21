@@ -804,7 +804,7 @@ return function(Window, Utils)
                         local platform = Workspace:FindFirstChild("FarmSafePlatform")
                         if platform then platform:Destroy() end
                     end)
-                    --Utils.SmartDismount
+                    Utils.SmartDismount()
                     currentTargetId = nil
                     deadMonstersBlacklist = {} -- Xóa sạch blacklist khi tắt farm
                 end
@@ -854,6 +854,9 @@ return function(Window, Utils)
                     end
                     task.wait(delayTime)
                 end
+
+                -- Đảm bảo nhảy xuống thú cưỡi trước khi bắt đầu tung đòn tấn công
+                pcall(function() Utils.SmartDismount() end)
 
                 -- Tấn công liên tục cho đến khi con quái chết hoặc điều kiện thay đổi
                 local attackStartTick = tick()
