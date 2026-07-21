@@ -777,21 +777,20 @@ function Utils.IsMonsterAlive(monsterObj)
     local hpVal = monsterObj:FindFirstChild("Health")
     if hpVal and hpVal:IsA("StringValue") then
         local rawStr = hpVal.Value
-        
-        -- Thử parse thập phân thường (VD: "0,5" -> "0.5")
-        local hpNum = tonumber((string.gsub(rawStr, ",", ".")))
-        
-        -- Nếu thất bại, giải mã định dạng khoa học/BigNum của game (VD: "9289000,-3")
-        if not hpNum then
-            local parts = string.split(rawStr, ",")
-            if #parts == 2 then 
-                local base = tonumber(parts[1]) or 0
-                local exp = tonumber(parts[2]) or 0
-                hpNum = base * (10 ^ exp)
-            end
+        local hpNum = nil
+
+        -- Định dạng BigNum tiêu chuẩn của game: "base,exp" (Ví dụ: "6693500,-2" hoặc "0,-1")
+        local parts = string.split(rawStr, ",")
+        if #parts == 2 then
+            local base = tonumber(parts[1]) or 0
+            local exp = tonumber(parts[2]) or 0
+            hpNum = base * (10 ^ exp)
+        else
+            -- Thử parse thập phân thường
+            hpNum = tonumber((string.gsub(rawStr, ",", ".")))
         end
-        
-        return (hpNum and hpNum >= 1) or false
+
+        return (hpNum and hpNum > 0) or false
     end
     
     -- Mặc định trả về true nếu không tìm thấy thanh máu (boss phụ hoặc quái map đặc biệt chưa kịp tải)

@@ -834,6 +834,12 @@ return function(Window, Utils)
 
                 currentTargetId = target.Id
 
+                -- Chốt kiểm tra: Nếu quái đã ngất/chết trước khi cất cánh, hủy Teleport lập tức
+                if not (target.Object and target.Object.Parent and Utils.IsMonsterAlive(target.Object)) then
+                    if target.Id then deadMonstersBlacklist[target.Id] = tick() + 2.0 end
+                    break
+                end
+
                 -- Teleport đến con quái
                 local telePos = CalcTeleportPosition(target)
                 local dist = (charData.RootPart.Position - telePos).Magnitude
