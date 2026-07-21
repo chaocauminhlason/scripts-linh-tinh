@@ -383,6 +383,34 @@ function Utils.ClickButtonExact(button, debugName)
 end
 
 -- ==========================================
+-- HÀM GOM PET VỀ VỊ TRÍ NHÂN VẬT (TELEPORT PETS TO PLAYER)
+-- ==========================================
+function Utils.GatherPetsToPlayer()
+    pcall(function()
+        local char = LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+        
+        local petsFolder = Workspace:FindFirstChild("Pets")
+        if not petsFolder then return end
+        
+        local myUserId = LocalPlayer.UserId
+        local targetCFrame = hrp.CFrame
+        
+        for _, pet in ipairs(petsFolder:GetChildren()) do
+            local ownerId = pet:GetAttribute("PlayerId")
+            if ownerId == myUserId then
+                if pet:IsA("Model") then
+                    pet:PivotTo(targetCFrame)
+                elseif pet:IsA("BasePart") then
+                    pet.CFrame = targetCFrame
+                end
+            end
+        end
+    end)
+end
+
+-- ==========================================
 -- HÀM LẤY ID NGƯỜI CHƠI
 -- ==========================================
 local cachedPlayerId = nil

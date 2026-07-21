@@ -717,7 +717,7 @@ return function(Window, Utils)
             local isRiding = LocalPlayer:GetAttribute("RidePetId") ~= nil
             if not isRiding then
                 Utils.ToggleMount(true)
-                task.wait(0.2)
+                task.wait(0.3)
             end
 
             -- Chỉ dịch chuyển vị trí nếu khoảng cách ngang > 20 studs hoặc lệch độ cao quá 15 studs
@@ -736,8 +736,19 @@ return function(Window, Utils)
                     platform.CFrame = CFrame.new(targetPos - Vector3.new(0, 4.0, 0))
                 end)
                 charData.RootPart.CFrame = CFrame.lookAt(targetPos, monsterPos)
+                
+                -- Gom Pet về vị trí mới ngay lập tức
+                if Utils and type(Utils.GatherPetsToPlayer) == "function" then
+                    Utils.GatherPetsToPlayer()
+                end
+                
                 task.wait(0.15)
                 return true
+            else
+                -- Ở cự ly ngắn (dưới 20 studs), vẫn chủ động gom Pet tới áp sát quái
+                if Utils and type(Utils.GatherPetsToPlayer) == "function" then
+                    Utils.GatherPetsToPlayer()
+                end
             end
             return false
         end
@@ -831,15 +842,15 @@ return function(Window, Utils)
                     local delayTime = 0.35
 
                     if dist > 800 then
-                        delayTime = 1.25
+                        delayTime = 1.0
                     elseif dist > 500 then
-                        delayTime = 1.05    
-                    elseif dist > 300 then
-                        delayTime = 0.85
-                    elseif dist > 150 then
-                        delayTime = 0.75
+                        delayTime = 0.8    
+--                    elseif dist > 300 then
+--                        delayTime = 0.85
+--                    elseif dist > 150 then
+--                        delayTime = 0.75
                     elseif dist > 50 then
-                        delayTime = 0.4
+                        delayTime = 0.6
                     end
                     task.wait(delayTime)
                 end
