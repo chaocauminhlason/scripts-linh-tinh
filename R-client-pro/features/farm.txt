@@ -717,7 +717,7 @@ return function(Window, Utils)
             local isRiding = LocalPlayer:GetAttribute("RidePetId") ~= nil
             
                 Utils.ToggleMount(true)
-                task.wait(0.3)
+                task.wait(0.7)
             
 
             -- Chỉ dịch chuyển vị trí nếu khoảng cách ngang > 20 studs hoặc lệch độ cao quá 15 studs
@@ -804,8 +804,8 @@ return function(Window, Utils)
                         local platform = Workspace:FindFirstChild("FarmSafePlatform")
                         if platform then platform:Destroy() end
                     end)
-                    Utils.SmartDismount()
-                    task.wait(0.1)
+                    --Utils.SmartDismount()
+                    --task.wait(0.1)
                     currentTargetId = nil
                     deadMonstersBlacklist = {} -- Xóa sạch blacklist khi tắt farm
                 end
@@ -877,15 +877,23 @@ return function(Window, Utils)
                     if not stillAlive then
                         -- Con quái vừa chết → Ghi nhận ngay vào blacklist 1.5s để chặn nháy target
                         if target.Id then
-                            deadMonstersBlacklist[target.Id] = tick() + 1.5
+                            deadMonstersBlacklist[target.Id] = tick() + 10
                         end
                         -- Thoát inner loop để tìm con mới NGAY LẬP TỨC mà KHÔNG gọi Remote nữa
                         break
                     end
 
-                    -- Gửi lệnh tấn công (Chỉ gửi khi kiểm tra quái còn sống)
+                    -- Gửi lệnh tấn công (Chốt an toàn: Chỉ gửi khi quái còn sống VÀ nhân vật đã ở khoảng cách gần <= 35 studs)
                     if SystemCache.AttackRemote and target.Id then
-                        pcall(function() SystemCache.AttackRemote:InvokeServer("MonsterAttackChannel", target.Id) end)
+                        local charDataCur = GetValidCharacterData()
+                        local distToTarget = math.huge
+                        if charDataCur and target.Position then
+                            distToTarget = (charDataCur.Position - target.Position).Magnitude
+                        end
+                        
+                        if distToTarget <= 35 then
+                            pcall(function() SystemCache.AttackRemote:InvokeServer("MonsterAttackChannel", target.Id) end)
+                        end
                     end
                     
                     -- Bám theo quái nếu nó di chuyển (cập nhật vị trí real-time)
@@ -922,7 +930,7 @@ return function(Window, Utils)
 
                 -- Ghi nhận quái đã chết vào blacklist để tránh desync teleport lại xác của nó
                 if target.Id then
-                    deadMonstersBlacklist[target.Id] = tick() + 2.0
+                    deadMonstersBlacklist[target.Id] = tick() + 10
                 end
 
                 -- === CHUYỂN MỤC TIÊU TỨC THÌ ===
