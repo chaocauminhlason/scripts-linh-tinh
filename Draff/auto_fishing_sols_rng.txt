@@ -7,6 +7,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
 
 -- [1] NẠP CÁC MODULE PACKETS VÀ FISH UI GỐC CỦA GAME
@@ -29,11 +30,40 @@ print("✅ [AutoFishing] Đã liên kết thành công với hệ thống Fishin
 local AutoFishingConfig = {
     Enabled = true,          -- Bật / Tắt Auto Fishing
     CastDelay = 1.0,         -- Thời gian chờ quăng cần tiếp theo (giây)
-    RodId = "Basic"          -- ID cần câu mặc định (Basic, Merchant,...)
+    MaxDistance = 15          -- Bán kính tự động tìm bãi câu cá gần nhất (studs)
 }
 
 local isFishingLoopActive = false
 local minigameConnection = nil
+
+-- [Helper] Tìm điểm câu cá gần nhân vật nhất trong Workspace.Map.Miscs.FishingPoints
+local function GetClosestFishingSpot()
+    local fishingPoints = Workspace:FindFirstChild("Map") and Workspace.Map:FindFirstChild("Miscs") and Workspace.Map.Miscs:FindFirstChild("FishingPoints")
+    if not fishingPoints then return nil end
+
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+
+    local closestSpot = nil
+    local minDist = AutoFishingConfig.MaxDistance
+
+    for _, spot in ipairs(fishingPoints:GetChildren()) do
+        if spot:IsA("Model") and not spot:GetAttribute("occupied") then
+            local spotId = spot:GetAttribute("spotId")
+            if spotId then
+                local pos = spot:GetPivot().Position
+                local dist = (hrp.Position - pos).Magnitude
+                if dist < minDist then
+                    minDist = dist
+                    closestSpot = spot
+                end
+            end
+        end
+    end
+
+    return closestSpot
+end
 
 -- [3] HÀM TỰ ĐỘNG GIẢI MINIGAME CÂU CÁ (SOLVE MINIGAME PERFECTLY)
 local function StartAutoMinigameSolver()
@@ -62,16 +92,22 @@ local function StartAutoFishingLoop()
         while AutoFishingConfig.Enabled do
             -- Nếu chưa ở trong trạng thái câu cá hoặc minigame
             if not FishUI.isFishing and not FishUI.isMinigameMode then
-                print("🎣 [AutoFishing] Đang tự động thả câu (Rod: " .. tostring(AutoFishingConfig.RodId) .. ")...")
-                pcall(function()
-                    FishingPacket.start.send(AutoFishingConfig.RodId)
-                end)
-                task.wait(1.5)
+                local spot = GetClosestFishingSpot()
+                if spot then
+                    local spotId = spot:GetAttribute("spotId")
+                    print("🎣 [AutoFishing] Thấy bãi câu: " .. spot.Name .. " (spotId: " .. tostring(spotId) .. "). Đang quăng cần...")
+                    pcall(function()
+                        FishingPacket.start.send(spotId)
+                    end)
+                    task.wait(1.5)
+                else
+                    print("⚠️ [AutoFishing] Không thấy bãi câu cá nào trong bán kính " .. tostring(AutoFishingConfig.MaxDistance) .. " studs! Hãy đứng lại gần ao nước.")
+                    task.wait(2)
+                end
             end
 
             -- Nếu đang trong Minigame -> Chờ Minigame kết thúc
             if FishUI.isMinigameMode then
-                -- Chờ cho đến khi Minigame hoàn thành
                 repeat
                     task.wait(0.2)
                 until not FishUI.isMinigameMode or not AutoFishingConfig.Enabled
