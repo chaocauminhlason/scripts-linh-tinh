@@ -158,11 +158,8 @@ return function(Window, Utils)
         if _G.PendingBossHunt or _G.PendingSpecialBoss then return true end
         
         -- Kiểm tra xem nhân vật có đang trong map/phó bản đặc biệt (Rift, Abyss...) không
-        if Utils and type(Utils.GetCurrentAreaId) == "function" then
-            local currentArea = Utils.GetCurrentAreaId()
-            if currentArea == "Rift" or currentArea == "Abyss" then
-                return true
-            end
+        if Utils and type(Utils.IsInSpecialArea) == "function" and Utils.IsInSpecialArea() then
+            return true
         end
         return false
     end

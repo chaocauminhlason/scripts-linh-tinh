@@ -244,6 +244,14 @@ function Utils.GetCurrentAreaId()
 end
 
 -- ==========================================
+-- KIỂM TRA NHÂN VẬT CÓ ĐANG TRONG PHÓ BẢN ĐẶC BIỆT KÍNH (RIFT / ABYSS...)
+-- ==========================================
+function Utils.IsInSpecialArea()
+    local areaId = Utils.GetCurrentAreaId()
+    return areaId == "Rift" or areaId == "Abyss"
+end
+
+-- ==========================================
 -- 5. LẤY DANH SÁCH CÁC KHU VỰC
 -- ==========================================
 function Utils.GetAreaList()
