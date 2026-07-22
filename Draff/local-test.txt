@@ -7,12 +7,12 @@ local HttpService = game:GetService("HttpService")
 -- ==========================================
 -- BƯỚC 1: ĐỊNH HƯỚNG ĐƯỜNG DẪN LOCAL (LOCALHOST)
 -- ==========================================
+-- Server nội bộ trỏ thẳng vào thư mục Draff của bạn
 local repoUrl = "http://127.0.0.1:8000/Draff/"
-local noCache = "?t=" .. tostring(os.time())
 
 print("[System] Dev Mode: Loading assets from Localhost server...")
 
--- Tải thư viện Fluent UI (Vẫn lấy online hoặc bạn có thể lưu về local nếu muốn)
+-- Tải thư viện Fluent UI Pro & Addons
 local Fluent = loadstring(game:HttpGet("https://github.com/StyearX/Fluent-modded/releases/download/1.5.1/FluentPro"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/StyearX/Fluent-modded/main/Addons/SaveManager.lua"))()
 local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/StyearX/Fluent-modded/main/Addons/InterfaceManager.lua"))()
@@ -43,50 +43,24 @@ local Tabs = {
 }
 
 -- ==========================================
--- BƯỚC 2: HÀM TẢI LOCAL AN TOÀN (SAFE LOAD)
+-- BƯỚC 2: HÀM TẢI LOCAL AN TOÀN (SAFE LOAD) - Y HỆT R-CLIENT-PRO
 -- ==========================================
 local function SafeLoad(filePath)
-    -- 1. ƯU TIÊN 1: Đọc file trực tiếp từ thư mục workspace của Executor (readfile)
-    local possiblePaths = {
-        "Draff/" .. filePath,
-        "d:/scripts/scripts-linh-tinh/Draff/" .. filePath
-    }
-    for _, p in ipairs(possiblePaths) do
-        if isfile and isfile(p) then
-            local ok, content = pcall(readfile, p)
-            if ok and content then
-                local func, err = loadstring(content)
-                if func then return func() else warn("❌ Lỗi Cú Pháp tại file local: " .. p .. "\n" .. tostring(err)) end
-            end
-        end
-    end
-
-    -- 2. ƯU TIÊN 2: Đọc qua HTTP Localhost (nếu Executor cho phép game:HttpGet 127.0.0.1)
-    local fullUrl = repoUrl .. filePath .. noCache
+    local fullUrl = repoUrl .. filePath .. "?t=" .. tostring(os.time())
+    
+    -- Đọc file trực tiếp qua HTTP Localhost, tốc độ gần như bằng 0ms
     local success, result = pcall(function() return game:HttpGet(fullUrl) end)
     
-    if success and result and not string.find(result, "404") then
+    if success and not string.find(result, "404") then
         local func, err = loadstring(result)
         if func then 
             return func() 
         else 
             warn("❌ Lỗi Cú Pháp tại file local: " .. filePath .. "\n" .. tostring(err)) 
         end
+    else
+        warn("❌ Không kết nối được Local Server hoặc sai đường dẫn: " .. fullUrl)
     end
-
-    -- 3. ƯU TIÊN 3: Đọc online qua GitHub Raw Repository (Dự phòng giống R-client-pro)
-    local rawUrl = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/refs/heads/test/pre-config-manager/Draff/" .. filePath .. noCache
-    local success2, result2 = pcall(function() return game:HttpGet(rawUrl) end)
-    if success2 and result2 and not string.find(result2, "404") then
-        local func, err = loadstring(result2)
-        if func then 
-            return func() 
-        else 
-            warn("❌ Lỗi Cú Pháp tại file online: " .. filePath .. "\n" .. tostring(err)) 
-        end
-    end
-
-    warn("❌ Không nạp được module: " .. filePath)
     return nil
 end
 
@@ -132,6 +106,6 @@ Window:SelectTab(1)
 Fluent:Notify({ Title = "Thành Công!", Content = "Chế độ Dev Local đã sẵn sàng!", Duration = 3 })
 
 -- Hướng dẫn bật server test
--- Mở PowerShell / Terminal
+-- Mở power shell
 -- cd /d D:\scripts\scripts-linh-tinh
 -- python -m http.server 8000
