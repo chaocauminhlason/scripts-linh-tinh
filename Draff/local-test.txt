@@ -1,0 +1,52 @@
+-- ====================================================================
+-- MAIN SCRIPT: Khởi chạy ApolloHub | SolRNG (BẢN TEST LOCAL DEV)
+-- Hỗ trợ nạp code trực tiếp từ máy tính (Localhost) không cần push GitHub
+-- ====================================================================
+-- 📖 HƯỚNG DẪN SỬ DỤNG CHẾ ĐỘ TEST LOCAL (LOCAL DEV MODE):
+--
+-- CÁCH 1: Chạy qua Web Server Nội Bộ (Khuyên dùng)
+-- 1. Mở PowerShell hoặc Terminal tại thư mục dự án:
+--    cd D:\scripts\scripts-linh-tinh
+-- 2. Chạy lệnh bật HTTP server tại port 8000:
+--    python -m http.server 8000
+-- 3. Copy đoạn code bên dưới dán vào Roblox Executor để test:
+--    loadstring(game:HttpGet("http://127.0.0.1:8000/Draff/local-test.txt?t=" .. os.time()))()
+--
+-- CÁCH 2: Chạy trực tiếp qua Workspace Executor (Chế độ Offline)
+-- 1. Copy cả thư mục "Draff" vào thư mục workspace của Executor (e.g. workspace/Draff)
+-- 2. Dán đoạn code sau vào Executor:
+--    loadstring(readfile("Draff/local-test.txt"))()
+-- ====================================================================
+
+-- 1. Thử đọc file main.txt trực tiếp từ thư mục workspace của Executor (readfile)
+if isfile and isfile("Draff/main.txt") then
+    print("[ApolloHub | Local Dev] 📂 Phát hiện file Draff/main.txt cục bộ. Đang nạp qua readfile()...")
+    local ok, content = pcall(readfile, "Draff/main.txt")
+    if ok and content then
+        local func, err = loadstring(content)
+        if func then
+            func()
+            return
+        else
+            warn("❌ [Local Dev] Lỗi cú pháp trong Draff/main.txt:\n" .. tostring(err))
+        end
+    end
+end
+
+-- 2. Fallback: Tải qua Localhost Web Server (chạy `python -m http.server 8000` tại D:\scripts\scripts-linh-tinh)
+local localUrl = "http://127.0.0.1:8000/Draff/main.txt?t=" .. tostring(os.time())
+print("[ApolloHub | Local Dev] 🌐 Thử nạp từ Localhost: " .. localUrl)
+
+local success, result = pcall(function() return game:HttpGet(localUrl) end)
+if success and not string.find(result, "404") then
+    local func, err = loadstring(result)
+    if func then
+        func()
+        print("🚀 [ApolloHub | Local Dev] Nạp thành công từ Localhost Server!")
+    else
+        warn("❌ [Local Dev] Lỗi cú pháp từ Localhost Server:\n" .. tostring(err))
+    end
+else
+    warn("❌ [Local Dev] Không kết nối được Localhost Server hoặc không thấy file Draff/main.txt!")
+    warn("👉 Hướng dẫn: Mở PowerShell tại D:\\scripts\\scripts-linh-tinh và chạy lệnh: python -m http.server 8000")
+end

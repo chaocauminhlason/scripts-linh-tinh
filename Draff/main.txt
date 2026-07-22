@@ -1,0 +1,117 @@
+-- ====================================================================
+-- MAIN ENTRY POINT: APOLLOHUB | SOL'S RNG (DRAFF PROJECT)
+-- Cấu trúc Modular: Core + Features với SafeLoad
+-- ====================================================================
+local Fluent = loadstring(game:HttpGet("https://github.com/StyearX/Fluent-modded/releases/download/1.5.1/FluentPro"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/StyearX/Fluent-modded/main/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/StyearX/Fluent-modded/main/Addons/InterfaceManager.lua"))()
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+--------------------------------------------------------------------------------
+-- 1. NẠP CORE UTILITIES
+--------------------------------------------------------------------------------
+local Utils = nil
+local possibleUtilPaths = {
+    "d:/scripts/scripts-linh-tinh/Draff/core/utilities.txt",
+    "Draff/core/utilities.txt"
+}
+for _, p in ipairs(possibleUtilPaths) do
+    if isfile and isfile(p) then
+        local ok, content = pcall(readfile, p)
+        if ok and content then
+            local func = loadstring(content)
+            if func then Utils = func() break end
+        end
+    end
+end
+
+if not Utils then
+    local localUrl = "http://127.0.0.1:8000/Draff/core/utilities.txt?t=" .. tostring(os.time())
+    local ok, content = pcall(game.HttpGet, game, localUrl)
+    if ok and content and not string.find(content, "404") then
+        local func = loadstring(content)
+        if func then Utils = func() end
+    end
+end
+
+if not Utils then
+    local rawUrl = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/Draff/core/utilities.txt"
+    local ok, content = pcall(game.HttpGet, game, rawUrl)
+    if ok and content then
+        local func = loadstring(content)
+        if func then Utils = func() end
+    end
+end
+
+if not Utils then
+    error("❌ [ApolloHub] Không thể nạp module core/utilities.txt")
+end
+
+--------------------------------------------------------------------------------
+-- 2. UI WINDOW CREATION
+--------------------------------------------------------------------------------
+local Window = Fluent:CreateWindow({
+    Title = "ApolloHub | SolRNG",
+    SubTitle = "by Era_ | Sson",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(480, 360),
+    Acrylic = true,
+    Theme = "Blood Moon",
+    MinimizeKey = Enum.KeyCode.LeftControl,
+
+    UserInfo = true,
+    UserInfoTitle = "Welcome",
+    UserInfoSubtitle = LocalPlayer.DisplayName,
+    UserInfoColor = Color3.fromRGB(120, 235, 140)
+})
+
+local Tabs = {
+    Main = Window:AddTab({ Title = "Main / Auto Fisch", Icon = "fish" }),
+    Seller = Window:AddTab({ Title = "Merchant / Sell", Icon = "shopping-cart" }),
+    Interface = Window:AddTab({ Title = "Interface", Icon = "monitor" }),
+    Configuration = Window:AddTab({ Title = "Configuration", Icon = "settings" })
+}
+
+--------------------------------------------------------------------------------
+-- 3. NẠP FLOATING TOGGLE BUTTON
+--------------------------------------------------------------------------------
+local floatButtonModule = Utils.SafeLoad("core/floating_button.txt")
+if floatButtonModule then
+    floatButtonModule(Window, Utils)
+end
+
+--------------------------------------------------------------------------------
+-- 4. NẠP FEATURES MODULES
+--------------------------------------------------------------------------------
+local autoFischModule = Utils.SafeLoad("features/auto_fisch.txt")
+if autoFischModule then
+    autoFischModule(Tabs, Fluent, Utils)
+end
+
+local sellerModule = Utils.SafeLoad("features/seller.txt")
+if sellerModule then
+    sellerModule(Tabs, Fluent, Utils)
+end
+
+--------------------------------------------------------------------------------
+-- 5. INTERFACE & CONFIGURATION SAVE MANAGER
+--------------------------------------------------------------------------------
+InterfaceManager:SetLibrary(Fluent)
+SaveManager:SetLibrary(Fluent)
+SaveManager:IgnoreThemeSettings()
+SaveManager:SetIgnoreIndexes({})
+SaveManager:SetFolder("ApolloHub/ConfigSolRNG")
+InterfaceManager:SetFolder("ApolloHub/InterfaceSolRNG")
+
+InterfaceManager:BuildInterfaceSection(Tabs.Interface)
+SaveManager:BuildConfigSection(Tabs.Configuration)
+
+Window:SelectTab(1)
+
+Fluent:Notify({
+    Title = "Script Loaded",
+    Content = "Welcome To ApolloHub",
+    Duration = 3
+})
