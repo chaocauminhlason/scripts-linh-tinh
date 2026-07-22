@@ -32,7 +32,7 @@ function Utils.SafeLoad(filePath)
         for _, port in ipairs({8000, 8002}) do
             local localUrl = "http://127.0.0.1:" .. port .. "/Draff/" .. filePath .. "?t=" .. tostring(os.time())
             local ok, data = pcall(function() return game:HttpGet(localUrl) end)
-            if ok and data and not string.find(data, "404") then content = data break end
+            if ok and type(data) == "string" and #data > 0 and not string.find(data, "404 File not found") then content = data break end
         end
     end
 
@@ -40,7 +40,7 @@ function Utils.SafeLoad(filePath)
     if not content then
         local rawUrl = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/refs/heads/test/pre-config-manager/Draff/" .. filePath .. "?t=" .. tostring(os.time())
         local ok, data = pcall(function() return game:HttpGet(rawUrl) end)
-        if ok and data and not string.find(data, "404") then content = data end
+        if ok and type(data) == "string" and #data > 0 and not string.find(data, "404: Not Found") then content = data end
     end
     
     if content then
