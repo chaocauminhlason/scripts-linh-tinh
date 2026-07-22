@@ -38,7 +38,7 @@ function Utils.SafeLoad(filePath)
 
     -- 3. Nếu không thấy file cục bộ / localhost, nạp qua GitHub repository (online)
     if not content then
-        local rawUrl = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/test/pre-config-manager/Draff/" .. filePath .. "?t=" .. tostring(os.time())
+        local rawUrl = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/refs/heads/test/pre-config-manager/Draff/" .. filePath .. "?t=" .. tostring(os.time())
         local ok, data = pcall(game.HttpGet, game, rawUrl)
         if ok and data and not string.find(data, "404") then content = data end
     end

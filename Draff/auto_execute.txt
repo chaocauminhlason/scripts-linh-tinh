@@ -10,7 +10,7 @@ getgenv().ApolloHub_Draff_Running = true
 
 -- Khởi tạo đường dẫn GitHub
 local branch = "test/pre-config-manager" 
-local repoUrl = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/" .. branch .. "/Draff/"
+local repoUrl = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/refs/heads/" .. branch .. "/Draff/"
 
 local mainScriptLink = repoUrl .. "main.txt"
 local autoExecLink = repoUrl .. "auto_execute.txt"

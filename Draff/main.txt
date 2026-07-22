@@ -39,7 +39,7 @@ if not Utils then
 end
 
 if not Utils then
-    local rawUrl = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/test/pre-config-manager/Draff/core/utilities.txt?t=" .. tostring(os.time())
+    local rawUrl = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/refs/heads/test/pre-config-manager/Draff/core/utilities.txt?t=" .. tostring(os.time())
     local ok, content = pcall(game.HttpGet, game, rawUrl)
     if ok and content and not string.find(content, "404") then
         local func = loadstring(content)
