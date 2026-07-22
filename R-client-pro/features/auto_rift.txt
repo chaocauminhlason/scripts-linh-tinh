@@ -658,16 +658,13 @@ return function(Window, Utils)
                 riftEntryPosition = nil
                 -- Xử lý thời gian nghỉ ngơi
                 if cycleState.isResting then
-                    if riftSettings.autoHop and controller then
-                        table.insert(controller.TaskQueue, { 
-                            Name = "RiftRoundHop", 
-                            Func = function() 
-                                if controller.RequestLock("AutoRift") then 
-                                    Utils.HopServer("Hoàn tất 1 vòng quét Rift") 
-                                    controller.ReleaseLock("AutoRift") 
-                                end 
-                            end 
-                        })
+                    if riftSettings.autoHop then
+                        print("[AutoRift] 🔄 Hoàn tất 1 vòng quét Rift -> Đang thực hiện Hop Server...")
+                        CycleStatus:Set(Utils.t("rift_cycle_resting") .. " (Hop Server...)")
+                        if controller and controller.CurrentLock == "AutoRift" then
+                            controller.ReleaseLock("AutoRift")
+                        end
+                        pcall(function() Utils.HopServer("Hoàn tất 1 vòng quét Rift") end)
                         task.wait(5)
                         continue
                     else

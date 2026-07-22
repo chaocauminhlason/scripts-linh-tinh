@@ -1,132 +1,138 @@
--- ===================================================================
--- 🎣 SCRIPT AUTO FISHING SOL'S RNG (STANDALONE DRAFT)
--- Dự án: Draff / Auto Fishing Sol's RNG
--- Tách biệt hoàn toàn với hệ thống R-client-pro
--- ===================================================================
+-- =============================================================
+-- AUTO FISHING SOL'S RNG (100% CATCH SUCCESS & AUTO WIN)
+-- =============================================================
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local Players = game:GetService("Players")
-local Workspace = game:GetService("Workspace")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 local LocalPlayer = Players.LocalPlayer
 
--- [1] NẠP CÁC MODULE PACKETS VÀ FISH UI GỐC CỦA GAME
-local Packets = ReplicatedStorage:WaitForChild("Packets", 10)
-local FishingPacket = Packets and require(Packets:WaitForChild("Fishing", 10))
+local Quad = require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("UI"):WaitForChild("Quad"))
+local FishStore = Quad.Store.GetStore("FishUI")
+local FishingPacket = require(ReplicatedStorage:WaitForChild("Packets"):WaitForChild("Fishing"))
 
-local ReplicatedFirst = game:GetService("ReplicatedFirst")
-local ClientHandlers = ReplicatedFirst:WaitForChild("ClientHandlers", 10)
-local FishingClient = ClientHandlers and ClientHandlers:WaitForChild("FishingClient", 10)
-local FishUI = FishingClient and require(FishingClient:WaitForChild("FishUI", 10))
+getgenv().AutoFishing = true
 
-if not (FishingPacket and FishUI) then
-    warn("❌ [AutoFishing] Không tìm thấy module Fishing / FishUI của Sol's RNG!")
-    return
+-- Hủy vòng lặp cũ nếu đã chạy
+if getgenv().AutoFishingConnection then
+    getgenv().AutoFishingConnection:Disconnect()
 end
 
-print("✅ [AutoFishing] Đã liên kết thành công với hệ thống Fishing của Sol's RNG!")
+print("[Auto-Fishing] Đã khởi chạy kịch bản Auto Fishing Sol's RNG...")
 
--- [2] CẤU HÌNH AUTO FISHING
-local AutoFishingConfig = {
-    Enabled = true,          -- Bật / Tắt Auto Fishing
-    CastDelay = 1.0,         -- Thời gian chờ quăng cần tiếp theo (giây)
-    MaxDistance = 15          -- Bán kính tự động tìm bãi câu cá gần nhất (studs)
-}
+local lastClickTime = 0
 
-local isFishingLoopActive = false
-local minigameConnection = nil
+-- Hàm nhấp đúp mượt mà
+local function doubleClick(x, y)
+    VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 0)
+    task.wait(0.02)
+    VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 0)
+    task.wait(0.03)
+    VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 0)
+    task.wait(0.02)
+    VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 0)
+end
 
--- [Helper] Tìm điểm câu cá gần nhân vật nhất trong Workspace.Map.Miscs.FishingPoints
-local function GetClosestFishingSpot()
-    local fishingPoints = Workspace:FindFirstChild("Map") and Workspace.Map:FindFirstChild("Miscs") and Workspace.Map.Miscs:FindFirstChild("FishingPoints")
-    if not fishingPoints then return nil end
+getgenv().AutoFishingConnection = RunService.Heartbeat:Connect(function()
+    if not getgenv().AutoFishing then return end
 
-    local char = LocalPlayer.Character
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return nil end
+    local now = tick()
+    local mainUI = LocalPlayer.PlayerGui:FindFirstChild("MainInterface")
 
-    local closestSpot = nil
-    local minDist = AutoFishingConfig.MaxDistance
+    -- 1. KHI MINIGAME KÍCH HOẠT: Mở rộng vùng mục tiêu 100% & Tự gửi tín hiệu thắng
+    if FishStore.isMinigameStarted or FishStore.isMinigameMode then
+        pcall(function()
+            -- Mở rộng khối màu xanh an toàn trùm 100% thanh slider
+            FishStore.successWidth = 1.0
+            FishStore.catchValue = 0.5
+            FishStore.successPosition = 0.5
+            
+            -- Đẩy tiến trình kéo cá mượt mà
+            local p = FishStore.catchProgress or 0
+            if p < 0.9 then
+                FishStore.catchProgress = p + 0.08
+            else
+                -- Gửi tín hiệu hoàn thành minigame cho Server
+                FishingPacket.gameResult.send(true)
+            end
+        end)
 
-    for _, spot in ipairs(fishingPoints:GetChildren()) do
-        if spot:IsA("Model") and not spot:GetAttribute("occupied") then
-            local spotId = spot:GetAttribute("spotId")
-            if spotId then
-                local pos = spot:GetPivot().Position
-                local dist = (hrp.Position - pos).Magnitude
-                if dist < minDist then
-                    minDist = dist
-                    closestSpot = spot
+        -- Giữ click nhấp đúp
+        doubleClick(400, 300)
+        return
+    end
+
+    -- 2. KHI BẢNG KẾT QUẢ HIỂN THỊ: Đóng bảng qua nút X (MainInterface:GetChildren()[56]:GetChildren()[7].ImageButton)
+    local popupOpen = false
+    if mainUI then
+        for _, desc in ipairs(mainUI:GetDescendants()) do
+            if desc:IsA("TextLabel") and desc.Visible then
+                if desc.Text:find("trốn thoát") or desc.Text:find("thất bại") or desc.Text:find("bắt được") then
+                    popupOpen = true
+                    break
                 end
             end
         end
     end
 
-    return closestSpot
-end
+    if popupOpen and now - lastClickTime > 0.4 then
+        lastClickTime = now
+        
+        -- Đóng trực tiếp qua Nút X chính xác được dò ra: [56][7].ImageButton
+        pcall(function()
+            local xBtn = mainUI:GetChildren()[56]
+                and mainUI:GetChildren()[56]:GetChildren()[7]
+                and mainUI:GetChildren()[56]:GetChildren()[7]:FindFirstChild("ImageButton")
+            
+            if xBtn then
+                local pos = xBtn.AbsolutePosition
+                local size = xBtn.AbsoluteSize
+                doubleClick(pos.X + size.X/2, pos.Y + size.Y/2 + 58)
+                xBtn.Visible = false
+            end
+        end)
 
--- [3] HÀM TỰ ĐỘNG GIẢI MINIGAME CÂU CÁ (SOLVE MINIGAME PERFECTLY)
-local function StartAutoMinigameSolver()
-    if minigameConnection then minigameConnection:Disconnect() end
+        FishStore.isResultMode = false
+        print("[Auto-Fishing] Đã đóng cửa sổ thông báo kết quả qua nút X [56][7]!")
+        return
+    end
 
-    minigameConnection = RunService.Heartbeat:Connect(function()
-        if not AutoFishingConfig.Enabled then return end
-
-        if FishUI.isMinigameMode and FishUI.isMinigameStarted then
-            -- Tự động giữ thanh catchProgress ở mức hoàn hảo (Full 100%)
-            -- Khớp vị trí vẹt catch thanh ngang và ép kết quả Catch thành công
-            FishUI.fishProgress = FishUI.successPosition or 0.5
-            FishUI.catchProgress = 100
-        end
-    end)
-end
-
--- [4] LUỒNG TỰ ĐỘNG QUĂNG CẦN & BẮT ĐẦU CÂU CÁ (MAIN AUTO LOOP)
-local function StartAutoFishingLoop()
-    if isFishingLoopActive then return end
-    isFishingLoopActive = true
-
-    StartAutoMinigameSolver()
-
-    task.spawn(function()
-        while AutoFishingConfig.Enabled do
-            -- Nếu chưa ở trong trạng thái câu cá hoặc minigame
-            if not FishUI.isFishing and not FishUI.isMinigameMode then
-                local spot = GetClosestFishingSpot()
-                if spot then
-                    local spotId = spot:GetAttribute("spotId")
-                    print("🎣 [AutoFishing] Thấy bãi câu: " .. spot.Name .. " (spotId: " .. tostring(spotId) .. "). Đang quăng cần...")
-                    pcall(function()
-                        FishingPacket.start.send(spotId)
-                    end)
-                    task.wait(1.5)
-                else
-                    print("⚠️ [AutoFishing] Không thấy bãi câu cá nào trong bán kính " .. tostring(AutoFishingConfig.MaxDistance) .. " studs! Hãy đứng lại gần ao nước.")
-                    task.wait(2)
+    -- 3. KHI NÚT "CÂU" SẴN SÀNG: Tự động thả cần
+    local fishBtnReady = false
+    if mainUI then
+        for _, desc in ipairs(mainUI:GetDescendants()) do
+            if (desc:IsA("TextLabel") or desc:IsA("TextButton")) and desc.Text == "Fish" then
+                local btn = desc:IsA("TextButton") and desc or desc.Parent
+                if btn and btn:IsA("GuiObject") and btn.Visible then
+                    fishBtnReady = true
+                    break
                 end
             end
+        end
+    end
 
-            -- Nếu đang trong Minigame -> Chờ Minigame kết thúc
-            if FishUI.isMinigameMode then
-                repeat
-                    task.wait(0.2)
-                until not FishUI.isMinigameMode or not AutoFishingConfig.Enabled
-                
-                print("🐟 [AutoFishing] Đã câu thành công! Đang chờ câu lượt tiếp theo...")
-                task.wait(AutoFishingConfig.CastDelay)
+    if fishBtnReady and not FishStore.isFishing and now - lastClickTime > 1.2 then
+        lastClickTime = now
+        
+        -- Thả câu trực tiếp qua Packet ByteNet
+        local FishingPoints = workspace.Map.Miscs.FishingPoints
+        local playerPos = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character.HumanoidRootPart.Position
+        
+        if playerPos then
+            for _, spot in ipairs(FishingPoints:GetChildren()) do
+                if spot:IsA("Model") then
+                    local p = spot:GetPivot().Position
+                    if (p - playerPos).Magnitude < 15 then
+                        local spotId = spot:GetAttribute("spotId")
+                        if spotId then 
+                            FishingPacket.start.send(spotId) 
+                            print("[Auto-Fishing] Đã thả cần câu qua Packet!")
+                        end
+                        break
+                    end
+                end
             end
-
-            task.wait(0.5)
         end
-
-        if minigameConnection then
-            minigameConnection:Disconnect()
-            minigameConnection = nil
-        end
-        isFishingLoopActive = false
-        print("🛑 [AutoFishing] Đã dừng luồng tự động câu cá.")
-    end)
-end
-
--- [5] KÍCH HOẠT HỆ THỐNG
-StartAutoFishingLoop()
+    end
+end)

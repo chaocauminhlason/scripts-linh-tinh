@@ -196,6 +196,15 @@ return function(Window, Utils)
     BossTab:CreateSection(" " .. Utils.t("sec_sp_boss") .. " ")
     local spStatusLabel = BossTab:CreateLabel(Utils.t("sp_boss_idle"))
 
+    local spAllowedWorldIds = {}
+    for worldId in pairs(SPECIAL_BOSS_MAPPING) do table.insert(spAllowedWorldIds, worldId) end
+    Utils.CreateFilteredAreaMultiSelect(BossTab, {
+        name = Utils.t("select_sp_worlds"),
+        flag = "SpBossWorldSelect",
+        allowedIds = spAllowedWorldIds,
+        callback = function(selectedIds) spSettings.selectedWorlds = selectedIds end,
+    })
+
     BossTab:CreateToggle({
         Name = Utils.t("auto_sp_boss"),
         Info = Utils.t("auto_sp_boss_info"),
@@ -208,15 +217,6 @@ return function(Window, Utils)
                 TryReleaseLock()
             end
         end,
-    })
-
-    local spAllowedWorldIds = {}
-    for worldId in pairs(SPECIAL_BOSS_MAPPING) do table.insert(spAllowedWorldIds, worldId) end
-    Utils.CreateFilteredAreaMultiSelect(BossTab, {
-        name = Utils.t("select_sp_worlds"),
-        flag = "SpBossWorldSelect",
-        allowedIds = spAllowedWorldIds,
-        callback = function(selectedIds) spSettings.selectedWorlds = selectedIds end,
     })
 
     -- [UI] WORLD BOSS
@@ -232,6 +232,22 @@ return function(Window, Utils)
         wbHuntState.isActive          = true
         wbCycleCompleted              = false
     end
+
+    local wbAllowedWorldIds = {}
+    for worldId in pairs(WORLD_BOSS_MAPPING) do table.insert(wbAllowedWorldIds, worldId) end
+    Utils.CreateFilteredAreaMultiSelect(BossTab, {
+        name = Utils.t("select_wb_worlds"),
+        flag = "WbBossWorldSelect",
+        allowedIds = wbAllowedWorldIds,
+        callback = function(selectedIds)
+            wbSettings.selectedWorlds = selectedIds
+            if wbSettings.enabled and not wbHuntState.isActive and not wbCycleCompleted and #wbSettings.selectedWorlds > 0 then
+                print("🌍 [WORLD BOSS] Cập nhật danh sách đảo. Tự động kích hoạt luồng săn Boss...")
+                StartWbHuntFromFirstWorld()
+                wbStatusLabel:Set(Utils.t("boss_req_lock"))
+            end
+        end,
+    })
 
     BossTab:CreateToggle({
         Name = Utils.t("auto_wb_boss"),
@@ -256,15 +272,6 @@ return function(Window, Utils)
                 TryReleaseLock()
             end
         end,
-    })
-
-    local wbAllowedWorldIds = {}
-    for worldId in pairs(WORLD_BOSS_MAPPING) do table.insert(wbAllowedWorldIds, worldId) end
-    Utils.CreateFilteredAreaMultiSelect(BossTab, {
-        name = Utils.t("select_wb_worlds"),
-        flag = "WbBossWorldSelect",
-        allowedIds = wbAllowedWorldIds,
-        callback = function(selectedIds) wbSettings.selectedWorlds = selectedIds end,
     })
 
     BossTab:CreateToggle({
@@ -483,13 +490,10 @@ return function(Window, Utils)
 
         while task.wait(0.2) do
             -- [Tự động kích hoạt khi cấu hình dropdown nạp trễ hơn toggle ở startup]
-            -- Chỉ kích hoạt nếu sóng Boss đang diễn ra (ReadWbWaveTimer) và chưa hoàn thành vòng (wbCycleCompleted = false)
             if wbSettings.enabled and not wbHuntState.isActive and not wbCycleCompleted and #wbSettings.selectedWorlds > 0 then
-                local isWaveActive, _ = ReadWbWaveTimer()
-                if isWaveActive then
-                    print("🌍 [WORLD BOSS] Phát hiện sóng Boss đang diễn ra. Tự động kích hoạt luồng săn Boss.")
-                    StartWbHuntFromFirstWorld()
-                end
+                print("🌍 [WORLD BOSS] Tự động khởi chạy luồng săn Boss khi danh sách đảo sẵn sàng.")
+                StartWbHuntFromFirstWorld()
+                wbStatusLabel:Set(Utils.t("boss_req_lock"))
             end
 
             if not wbSettings.enabled or not wbHuntState.isActive then 

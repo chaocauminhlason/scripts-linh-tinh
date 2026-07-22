@@ -717,7 +717,7 @@ return function(Window, Utils)
             local isRiding = LocalPlayer:GetAttribute("RidePetId") ~= nil
             
                 Utils.ToggleMount(true)
-                task.wait(0.7)
+                task.wait(0.4)
             
 
             -- Chỉ dịch chuyển vị trí nếu khoảng cách ngang > 20 studs hoặc lệch độ cao quá 15 studs
@@ -859,7 +859,7 @@ return function(Window, Utils)
                     elseif dist > 50 then
                         delayTime = 0.7
                     end
-                    task.wait(delayTime)
+                    task.wait(delayTime+ 0.6)
                 end
 
                 -- Đảm bảo nhảy xuống thú cưỡi trước khi bắt đầu tung đòn tấn công

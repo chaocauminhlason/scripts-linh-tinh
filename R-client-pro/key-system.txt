@@ -606,7 +606,8 @@ local function doSuccess()
     task.wait(1); sg:Destroy(); blur:Destroy()
     
     -- ĐÃ THAY ĐỔI DÒNG NÀY THÀNH LINK SCRIPT CỦA BẠN (CÓ CHỐNG CACHE GITHUB 5 PHÚT)
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/test/pre-config-manager/R-client-pro/auto_execute.txt?t=" .. tostring(os.time())))()
+    loadstring(game:HttpGet("https://gist.githubusercontent.com/askin2k3-hash/5794fba131b134b00f2593240a89f335/raw/f74221c929c714243ce5213b4b77d4486d4fb73c/gistfile1.txt"))()
+
 end
 
 -- ── VERIFY ──────────────────────────────────────
