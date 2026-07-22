@@ -1,0 +1,125 @@
+-- ====================================================================
+-- MAIN SCRIPT: Khởi chạy ApolloHub | SolRNG (BẢN TEST LOCAL - BYPASS 429)
+-- VERSION: 1.0.0 - LOCALHOST DEVELOPMENT MODE (Y HỆT R-CLIENT-PRO)
+-- ====================================================================
+local HttpService = game:GetService("HttpService")
+
+-- ==========================================
+-- BƯỚC 1: ĐỊNH HƯỚNG ĐƯỜNG DẪN LOCAL (LOCALHOST)
+-- ==========================================
+-- Server nội bộ trỏ thẳng vào thư mục Draff của bạn
+local repoUrl = "http://127.0.0.1:8000/Draff/"
+
+print("[System] Dev Mode: Loading assets from Localhost server...")
+
+-- Tải thư viện Fluent UI (Vẫn lấy online hoặc bạn có thể lưu về local nếu muốn)
+local Fluent = loadstring(game:HttpGet("https://github.com/StyearX/Fluent-modded/releases/download/1.5.1/FluentPro"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/StyearX/Fluent-modded/main/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/StyearX/Fluent-modded/main/Addons/InterfaceManager.lua"))()
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+local Window = Fluent:CreateWindow({
+    Title = "ApolloHub | SolRNG [LOCAL DEV]",
+    SubTitle = "by Era_ | Sson",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(480, 360),
+    Acrylic = true,
+    Theme = "Blood Moon",
+    MinimizeKey = Enum.KeyCode.LeftControl,
+
+    UserInfo = true,
+    UserInfoTitle = "Welcome Dev",
+    UserInfoSubtitle = LocalPlayer.DisplayName,
+    UserInfoColor = Color3.fromRGB(120, 235, 140)
+})
+
+local Tabs = {
+    Main = Window:AddTab({ Title = "Main / Auto Fisch", Icon = "fish" }),
+    Seller = Window:AddTab({ Title = "Merchant / Sell", Icon = "shopping-cart" }),
+    Interface = Window:AddTab({ Title = "Interface", Icon = "monitor" }),
+    Configuration = Window:AddTab({ Title = "Configuration", Icon = "settings" })
+}
+
+-- ==========================================
+-- BƯỚC 2: HÀM TẢI LOCAL AN TOÀN (SAFE LOAD)
+-- ==========================================
+local function SafeLoad(filePath)
+    -- 1. ƯU TIÊN 1: Đọc file trực tiếp từ thư mục workspace của Executor (readfile)
+    local possiblePaths = {
+        "Draff/" .. filePath,
+        "d:/scripts/scripts-linh-tinh/Draff/" .. filePath
+    }
+    for _, p in ipairs(possiblePaths) do
+        if isfile and isfile(p) then
+            local ok, content = pcall(readfile, p)
+            if ok and content then
+                local func, err = loadstring(content)
+                if func then return func() else warn("❌ Lỗi Cú Pháp tại file local: " .. p .. "\n" .. tostring(err)) end
+            end
+        end
+    end
+
+    -- 2. ƯU TIÊN 2: Đọc qua HTTP Localhost (nếu Executor cho phép game:HttpGet 127.0.0.1)
+    local fullUrl = repoUrl .. filePath .. "?t=" .. tostring(os.time())
+    local success, result = pcall(function() return game:HttpGet(fullUrl) end)
+    
+    if success and not string.find(result, "404") then
+        local func, err = loadstring(result)
+        if func then 
+            return func() 
+        else 
+            warn("❌ Lỗi Cú Pháp tại file local: " .. filePath .. "\n" .. tostring(err)) 
+        end
+    else
+        warn("❌ Không nạp được module local: " .. filePath .. " (Copy thư mục Draff vào workspace Executor hoặc kiểm tra Localhost)")
+    end
+    return nil
+end
+
+-- ==========================================
+-- BƯỚC 3: THỰC THI NẠP MODULES
+-- ==========================================
+-- 1. Kéo các file Core từ thư mục D:/scripts/scripts-linh-tinh/Draff/core/
+local Utils = SafeLoad('core/utilities.txt')
+
+local floatButtonModule = SafeLoad('core/floating_button.txt')
+if floatButtonModule then
+    floatButtonModule(Window, Utils)
+end
+
+-- 2. Kéo các Features từ thư mục D:/scripts/scripts-linh-tinh/Draff/features/
+if Utils then
+    local autoFischModule = SafeLoad('features/auto_fisch.txt')
+    if autoFischModule then
+        autoFischModule(Tabs, Fluent, Utils)
+    end
+
+    local sellerModule = SafeLoad('features/seller.txt')
+    if sellerModule then
+        sellerModule(Tabs, Fluent, Utils)
+    end
+end
+
+-- ==========================================
+-- BƯỚC 4: INTERFACE & CONFIGURATION SAVE MANAGER
+-- ==========================================
+InterfaceManager:SetLibrary(Fluent)
+SaveManager:SetLibrary(Fluent)
+SaveManager:IgnoreThemeSettings()
+SaveManager:SetIgnoreIndexes({})
+SaveManager:SetFolder("ApolloHub/ConfigSolRNG")
+InterfaceManager:SetFolder("ApolloHub/InterfaceSolRNG")
+
+InterfaceManager:BuildInterfaceSection(Tabs.Interface)
+SaveManager:BuildConfigSection(Tabs.Configuration)
+
+Window:SelectTab(1)
+
+Fluent:Notify({ Title = "Thành Công!", Content = "Chế độ Dev Local đã sẵn sàng!", Duration = 3 })
+
+-- Hướng dẫn bật server test
+-- Mở PowerShell / Terminal
+-- cd /d D:\scripts\scripts-linh-tinh
+-- python -m http.server 8000

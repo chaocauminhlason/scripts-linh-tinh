@@ -1,0 +1,52 @@
+-- ====================================================================
+-- MODULE: FLOATING BUTTON (DRAFF CORE UI)
+-- Tạo nút bấm nổi để Ẩn / Hiện giao diện Fluent Window
+-- ====================================================================
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+return function(Window, Utils)
+    local toggleGui = Instance.new("ScreenGui")
+    toggleGui.Name = "OpenUI"
+    toggleGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+    toggleGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    toggleGui.ResetOnSpawn = false
+
+    local mainBtn = Instance.new("TextButton")
+    mainBtn.Name = "OpenButton"
+    mainBtn.Parent = toggleGui
+    mainBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    mainBtn.BackgroundTransparency = 1
+    mainBtn.Position = UDim2.new(0.02, 0, 0.85, 0)
+    mainBtn.Size = UDim2.new(0, 64, 0, 64)
+    mainBtn.Text = ""
+    mainBtn.Visible = true
+    Instance.new("UICorner", mainBtn)
+
+    local frontImage = Instance.new("ImageLabel")
+    frontImage.Name = "StaticIcon"
+    frontImage.Parent = mainBtn
+    frontImage.Size = UDim2.fromOffset(55, 55)
+    frontImage.Position = UDim2.new(0.5, 0, 0.5, 0)
+    frontImage.AnchorPoint = Vector2.new(0.5, 0.5)
+    frontImage.BackgroundTransparency = 1
+    frontImage.Image = "rbxassetid://97157337923268"
+    frontImage.ZIndex = 1
+    Instance.new("UICorner", frontImage).CornerRadius = UDim.new(0.2, 0)
+
+    local uiOpen = true
+    mainBtn.MouseButton1Click:Connect(function()
+        uiOpen = not uiOpen
+        if uiOpen then
+            Window:Show()
+        else
+            Window:Hide()
+        end
+    end)
+
+    if Utils and type(Utils.MakeDraggable) == "function" then
+        Utils.MakeDraggable(mainBtn, mainBtn)
+    end
+
+    return toggleGui
+end

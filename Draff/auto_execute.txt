@@ -1,0 +1,53 @@
+-- =================================================================
+-- APOLLOHUB | SOL'S RNG (DRAFF PROJECT) - AUTO EXECUTE LOADER
+-- Hỗ trợ khóa chống chạy trùng lặp & bám dính khi chuyển server (queue_on_teleport)
+-- =================================================================
+if getgenv().ApolloHub_Draff_Running then 
+    warn("⏳ ApolloHub (Draff) đã hoạt động, chặn thực thi trùng lặp!")
+    return 
+end
+getgenv().ApolloHub_Draff_Running = true
+
+-- Khởi tạo đường dẫn GitHub
+local branch = "test/pre-config-manager" 
+local repoUrl = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/refs/heads/" .. branch .. "/Draff/"
+
+local mainScriptLink = repoUrl .. "main.txt"
+local autoExecLink = repoUrl .. "auto_execute.txt"
+
+-- Xuyên thủng cache GitHub (5 phút)
+local noCache = "?t=" .. tostring(os.time())
+
+-- 1. BÁM DÍNH VĨNH CỬU KHI TELEPORT / CHUYỂN SERVER (QUEUE ON TELEPORT)
+local executeCode = [[
+    if not game:IsLoaded() then game.Loaded:Wait() end
+    pcall(function()
+        loadstring(game:HttpGet("]] .. autoExecLink .. noCache .. [["))()
+    end)
+]]
+
+local queueFunc = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport) or getgenv().queue_on_teleport
+
+if queueFunc then
+    pcall(function() queueFunc(executeCode) end)
+end
+
+-- 2. NẠP VÀ THỰC THI MAIN SCRIPT Ở SERVER HIỆN TẠI
+task.spawn(function()
+    local success, result = pcall(function() 
+        return game:HttpGet(mainScriptLink .. noCache) 
+    end)
+    
+    if success then
+        local func, err = loadstring(result)
+        if func then 
+            func() -- Thực thi main.txt
+        else 
+            warn("❌ [ApolloHub] Lỗi cú pháp tại main.txt:\n" .. tostring(err)) 
+        end
+    else
+        warn("❌ [ApolloHub] Không kết nối được với GitHub! Kiểm tra lại đường dẫn/mạng.")
+    end
+end)
+
+print("🚀 [ApolloHub | Draff] Khởi chạy thành công loader (Nhánh: " .. branch .. ")!")
