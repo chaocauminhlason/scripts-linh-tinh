@@ -29,16 +29,18 @@ function Utils.SafeLoad(filePath)
     
     -- 2. Thử đọc từ Localhost Web Server (nếu đang chạy Local Dev)
     if not content then
-        local localUrl = "http://127.0.0.1:8002/Draff/" .. filePath .. "?t=" .. tostring(os.time())
-        local ok, data = pcall(game.HttpGet, game, localUrl)
-        if ok and data and not string.find(data, "404") then content = data end
+        for _, port in ipairs({8000, 8002}) do
+            local localUrl = "http://127.0.0.1:" .. port .. "/Draff/" .. filePath .. "?t=" .. tostring(os.time())
+            local ok, data = pcall(game.HttpGet, game, localUrl)
+            if ok and data and not string.find(data, "404") then content = data break end
+        end
     end
 
     -- 3. Nếu không thấy file cục bộ / localhost, nạp qua GitHub repository (online)
     if not content then
-        local rawUrl = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/main/Draff/" .. filePath
+        local rawUrl = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/test/pre-config-manager/Draff/" .. filePath .. "?t=" .. tostring(os.time())
         local ok, data = pcall(game.HttpGet, game, rawUrl)
-        if ok and data then content = data end
+        if ok and data and not string.find(data, "404") then content = data end
     end
     
     if content then
