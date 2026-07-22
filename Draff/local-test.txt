@@ -7,8 +7,8 @@ local HttpService = game:GetService("HttpService")
 -- ==========================================
 -- BƯỚC 1: ĐỊNH HƯỚNG ĐƯỜNG DẪN LOCAL (LOCALHOST)
 -- ==========================================
--- Server nội bộ trỏ thẳng vào thư mục Draff của bạn
 local repoUrl = "http://127.0.0.1:8000/Draff/"
+local noCache = "?t=" .. tostring(os.time())
 
 print("[System] Dev Mode: Loading assets from Localhost server...")
 
@@ -62,10 +62,10 @@ local function SafeLoad(filePath)
     end
 
     -- 2. ƯU TIÊN 2: Đọc qua HTTP Localhost (nếu Executor cho phép game:HttpGet 127.0.0.1)
-    local fullUrl = repoUrl .. filePath .. "?t=" .. tostring(os.time())
+    local fullUrl = repoUrl .. filePath .. noCache
     local success, result = pcall(function() return game:HttpGet(fullUrl) end)
     
-    if success and not string.find(result, "404") then
+    if success and result and not string.find(result, "404") then
         local func, err = loadstring(result)
         if func then 
             return func() 
@@ -75,11 +75,15 @@ local function SafeLoad(filePath)
     end
 
     -- 3. ƯU TIÊN 3: Đọc online qua GitHub Raw Repository (Dự phòng giống R-client-pro)
-    local rawUrl = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/refs/heads/test/pre-config-manager/Draff/" .. filePath .. "?t=" .. tostring(os.time())
-    local ok, data = pcall(game.HttpGet, game, rawUrl)
-    if ok and data and not string.find(data, "404") then
-        local func, err = loadstring(data)
-        if func then return func() else warn("❌ Lỗi Cú Pháp tại file online: " .. filePath .. "\n" .. tostring(err)) end
+    local rawUrl = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/refs/heads/test/pre-config-manager/Draff/" .. filePath .. noCache
+    local success2, result2 = pcall(function() return game:HttpGet(rawUrl) end)
+    if success2 and result2 and not string.find(result2, "404") then
+        local func, err = loadstring(result2)
+        if func then 
+            return func() 
+        else 
+            warn("❌ Lỗi Cú Pháp tại file online: " .. filePath .. "\n" .. tostring(err)) 
+        end
     end
 
     warn("❌ Không nạp được module: " .. filePath)

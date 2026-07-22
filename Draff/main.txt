@@ -30,7 +30,7 @@ end
 if not Utils then
     for _, port in ipairs({8000, 8002}) do
         local localUrl = "http://127.0.0.1:" .. port .. "/Draff/core/utilities.txt?t=" .. tostring(os.time())
-        local ok, content = pcall(game.HttpGet, game, localUrl)
+        local ok, content = pcall(function() return game:HttpGet(localUrl) end)
         if ok and content and not string.find(content, "404") then
             local func = loadstring(content)
             if func then Utils = func() break end
@@ -40,7 +40,7 @@ end
 
 if not Utils then
     local rawUrl = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/refs/heads/test/pre-config-manager/Draff/core/utilities.txt?t=" .. tostring(os.time())
-    local ok, content = pcall(game.HttpGet, game, rawUrl)
+    local ok, content = pcall(function() return game:HttpGet(rawUrl) end)
     if ok and content and not string.find(content, "404") then
         local func = loadstring(content)
         if func then Utils = func() end
