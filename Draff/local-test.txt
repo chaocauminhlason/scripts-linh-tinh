@@ -51,15 +51,20 @@ local function SafeLoad(filePath)
     -- Đọc file trực tiếp qua HTTP Localhost, tốc độ gần như bằng 0ms
     local success, result = pcall(function() return game:HttpGet(fullUrl) end)
     
-    if success and not string.find(result, "404") then
+    if success and result and not string.find(result, "404") then
         local func, err = loadstring(result)
         if func then 
-            return func() 
+            local okExec, resExec = pcall(func)
+            if okExec then
+                return resExec
+            else
+                warn("❌ Lỗi Thực Thi tại file local: " .. filePath .. "\n" .. tostring(resExec))
+            end
         else 
             warn("❌ Lỗi Cú Pháp tại file local: " .. filePath .. "\n" .. tostring(err)) 
         end
     else
-        warn("❌ Không kết nối được Local Server hoặc sai đường dẫn: " .. fullUrl)
+        warn("❌ Không kết nối được Local Server hoặc sai đường dẫn: " .. fullUrl .. " | Output: " .. tostring(result))
     end
     return nil
 end
