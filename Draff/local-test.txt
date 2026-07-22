@@ -72,9 +72,17 @@ local function SafeLoad(filePath)
         else 
             warn("❌ Lỗi Cú Pháp tại file local: " .. filePath .. "\n" .. tostring(err)) 
         end
-    else
-        warn("❌ Không nạp được module local: " .. filePath .. " (Copy thư mục Draff vào workspace Executor hoặc kiểm tra Localhost)")
     end
+
+    -- 3. ƯU TIÊN 3: Đọc online qua GitHub Raw Repository (Dự phòng giống R-client-pro)
+    local rawUrl = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/refs/heads/test/pre-config-manager/Draff/" .. filePath .. "?t=" .. tostring(os.time())
+    local ok, data = pcall(game.HttpGet, game, rawUrl)
+    if ok and data and not string.find(data, "404") then
+        local func, err = loadstring(data)
+        if func then return func() else warn("❌ Lỗi Cú Pháp tại file online: " .. filePath .. "\n" .. tostring(err)) end
+    end
+
+    warn("❌ Không nạp được module: " .. filePath)
     return nil
 end
 
