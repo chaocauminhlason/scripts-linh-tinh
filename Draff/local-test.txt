@@ -38,6 +38,7 @@ local Window = Fluent:CreateWindow({
 local Tabs = {
     Main = Window:AddTab({ Title = "Main / Auto Fisch", Icon = "fish" }),
     Seller = Window:AddTab({ Title = "Merchant / Sell", Icon = "shopping-cart" }),
+    Optimization = Window:AddTab({ Title = "Optimization", Icon = "zap" }),
     Interface = Window:AddTab({ Title = "Interface", Icon = "monitor" }),
     Configuration = Window:AddTab({ Title = "Configuration", Icon = "settings" })
 }
@@ -89,6 +90,11 @@ if Utils then
     local sellerModule = SafeLoad('features/seller.txt')
     if sellerModule then
         sellerModule(Tabs, Fluent, Utils)
+    end
+
+    local optimizationModule = SafeLoad('features/optimization.txt')
+    if optimizationModule then
+        optimizationModule(Tabs, Fluent, Utils)
     end
 end
 

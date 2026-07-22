@@ -1,95 +1,196 @@
 -- ====================================================================
--- MODULE: AUTO FISCH (SOL'S RNG MINIGAME RADAR & AUTO CLICKER)
--- Tự động theo dõi thanh Minigame và thực hiện nhấp chuột an toàn
+-- MODULE: AUTO FISCH MASTER (SOL'S RNG AUTOMATED FISHING ENGINE)
+-- Đường Dẫn Tĩnh Chuẩn Xác 100% (Roblox MCP Verified)
 -- ====================================================================
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local GuiService = game:GetService("GuiService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 local LocalPlayer = Players.LocalPlayer
 
 return function(Tabs, Fluent, Utils)
-    getgenv().TargetTrackerOnly = false
+    getgenv().AutoFishingMaster = false
 
-    local cachedObj1 = nil
-    local cachedObj2 = nil
+    local lastCastTime = 0
+    local lastXClickTime = 0
 
-    local function getMinigameBarsCached(mainUI)
-        if cachedObj1 and cachedObj2 and cachedObj1.Parent and cachedObj2.Parent and cachedObj1.Visible and cachedObj2.Visible then
-            return cachedObj1, cachedObj2
+    --------------------------------------------------------------------------------
+    -- HELPER INPUT FUNCTIONS
+    --------------------------------------------------------------------------------
+    local function fastSingleClick(x, y)
+        VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 0)
+        task.wait(0.005)
+        VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 0)
+    end
+
+    local function clickButtonObject(btn)
+        if not btn or not btn.Visible or btn.AbsoluteSize.X == 0 then return end
+        local pos = btn.AbsolutePosition
+        local size = btn.AbsoluteSize
+        local inset = GuiService:GetGuiInset()
+
+        local cx = pos.X + size.X / 2 + inset.X
+        local cy = pos.Y + size.Y / 2 + inset.Y
+
+        VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, true, game, 0)
+        task.wait(0.03)
+        VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, false, game, 0)
+
+        pcall(function()
+            if getconnections then
+                for _, c in ipairs(getconnections(btn.MouseButton1Down)) do c:Fire() end
+                for _, c in ipairs(getconnections(btn.MouseButton1Up)) do c:Fire() end
+                for _, c in ipairs(getconnections(btn.MouseButton1Click)) do c:Fire() end
+                for _, c in ipairs(getconnections(btn.Activated)) do c:Fire() end
+            end
+            if firesignal then
+                firesignal(btn.MouseButton1Down)
+                firesignal(btn.MouseButton1Up)
+                firesignal(btn.MouseButton1Click)
+                firesignal(btn.Activated)
+            end
+        end)
+    end
+
+    --------------------------------------------------------------------------------
+    -- THUẬT TOÁN LẤY ĐƯỜNG DẪN TĨNH CHUẨN XÁC MCP VERIFIED
+    --------------------------------------------------------------------------------
+    local function getStaticUIElements()
+        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+        local mainUI = playerGui and playerGui:FindFirstChild("MainInterface")
+        if not mainUI then return nil, nil, nil, nil end
+
+        local MainContainer = mainUI:FindFirstChild("ImageLabel")
+        if not MainContainer then return nil, nil, nil, nil end
+
+        local FishButton = MainContainer:FindFirstChild("ImageLabel") 
+            and MainContainer.ImageLabel:FindFirstChild("ImageLabel") 
+            and MainContainer.ImageLabel.ImageLabel:FindFirstChild("ImageButton")
+
+        local ExitButton = MainContainer:FindFirstChild("ImageLabel") 
+            and MainContainer.ImageLabel:FindFirstChild("ImageButton")
+
+        local MinigameFrame = MainContainer:FindFirstChild("ImageLabel") 
+            and MainContainer.ImageLabel:FindFirstChild("ImageLabel") 
+            and MainContainer.ImageLabel.ImageLabel:FindFirstChild("ImageLabel")
+
+        local targetBar, forceBar = nil, nil
+        if MinigameFrame and MinigameFrame.Visible and MinigameFrame.AbsoluteSize.X > 0 then
+            for _, child in ipairs(MinigameFrame:GetChildren()) do
+                if child:IsA("ImageLabel") and child.Visible and child.AbsoluteSize.X > 0 then
+                    if math.abs(child.Size.X.Scale - 0.16) < 0.05 then
+                        targetBar = child
+                    elseif child.Position.X.Scale == 0 then
+                        forceBar = child
+                    end
+                end
+            end
         end
 
-        cachedObj1 = nil
-        cachedObj2 = nil
+        return FishButton, ExitButton, targetBar, forceBar
+    end
 
-        if not mainUI then return nil, nil end
+    --------------------------------------------------------------------------------
+    -- STATE MACHINE ENGINE PROCESSOR
+    --------------------------------------------------------------------------------
+    local function processAutoFishingStateMachine()
+        if not getgenv().AutoFishingMaster then return end
 
-        for _, desc in ipairs(mainUI:GetDescendants()) do
-            if desc:IsA("ImageLabel") and desc.Visible then
-                local children = desc:GetChildren()
-                local foundTarget = nil
-                local foundForce = nil
+        local now = tick()
+        local fishBtn, xBtn, targetBar, forceBar = getStaticUIElements()
 
-                for _, child in ipairs(children) do
-                    if child:IsA("ImageLabel") then
-                        if math.abs(child.Size.X.Scale - 0.16) < 0.02 then
-                            foundTarget = child
-                        elseif child.Position.X.Scale == 0 and math.abs(child.Size.Y.Scale - 0.2) < 0.05 then
-                            foundForce = child
+        -- 1. THÀNH PHẦN 1: Minigame Tracker (Ưu tiên 1 khi thanh Minigame đang HIỆN)
+        if targetBar and forceBar and targetBar.Visible and forceBar.Visible then
+            local forceLength = forceBar.Size.X.Scale
+            if forceLength < 0.98 then
+                local targetPos = targetBar.Position.X.Scale
+                local targetWidth = targetBar.Size.X.Scale or 0.16
+                local targetQuarter = targetPos + (targetWidth / 4)
+
+                if forceLength < targetQuarter then
+                    fastSingleClick(400, 300)
+                end
+                return
+            end
+        end
+
+        -- 2. THÀNH PHẦN 2: Nút Fish Thả Cần Câu Mới (Ưu tiên 2 khi Nút Fish đang HIỆN)
+        if fishBtn and fishBtn.Visible and fishBtn.AbsoluteSize.X > 0 and now - lastCastTime > 1.2 then
+            lastCastTime = now
+            pcall(function()
+                clickButtonObject(fishBtn)
+
+                -- Direct ByteNet Packet Backup
+                local FishingPacket = require(ReplicatedStorage.Packets.Fishing)
+                local FishingPoints = workspace.Map.Miscs.FishingPoints
+                local playerPos = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character.HumanoidRootPart.Position
+
+                if playerPos then
+                    for _, spot in ipairs(FishingPoints:GetChildren()) do
+                        if spot:IsA("Model") then
+                            local p = spot:GetPivot().Position
+                            if (p - playerPos).Magnitude < 15 then
+                                local spotId = spot:GetAttribute("spotId")
+                                if spotId then 
+                                    FishingPacket.start.send(spotId) 
+                                end
+                                break
+                            end
                         end
                     end
                 end
 
-                if foundTarget and foundForce then
-                    cachedObj1 = foundTarget
-                    cachedObj2 = foundForce
-                    return cachedObj1, cachedObj2
-                end
-            end
+                print("[Auto-Fishing] 🎣 Đã thả cần câu mới!")
+            end)
+            return
         end
 
-        return nil, nil
-    end
+        -- 3. THÀNH PHẦN 3: Nút X Đóng Bảng Kết Quả (Chỉ click Nút X khi KHÔNG trong Minigame và KHÔNG thấy Nút Fish)
+        local minigameActive = (targetBar and targetBar.Visible) or (forceBar and forceBar.Visible)
+        local fishBtnActive = (fishBtn and fishBtn.Visible and fishBtn.AbsoluteSize.X > 0)
 
-    local function processTargetTracking()
-        if not getgenv().TargetTrackerOnly then return end
-
-        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-        local mainUI = playerGui and playerGui:FindFirstChild("MainInterface")
-        if not mainUI then return end
-
-        local obj1, obj2 = getMinigameBarsCached(mainUI)
-
-        if obj1 and obj2 and obj1.Visible and obj2.Visible then
-            local targetPos = obj1.Position.X.Scale
-            local targetWidth = obj1.Size.X.Scale or 0.16
-            local targetQuarter = targetPos + (targetWidth / 4)
-            local forceLength = obj2.Size.X.Scale
-
-            if forceLength < targetQuarter then
-                if Utils and type(Utils.ThrottledClick) == "function" then
-                    Utils.ThrottledClick(400, 300)
-                end
+        if not minigameActive and not fishBtnActive then
+            if xBtn and xBtn.Visible and xBtn.AbsoluteSize.X > 0 and now - lastXClickTime > 0.4 then
+                lastXClickTime = now
+                pcall(function()
+                    clickButtonObject(xBtn)
+                end)
+                print("[Auto-Fishing] ❌ Đã click Nút X đóng Bảng Kết Quả!")
+                return
             end
         end
     end
 
     --------------------------------------------------------------------------------
-    -- TAB CONTROLS
+    -- TAB CONTROLS & EVENT BINDINGS
     --------------------------------------------------------------------------------
-    local AutoFischToggle = Tabs.Main:AddToggle("AutoFischToggle", { Title = "Auto Fisch", Default = false })
+    local AutoFischToggle = Tabs.Main:AddToggle("AutoFischToggle", { Title = "Auto Fisch (Auto Câu Cá Tự Động)", Default = false })
 
     AutoFischToggle:OnChanged(function()
-        getgenv().TargetTrackerOnly = AutoFischToggle.Value
+        getgenv().AutoFishingMaster = AutoFischToggle.Value
         
-        if getgenv().TargetTrackerConnection1 then 
-            getgenv().TargetTrackerConnection1:Disconnect() 
-            getgenv().TargetTrackerConnection1 = nil
+        -- Hủy các kết nối lặp cũ
+        if getgenv().AutoFishingConnection1 then 
+            getgenv().AutoFishingConnection1:Disconnect() 
+            getgenv().AutoFishingConnection1 = nil
+        end
+        if getgenv().AutoFishingConnection2 then 
+            getgenv().AutoFishingConnection2:Disconnect() 
+            getgenv().AutoFishingConnection2 = nil
         end
 
+        -- Reset Cache khi bật/tắt công tắc
+        lastCastTime = 0
+        lastXClickTime = 0
+
         if AutoFischToggle.Value then
-            getgenv().TargetTrackerConnection1 = RunService.RenderStepped:Connect(processTargetTracking)
-            Fluent:Notify({ Title = "Auto Fisch", Content = "Started with 120ms safety click limit.", Duration = 2 })
+            -- Chạy song song RenderStepped & Heartbeat đạt 120Hz mượt mà
+            getgenv().AutoFishingConnection1 = RunService.RenderStepped:Connect(processAutoFishingStateMachine)
+            getgenv().AutoFishingConnection2 = RunService.Heartbeat:Connect(processAutoFishingStateMachine)
+            Fluent:Notify({ Title = "Auto Fisch", Content = "Đã khởi chạy Auto Câu Cá Tự Động (Static Paths).", Duration = 3 })
         else
-            Fluent:Notify({ Title = "Auto Fisch", Content = "Stopped completely.", Duration = 2 })
+            Fluent:Notify({ Title = "Auto Fisch", Content = "Đã dừng Auto Câu Cá.", Duration = 2 })
         end
     end)
 end
