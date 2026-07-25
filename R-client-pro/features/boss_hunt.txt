@@ -13,6 +13,7 @@ local SPECIAL_BOSS_MAPPING = {
     [10] = { "Stellar Sentinel" },
     [11] = { "Bull Lord" },
     [12] = { "Capshark", "Crabblaze" },
+    [13] = { "Venofrog" }
 }
 
 local WORLD_BOSS_MAPPING = {

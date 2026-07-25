@@ -1,6 +1,6 @@
 -- ====================================================================
 -- MODULE: AUTO FISCH MASTER (SOL'S RNG AUTOMATED FISHING ENGINE)
--- Đường Dẫn Tĩnh Chuẩn Xác 100% (Roblox MCP Verified)
+-- Tích Hợp Kiểm Tra Trạng Thái Nhân Vật: Motor6D + Animations (>= 2 Tracks) + GUI
 -- ====================================================================
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -28,15 +28,26 @@ return function(Tabs, Fluent, Utils)
         if not btn or not btn.Visible or btn.AbsoluteSize.X == 0 then return end
         local pos = btn.AbsolutePosition
         local size = btn.AbsoluteSize
-        local inset = GuiService:GetGuiInset()
+        local guiInset = GuiService:GetGuiInset()
 
-        local cx = pos.X + size.X / 2 + inset.X
-        local cy = pos.Y + size.Y / 2 + inset.Y
+        local cx = math.floor(pos.X + size.X / 2)
+        local cy = math.floor(pos.Y + size.Y / 2 + guiInset.Y)
 
-        VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, true, game, 0)
-        task.wait(0.03)
-        VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, false, game, 0)
+        -- 1. CLICK CHUỘT DÀNH CHO PC (Windows / Mac)
+        pcall(function()
+            VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, true, game, 0)
+            task.wait(0.03)
+            VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, false, game, 0)
+        end)
 
+        -- 2. CHẠM MÀN HÌNH DÀNH CHO MOBILE (iOS / Android / Tablet)
+        pcall(function()
+            VirtualInputManager:SendTouchEvent(1, 0, cx, cy, game) -- Touch Down
+            task.wait(0.03)
+            VirtualInputManager:SendTouchEvent(1, 2, cx, cy, game) -- Touch Up
+        end)
+
+        -- 3. TÍN HIỆU GIAO DIỆN LƯU THÔNG (GuiButton Signals)
         pcall(function()
             if getconnections then
                 for _, c in ipairs(getconnections(btn.MouseButton1Down)) do c:Fire() end
@@ -54,41 +65,244 @@ return function(Tabs, Fluent, Utils)
     end
 
     --------------------------------------------------------------------------------
-    -- THUẬT TOÁN LẤY ĐƯỜNG DẪN TĨNH CHUẨN XÁC MCP VERIFIED
+    -- HÀM KIỂM TRA NHÂN VẬT CÓ ĐANG THẢ CẦN CÂU HAY KHÔNG (MOTOR6D + SIBLING 3 EXIT + GUI + ANIMATIONS + MINIGAME)
     --------------------------------------------------------------------------------
-    local function getStaticUIElements()
+    local function isCharacterFishing()
+        local char = LocalPlayer.Character
+        if not char then return false end
+
+        -- 1. Kiểm tra Motor6D Cần Câu trên tay
+        local isHoldingRod = false
+        for _, desc in ipairs(char:GetDescendants()) do
+            if desc:IsA("Motor6D") and (desc.Part0.Name:find("Arm") or desc.Part1.Name == "Handle") then
+                isHoldingRod = true
+                break
+            end
+        end
+        if not isHoldingRod then return false end
+
+        -- 2. Kiểm tra Nút Anh Em 3 ("Exit" / "Rời khỏi") trong Container 54 -> Khung 4 -> Khung 1
+        local isExitSiblingVisible = false
         local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
         local mainUI = playerGui and playerGui:FindFirstChild("MainInterface")
-        if not mainUI then return nil, nil, nil, nil end
-
-        local MainContainer = mainUI:FindFirstChild("ImageLabel")
-        if not MainContainer then return nil, nil, nil, nil end
-
-        local FishButton = MainContainer:FindFirstChild("ImageLabel") 
-            and MainContainer.ImageLabel:FindFirstChild("ImageLabel") 
-            and MainContainer.ImageLabel.ImageLabel:FindFirstChild("ImageButton")
-
-        local ExitButton = MainContainer:FindFirstChild("ImageLabel") 
-            and MainContainer.ImageLabel:FindFirstChild("ImageButton")
-
-        local MinigameFrame = MainContainer:FindFirstChild("ImageLabel") 
-            and MainContainer.ImageLabel:FindFirstChild("ImageLabel") 
-            and MainContainer.ImageLabel.ImageLabel:FindFirstChild("ImageLabel")
-
-        local targetBar, forceBar = nil, nil
-        if MinigameFrame and MinigameFrame.Visible and MinigameFrame.AbsoluteSize.X > 0 then
-            for _, child in ipairs(MinigameFrame:GetChildren()) do
-                if child:IsA("ImageLabel") and child.Visible and child.AbsoluteSize.X > 0 then
-                    if math.abs(child.Size.X.Scale - 0.16) < 0.05 then
-                        targetBar = child
-                    elseif child.Position.X.Scale == 0 then
-                        forceBar = child
+        if mainUI then
+            local container54 = mainUI:GetChildren()[54] or mainUI:GetChildren()[57]
+            if not container54 or container54.Name ~= "ImageLabel" then
+                for _, child in ipairs(mainUI:GetChildren()) do
+                    if child.Name == "ImageLabel" and #child:GetChildren() >= 7 then
+                        container54 = child break
+                    end
+                end
+            end
+            if container54 and container54:GetChildren()[4] then
+                local frame4 = container54:GetChildren()[4]
+                local subFrame = frame4:GetChildren()[1]
+                if subFrame and subFrame:GetChildren()[4] then
+                    local exitSibling = subFrame:GetChildren()[4]
+                    if exitSibling:IsA("GuiObject") and exitSibling.Visible then
+                        isExitSiblingVisible = true
                     end
                 end
             end
         end
 
-        return FishButton, ExitButton, targetBar, forceBar
+        -- 3. Kiểm tra Animation Câu Cá (Animation1, Animation2, hoặc ID Roblox)
+        local isPlayingFishingAnim = false
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        local animator = hum and (hum:FindFirstChildOfClass("Animator") or hum)
+        local animCount = 0
+        if animator then
+            local tracks = animator:GetPlayingAnimationTracks()
+            animCount = #tracks
+            for _, t in ipairs(tracks) do
+                local animId = t.Animation and t.Animation.AnimationId or ""
+                if t.Name:find("Animation") or animId:find("180435571") or animId:find("180435792") then
+                    isPlayingFishingAnim = true
+                    break
+                end
+            end
+        end
+
+        -- 4. Kiểm tra GUI "Rời khỏi" / "Exit" & Minigame Tracker Active
+            -- 1. Nút X Đóng Bảng Kết Quả Cá (Định vị chuẩn 100% qua Khung "Đã bắt được cá")
+            local exitXBtn = nil
+            for _, desc in ipairs(mainUI:GetDescendants()) do
+                if desc:IsA("TextLabel") and (desc.Text:find("bắt được") or desc.Text:find("Caught") or desc.Text:find("Có được")) then
+                    local cardWindow = desc.Parent
+                    while cardWindow and cardWindow.Parent and cardWindow.Parent ~= mainUI do
+                        if cardWindow:IsA("GuiObject") and #cardWindow:GetChildren() >= 4 then
+                            break
+                        end
+                        cardWindow = cardWindow.Parent
+                    end
+                    if cardWindow then
+                        local btn = cardWindow:FindFirstChildOfClass("ImageButton")
+                        if btn and isElementTrulyVisible(btn) then
+                            exitXBtn = btn
+                            break
+                        end
+                    end
+                end
+            end
+
+            -- Backup tìm kiếm theo khung con trong Container 54/57
+            if not exitXBtn and container54 then
+                for _, child in ipairs(container54:GetChildren()) do
+                    if child:IsA("GuiObject") and child.Name == "ImageLabel" then
+                        local btn = child:FindFirstChildOfClass("ImageButton")
+                        if btn and isElementTrulyVisible(btn) then
+                            exitXBtn = btn
+                            break
+                        end
+                    end
+                end
+            end
+
+            local container54 = mainUI:GetChildren()[54] or mainUI:GetChildren()[57]
+        local isGuiCasting = false
+        local isMinigameActive = false
+        if mainUI then
+            for _, desc in ipairs(mainUI:GetDescendants()) do
+                if desc:IsA("TextLabel") and desc:IsA("GuiObject") and desc.Visible then
+                    local txt = desc.Text
+                    if txt == "Rời khỏi" or txt == "Exit" or txt:find("làn nước") or txt:find("gợn sóng") then
+                        isGuiCasting = true
+                        break
+                    end
+                end
+            end
+
+            local container54 = mainUI:GetChildren()[54] or mainUI:GetChildren()[57]
+            if container54 and container54:GetChildren()[5] and container54:GetChildren()[5]:IsA("GuiObject") and container54:GetChildren()[5].Visible then
+                isMinigameActive = true
+            end
+        end
+
+        return isHoldingRod and (isExitSiblingVisible or isGuiCasting or isPlayingFishingAnim or isMinigameActive or animCount >= 2)
+    end
+
+    --------------------------------------------------------------------------------
+    -- BỘ BỘ LỌC CHÍNH XÁC 100%: CLIPS DESCENDANTS + OFF-SCREEN BOUNDARY CHECKER
+    --------------------------------------------------------------------------------
+    local function isElementTrulyVisible(elem)
+        if not elem or not elem.Visible or elem.AbsoluteSize.X <= 0 or elem.AbsoluteSize.Y <= 0 then
+            return false
+        end
+
+        local elemPos = elem.AbsolutePosition
+        local elemSize = elem.AbsoluteSize
+
+        if elemPos.X < 0 or elemPos.Y < 0 then return false end
+
+        local current = elem.Parent
+        while current and current:IsA("GuiObject") do
+            if not current.Visible then return false end
+
+            if current.ClipsDescendants then
+                local pPos = current.AbsolutePosition
+                local pSize = current.AbsoluteSize
+
+                if (elemPos.X + elemSize.X < pPos.X) or (elemPos.X > pPos.X + pSize.X) or
+                   (elemPos.Y + elemSize.Y < pPos.Y) or (elemPos.Y > pPos.Y + pSize.Y) then
+                    return false
+                end
+            end
+            current = current.Parent
+        end
+
+        return true
+    end
+
+    --------------------------------------------------------------------------------
+    -- THUẬT TOÁN ĐỊNH VỊ CẢ 3 THÀNH PHẦN (HỖ TRỢ VIỆT NAM "Câu" & ANH "Fish")
+    --------------------------------------------------------------------------------
+    local function getFishingStatePointers()
+        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+        local mainUI = playerGui and playerGui:FindFirstChild("MainInterface")
+        if not mainUI then return nil, nil, nil, nil end
+
+        local container54 = mainUI:GetChildren()[54] or mainUI:GetChildren()[57]
+        if not container54 or container54.Name ~= "ImageLabel" then
+            for _, child in ipairs(mainUI:GetChildren()) do
+                if child.Name == "ImageLabel" and #child:GetChildren() >= 7 then
+                    container54 = child
+                    break
+                end
+            end
+        end
+
+        if not container54 then return nil, nil, nil, nil end
+
+        local children = container54:GetChildren()
+
+        -- 1. Nút X Đóng Bảng Kết Quả Cá (Định vị chuẩn 100% qua Khung "Đã bắt được cá")
+        local exitXBtn = nil
+        for _, desc in ipairs(mainUI:GetDescendants()) do
+            if desc:IsA("TextLabel") and (desc.Text:find("bắt được") or desc.Text:find("Caught") or desc.Text:find("Có được")) then
+                local cardWindow = desc.Parent
+                while cardWindow and cardWindow.Parent and cardWindow.Parent ~= mainUI do
+                    if cardWindow:IsA("GuiObject") and #cardWindow:GetChildren() >= 4 then
+                        break
+                    end
+                    cardWindow = cardWindow.Parent
+                end
+                if cardWindow then
+                    local btn = cardWindow:FindFirstChildOfClass("ImageButton")
+                    if btn and isElementTrulyVisible(btn) then
+                        exitXBtn = btn
+                        break
+                    end
+                end
+            end
+        end
+
+        -- 2. Khung Minigame Tracker (Khung 5)
+        local minigameFrame5 = children[5]
+        local targetBar, forceBar = nil, nil
+
+        if minigameFrame5 and isElementTrulyVisible(minigameFrame5) then
+            for _, desc in ipairs(minigameFrame5:GetDescendants()) do
+                if desc:IsA("ImageLabel") and isElementTrulyVisible(desc) then
+                    if math.abs(desc.Size.X.Scale - 0.16) < 0.05 then
+                        targetBar = desc
+                    elseif desc.Position.X.Scale == 0 and desc.Size.Y.Scale > 0.1 then
+                        forceBar = desc
+                    end
+                end
+            end
+        end
+
+        -- 3. Nút Fish / Câu (Khung 4 -> SubFrame -> Nút Anh Em 1 "Fish")
+        local frame4 = children[4]
+        local fishBtn = nil
+        if frame4 then
+            local subFrame = frame4:GetChildren()[1]
+            if subFrame then
+                -- Nút Anh Em 1 (Index 2 trong GetChildren) là Nút Fish
+                local fishSibling = subFrame:GetChildren()[2]
+                if fishSibling and fishSibling:IsA("GuiObject") and fishSibling.Visible then
+                    fishBtn = fishSibling
+                end
+            end
+
+            -- Backup tìm kiếm theo text
+            if not fishBtn then
+                for _, desc in ipairs(frame4:GetDescendants()) do
+                    if (desc:IsA("TextLabel") or desc:IsA("TextButton")) and desc.Visible then
+                        local txt = desc.Text
+                        if txt == "Fish" or txt == "Câu" or txt:find("Fish") or txt:find("Câu") then
+                            local btn = desc:IsA("ImageButton") or desc:IsA("TextButton") and desc or desc.Parent
+                            while btn and not (btn:IsA("ImageButton") or btn:IsA("TextButton")) do
+                                btn = btn.Parent
+                            end
+                            if btn and btn.Visible then fishBtn = btn; break end
+                        end
+                    end
+                end
+            end
+        end
+
+        return fishBtn, exitXBtn, targetBar, forceBar
     end
 
     --------------------------------------------------------------------------------
@@ -98,10 +312,10 @@ return function(Tabs, Fluent, Utils)
         if not getgenv().AutoFishingMaster then return end
 
         local now = tick()
-        local fishBtn, xBtn, targetBar, forceBar = getStaticUIElements()
+        local fishBtn, xBtn, targetBar, forceBar = getFishingStatePointers()
 
-        -- 1. THÀNH PHẦN 1: Minigame Tracker (Ưu tiên 1 khi thanh Minigame đang HIỆN)
-        if targetBar and forceBar and targetBar.Visible and forceBar.Visible then
+        -- 1. THÀNH PHẦN 1: Minigame Tracker (Kéo cá 120Hz)
+        if targetBar and forceBar and isElementTrulyVisible(targetBar) and isElementTrulyVisible(forceBar) then
             local forceLength = forceBar.Size.X.Scale
             if forceLength < 0.98 then
                 local targetPos = targetBar.Position.X.Scale
@@ -115,8 +329,20 @@ return function(Tabs, Fluent, Utils)
             end
         end
 
-        -- 2. THÀNH PHẦN 2: Nút Fish Thả Cần Câu Mới (Ưu tiên 2 khi Nút Fish đang HIỆN)
-        if fishBtn and fishBtn.Visible and fishBtn.AbsoluteSize.X > 0 and now - lastCastTime > 1.2 then
+        -- 2. THÀNH PHẦN 2: Nút X Đóng Bảng Kết Quả
+        if xBtn and isElementTrulyVisible(xBtn) and now - lastXClickTime > 0.3 then
+            lastXClickTime = now
+            pcall(function()
+                clickButtonObject(xBtn)
+                if fishBtn and isElementTrulyVisible(fishBtn) then clickButtonObject(fishBtn) end
+                fastSingleClick(400, 300)
+            end)
+            print("[Auto-Fishing] Đã click Nút X đóng Bảng Kết Quả!")
+            return
+        end
+
+        -- 3. THÀNH PHẦN 3: Nút Fish / Câu Thả Cần Câu Mới (Bấm khi không ở trạng thái thả cần)
+        if fishBtn and isElementTrulyVisible(fishBtn) and not isCharacterFishing() and now - lastCastTime > 1.5 then
             lastCastTime = now
             pcall(function()
                 clickButtonObject(fishBtn)
@@ -143,22 +369,6 @@ return function(Tabs, Fluent, Utils)
 
                 print("[Auto-Fishing] 🎣 Đã thả cần câu mới!")
             end)
-            return
-        end
-
-        -- 3. THÀNH PHẦN 3: Nút X Đóng Bảng Kết Quả (Chỉ click Nút X khi KHÔNG trong Minigame và KHÔNG thấy Nút Fish)
-        local minigameActive = (targetBar and targetBar.Visible) or (forceBar and forceBar.Visible)
-        local fishBtnActive = (fishBtn and fishBtn.Visible and fishBtn.AbsoluteSize.X > 0)
-
-        if not minigameActive and not fishBtnActive then
-            if xBtn and xBtn.Visible and xBtn.AbsoluteSize.X > 0 and now - lastXClickTime > 0.4 then
-                lastXClickTime = now
-                pcall(function()
-                    clickButtonObject(xBtn)
-                end)
-                print("[Auto-Fishing] ❌ Đã click Nút X đóng Bảng Kết Quả!")
-                return
-            end
         end
     end
 
@@ -185,10 +395,10 @@ return function(Tabs, Fluent, Utils)
         lastXClickTime = 0
 
         if AutoFischToggle.Value then
-            -- Chạy song song RenderStepped & Heartbeat đạt 120Hz mượt mà
+            -- Chạy song song RenderStepped & Heartbeat đạt 120Hz mượt màng
             getgenv().AutoFishingConnection1 = RunService.RenderStepped:Connect(processAutoFishingStateMachine)
             getgenv().AutoFishingConnection2 = RunService.Heartbeat:Connect(processAutoFishingStateMachine)
-            Fluent:Notify({ Title = "Auto Fisch", Content = "Đã khởi chạy Auto Câu Cá Tự Động (Static Paths).", Duration = 3 })
+            Fluent:Notify({ Title = "Auto Fisch", Content = "Đã khởi chạy Auto Câu Cá (Anim Tracks >= 2 Filter).", Duration = 3 })
         else
             Fluent:Notify({ Title = "Auto Fisch", Content = "Đã dừng Auto Câu Cá.", Duration = 2 })
         end

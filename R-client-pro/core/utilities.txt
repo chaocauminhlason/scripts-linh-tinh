@@ -846,7 +846,8 @@ local AreaData = {
     {id = 9, name = "Blossom Haven", category = "Săn Boss"},
     {id = 10, name = "Mobius Circus", category = "Săn Boss"},
     {id = 11, name = "Specter Shallows", category = "Săn Boss"},
-    {id = 12, name = "Nova Coast", category = "Săn Boss"}
+    {id = 12, name = "Nova Coast", category = "Săn Boss"},
+    {id=13, name= "Splash Isle", category = "Săn Boss"}
 }
 -- ==========================================
 -- 1.5 TẠO DROPDOWN ĐA CHỌN (BẢN LỌC - VERSION 2)
