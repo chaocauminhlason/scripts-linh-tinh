@@ -88,9 +88,9 @@ end
 --------------------------------------------------------------------------------
 -- 4. NẠP FEATURES MODULES
 --------------------------------------------------------------------------------
-local autoFischModule = Utils.SafeLoad("features/auto_fisch.txt")
-if autoFischModule then
-    autoFischModule(Tabs, Fluent, Utils)
+local autoFishModule = Utils.SafeLoad("features/auto_fish.txt") or Utils.SafeLoad("features/auto_fisch.txt")
+if autoFishModule then
+    autoFishModule(Tabs, Fluent, Utils)
 end
 
 local sellerModule = Utils.SafeLoad("features/seller.txt")

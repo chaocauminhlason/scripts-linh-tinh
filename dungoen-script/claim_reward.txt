@@ -34,21 +34,26 @@ local STAGES_WITH_BUFF = {
 -- ==========================================
 local PRIORITY_BUFF_LIST = {
     "Emergency Bandage", "Stun Immunity", "Reflect damage",
-    "Critical Damage IV", 
-    "Critical Damage III", 
-    "Critical Damage II", 
-    "Critical Damage I", 
+    "HP Boost IV", 
+    "HP Boost III", 
+    "HP Boost II", 
+    "HP Boost I", 
+    "Shield Effect I",
     "Attack IV", 
     "Attack III", 
     "Attack II", 
     "Attack I", 
-    "Critical I",
+    "Shield Effect IV",
+    "Shield Effect III",
+    "Shield Effect II",
+    "Critical Damage IV", 
+    "Critical Damage III", 
+    "Critical Damage II", 
+    "Critical Damage I", 
     "Critical IV", 
-    "HP Boost IV", "Shield Effect IV",
-    "Critical III", "HP Boost III", "Shield Effect III",
-    "Critical II", "HP Boost II", "Shield Effect II",
-    "HP Boost I", "Shield Effect I"
-
+    "Critical III", 
+    "Critical II", 
+    "Critical I"
 }
 
 local ITEM_DATA = {
@@ -101,7 +106,7 @@ local mainFrame = Instance.new("Frame")
 mainFrame.Size = UDim2.new(0, 400, 0, 280)
 mainFrame.Position = UDim2.new(0.05, 0, 0.2, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(18, 20, 26)
-mainFrame.BackgroundTransparency = 0
+mainFrame.BackgroundTransparency = 0.3 -- Thêm trong suốt 30%
 mainFrame.BorderSizePixel = 0
 mainFrame.ClipsDescendants = true
 mainFrame.Parent = screenGui
@@ -125,7 +130,7 @@ corner.Parent = mainFrame
 local header = Instance.new("Frame")
 header.Size = UDim2.new(1, 0, 0, 48)
 header.BackgroundColor3 = Color3.fromRGB(25, 28, 36)
-header.BackgroundTransparency = 0
+header.BackgroundTransparency = 0.3 -- Thêm trong suốt 30%
 header.BorderSizePixel = 0
 header.Parent = mainFrame
 
@@ -155,10 +160,10 @@ title.Font = Enum.Font.GothamBold
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.Parent = header
 
--- Nút toggle AUTO
+-- Nút toggle AUTO (Dịch sang trái một chút để nhường chỗ cho nút Thu Nhỏ)
 local toggleBtn = Instance.new("TextButton")
 toggleBtn.Size = UDim2.new(0, 100, 0, 32)
-toggleBtn.Position = UDim2.new(1, -112, 0, 8)
+toggleBtn.Position = UDim2.new(1, -146, 0, 8)
 toggleBtn.BackgroundColor3 = Color3.fromRGB(34, 197, 94)
 toggleBtn.BackgroundTransparency = 0
 toggleBtn.Text = "🔴 AUTO ON"
@@ -172,6 +177,23 @@ local toggleCorner = Instance.new("UICorner")
 toggleCorner.CornerRadius = UDim.new(0, 6)
 toggleCorner.Parent = toggleBtn
 
+-- Nút THU NHỎ / PHÓNG TO
+local minimizeBtn = Instance.new("TextButton")
+minimizeBtn.Size = UDim2.new(0, 32, 0, 32)
+minimizeBtn.Position = UDim2.new(1, -40, 0, 8)
+minimizeBtn.BackgroundColor3 = Color3.fromRGB(50, 55, 65)
+minimizeBtn.BackgroundTransparency = 0
+minimizeBtn.Text = "-"
+minimizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+minimizeBtn.TextSize = 18
+minimizeBtn.Font = Enum.Font.GothamBold
+minimizeBtn.BorderSizePixel = 0
+minimizeBtn.Parent = header
+
+local minimizeCorner = Instance.new("UICorner")
+minimizeCorner.CornerRadius = UDim.new(0, 6)
+minimizeCorner.Parent = minimizeBtn
+
 -- ==========================================
 -- STATUS BAR (thanh trạng thái)
 -- ==========================================
@@ -179,7 +201,7 @@ local statusBar = Instance.new("Frame")
 statusBar.Size = UDim2.new(1, -24, 0, 40)
 statusBar.Position = UDim2.new(0, 12, 0, 56)
 statusBar.BackgroundColor3 = Color3.fromRGB(30, 33, 42)
-statusBar.BackgroundTransparency = 0
+statusBar.BackgroundTransparency = 0.3 -- Thêm trong suốt 30%
 statusBar.BorderSizePixel = 0
 statusBar.Parent = mainFrame
 
@@ -214,7 +236,7 @@ local doorSection = Instance.new("Frame")
 doorSection.Size = UDim2.new(1, -24, 0, 160)
 doorSection.Position = UDim2.new(0, 12, 0, 104)
 doorSection.BackgroundColor3 = Color3.fromRGB(22, 25, 32)
-doorSection.BackgroundTransparency = 0
+doorSection.BackgroundTransparency = 0.3 -- Thêm trong suốt 30%
 doorSection.BorderSizePixel = 0
 doorSection.ClipsDescendants = true
 doorSection.Parent = mainFrame
@@ -227,7 +249,7 @@ doorCorner.Parent = doorSection
 local doorHeader = Instance.new("TextButton")
 doorHeader.Size = UDim2.new(1, 0, 0, 32)
 doorHeader.BackgroundColor3 = Color3.fromRGB(35, 38, 48)
-doorHeader.BackgroundTransparency = 0
+doorHeader.BackgroundTransparency = 0.3
 doorHeader.Text = "  🚪  ƯU TIÊN CỬA  ▼"
 doorHeader.TextColor3 = Color3.fromRGB(100, 255, 150)
 doorHeader.TextSize = 12
@@ -245,7 +267,7 @@ local doorScroll = Instance.new("ScrollingFrame")
 doorScroll.Size = UDim2.new(1, -8, 0, 120)
 doorScroll.Position = UDim2.new(0, 4, 0, 36)
 doorScroll.BackgroundColor3 = Color3.fromRGB(18, 20, 26)
-doorScroll.BackgroundTransparency = 0
+doorScroll.BackgroundTransparency = 0.3
 doorScroll.BorderSizePixel = 0
 doorScroll.ScrollBarThickness = 4
 doorScroll.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 120)
@@ -269,7 +291,7 @@ local buffSection = Instance.new("Frame")
 buffSection.Size = UDim2.new(1, -24, 0, 160)
 buffSection.Position = UDim2.new(0, 12, 0, 272)
 buffSection.BackgroundColor3 = Color3.fromRGB(22, 25, 32)
-buffSection.BackgroundTransparency = 0
+buffSection.BackgroundTransparency = 0.3 -- Thêm trong suốt 30%
 buffSection.BorderSizePixel = 0
 buffSection.ClipsDescendants = true
 buffSection.Parent = mainFrame
@@ -282,7 +304,7 @@ buffCorner.Parent = buffSection
 local buffHeader = Instance.new("TextButton")
 buffHeader.Size = UDim2.new(1, 0, 0, 32)
 buffHeader.BackgroundColor3 = Color3.fromRGB(35, 38, 48)
-buffHeader.BackgroundTransparency = 0
+buffHeader.BackgroundTransparency = 0.3
 buffHeader.Text = "  ✨  ƯU TIÊN BUFF  ▼"
 buffHeader.TextColor3 = Color3.fromRGB(255, 170, 0)
 buffHeader.TextSize = 12
@@ -300,7 +322,7 @@ local buffScroll = Instance.new("ScrollingFrame")
 buffScroll.Size = UDim2.new(1, -8, 0, 120)
 buffScroll.Position = UDim2.new(0, 4, 0, 36)
 buffScroll.BackgroundColor3 = Color3.fromRGB(18, 20, 26)
-buffScroll.BackgroundTransparency = 0
+buffScroll.BackgroundTransparency = 0.3
 buffScroll.BorderSizePixel = 0
 buffScroll.ScrollBarThickness = 4
 buffScroll.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 120)
@@ -322,8 +344,21 @@ buffLayout.Parent = buffScroll
 -- ==========================================
 local isDoorExpanded = true
 local isBuffExpanded = false
+local isMinimized = false
 
 local function UpdateUILayout()
+    if isMinimized then
+        mainFrame.Size = UDim2.new(0, 400, 0, 48)
+        statusBar.Visible = false
+        doorSection.Visible = false
+        buffSection.Visible = false
+        return
+    end
+
+    statusBar.Visible = true
+    doorSection.Visible = true
+    buffSection.Visible = true
+
     local currentY = 104 -- Vị trí bắt đầu của door section
     
     -- Door section
@@ -345,6 +380,13 @@ local function UpdateUILayout()
     -- Cập nhật kích thước main frame
     mainFrame.Size = UDim2.new(0, 400, 0, currentY)
 end
+
+-- Sự kiện click cho nút thu nhỏ
+minimizeBtn.MouseButton1Click:Connect(function()
+    isMinimized = not isMinimized
+    minimizeBtn.Text = isMinimized and "+" or "-"
+    UpdateUILayout()
+end)
 
 -- Sự kiện click cho door header
 doorHeader.MouseButton1Click:Connect(function()
@@ -413,7 +455,7 @@ local function CreateDragRow(index, name, isGhost, isHighlight)
         row.BackgroundTransparency = 0.3
     else
         row.BackgroundColor3 = Color3.fromRGB(35, 38, 48)
-        row.BackgroundTransparency = 0
+        row.BackgroundTransparency = 0.3 -- Đồng bộ trong suốt
     end
     
     row.BorderSizePixel = 0
@@ -506,7 +548,7 @@ local function UpdatePreviewUI(targetIndex)
     for _, child in ipairs(DragDrop.scrollFrame:GetChildren()) do
         if child:IsA("Frame") then
             child.BackgroundColor3 = Color3.fromRGB(35, 38, 48)
-            child.BackgroundTransparency = 0
+            child.BackgroundTransparency = 0.3
             -- Xóa highlight cũ
             local highlight = child:FindFirstChild("HighlightBorder")
             if highlight then highlight:Destroy() end
@@ -630,6 +672,9 @@ UpdateUILayout()
 -- ==========================================
 -- HÀM CHỌN BUFF (DÙNG REMOTE + AUTO SORT)
 -- ==========================================
+-- ==========================================
+-- HÀM CHỌN BUFF (DÙNG CLICK UI THỰC TẾ)
+-- ==========================================
 local function AutoPickBuff()
     local mainGui = player.PlayerGui:FindFirstChild("MainGui")
     local fmContent = mainGui and mainGui:FindFirstChild("AbyssSelectTalentView") and mainGui.AbyssSelectTalentView:FindFirstChild("AbyssSelectTalentView") and mainGui.AbyssSelectTalentView.AbyssSelectTalentView:FindFirstChild("FmContent")
@@ -645,12 +690,13 @@ local function AutoPickBuff()
 
     if #buffCells == 0 then return false end
 
-    -- Sắp xếp từ Trái -> Phải để lấy index chuẩn cho Remote (1, 2, 3)
+    -- Sắp xếp từ Trái -> Phải 
     table.sort(buffCells, function(a, b)
         return a.AbsolutePosition.X < b.AbsolutePosition.X
     end)
     
-    local bestIndex = 1 -- Mặc định chọn thẻ ngoài cùng bên trái nếu không cái nào khớp ưu tiên
+    local bestCell = buffCells[1] -- Mặc định lưu trữ luôn đối tượng UI của thẻ số 1
+    local bestIndex = 1 
     local bestScore = 999 
     local bestBuffName = "Không xác định"
     
@@ -670,6 +716,7 @@ local function AutoPickBuff()
                     if score < bestScore then 
                         bestScore = score
                         bestIndex = index 
+                        bestCell = itemCell -- Lưu lại thẻ UI tốt nhất
                         bestBuffName = buffName
                     end
                     break 
@@ -680,7 +727,7 @@ local function AutoPickBuff()
     
     -- Nếu không cái nào nằm trong danh sách ưu tiên, lấy tên của cái số 1 để in ra log
     if bestScore == 999 then
-        for _, child in pairs(buffCells[1]:GetDescendants()) do
+        for _, child in pairs(bestCell:GetDescendants()) do
             if child:IsA("TextLabel") and child.Name == "LabName" and child.Text ~= "" then 
                 bestBuffName = child.Text 
                 break
@@ -688,16 +735,27 @@ local function AutoPickBuff()
         end
     end
     
-    -- Bước 3: IN RA CONSOLE ĐỂ BẠN TEST
-    --print(string.format("✨ [AUTO BUFF] Quyết định chọn Buff: '%s' (Thẻ số %d)", bestBuffName, bestIndex))
+    -- Bước 3: In ra Log để kiểm tra
+    print("=========================================")
+    print("✨ [AUTO BUFF] Đã quét bảng UI thành công!")
+    print(string.format("✨ [AUTO BUFF] -> DÙNG CHUỘT CLICK: [%s] (Thẻ số %d)", bestBuffName, bestIndex))
+    print("=========================================")
     
-    -- Bước 4: GỌI THẲNG REMOTE (Tốc độ tức thời)
+    -- Bước 4: GIẢ LẬP CLICK CHUỘT ẢO VÀO THẺ UI (Bypass Remote)
     pcall(function()
-        local args = {
-            "AbyssSelectTalentChannel",
-            bestIndex
-        }
-        game:GetService("ReplicatedStorage"):WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc"):InvokeServer(unpack(args))
+        local GuiService = game:GetService("GuiService")
+        local guiInset = GuiService:GetGuiInset() -- Lấy độ dày của thanh Topbar Roblox (thường là 36 pixel)
+        
+        -- Tính tọa độ trung tâm (X, Y) của thẻ UI
+        local centerX = bestCell.AbsolutePosition.X + (bestCell.AbsoluteSize.X / 2)
+        -- Trục Y bắt buộc phải cộng thêm guiInset.Y để không click bị hụt lên trên
+        local centerY = bestCell.AbsolutePosition.Y + (bestCell.AbsoluteSize.Y / 2) + guiInset.Y
+        
+        -- Đưa lệnh bấm chuột trái xuống (0)
+        VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, true, game, 1)
+        task.wait(0.05) -- Nghỉ một nhịp ngắn
+        -- Thả chuột trái ra (Tạo thành thao tác Click hoàn chỉnh)
+        VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 1)
     end)
     
     return true
@@ -900,52 +958,70 @@ local function coreAutoSystem()
                     if hum then
                         local timeout = tick() + 6
                         local lastMoveCall = tick()
+                        local walkTimer = tick()
                         
+                        -- 1. DI CHUYỂN & ÉP TỌA ĐỘ
                         repeat
                             if tick() - lastMoveCall > 0.5 then
                                 hum:MoveTo(targetPos)
                                 lastMoveCall = tick()
                             end
+                            -- Lớp bảo vệ 1: Đi bộ 3s mà kẹt cầu thang/quái thì Teleport thẳng tới mặt cột
+                            if tick() - walkTimer > 3 then
+                                rootPart.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0))
+                            end
                             task.wait(0.03)
-                        until (rootPart.Position - targetPos).Magnitude < 4 or tick() > timeout
-                        hum:MoveTo(rootPart.Position)
+                        until (rootPart.Position - targetPos).Magnitude < 5 or tick() > timeout
                         
-                        task.wait(0.05) 
-                        logTalent.Text = "TALENT: ĐANG MỞ BẢNG BUFF..."
+                        hum:MoveTo(rootPart.Position) -- Đứng lại
+                        task.wait(0.1) 
+                        statusText.Text = "TALENT: ĐANG MỞ BẢNG BUFF..."
                         
-                        -- ===== THÊM LOGIC RETRY NHẬN BUFF CHỐNG MISS =====
+                        -- Tìm vòng tròn E (ProximityPrompt) để lát nữa kích hoạt thẳng
+                        local prompt = doGUI:FindFirstChildWhichIsA("ProximityPrompt", true)
+                        if not prompt and doGUI.Parent then
+                            prompt = doGUI.Parent:FindFirstChildWhichIsA("ProximityPrompt", true)
+                        end
+                        
+                        -- 2. LOGIC ÉP NHẬN BUFF CHỐNG MISS
                         local isBuffClaimed = false
-                        local buffRetryTimeout = tick() + 5 -- Cho phép thử lại tối đa 5 giây để tránh kẹt vĩnh viễn
+                        local buffRetryTimeout = tick() + 6 -- Thử tối đa 6 giây
                         
                         while tick() < buffRetryTimeout do
-                            -- 1. Nhấn E để mở bảng
+                            -- Lớp bảo vệ 2: Chọc thẳng vào vòng tròn E (Tỷ lệ mở UI 100% nếu kề sát)
+                            if prompt and fireproximityprompt then
+                                pcall(function() fireproximityprompt(prompt) end)
+                            end
+                            
+                            -- Giả lập bấm phím E (Làm dự phòng)
                             VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
                             task.wait(0.05)
                             VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
                             
-                            -- 2. Đợi 0.3s cho UI kịp render (khi lag)
-                            task.wait(0.3) 
+                            task.wait(0.3) -- Đợi UI mở
                             
-                            -- 3. Kiểm tra xem có nhận được buff không
+                            -- Quét UI và nhặt buff
                             if AutoPickBuff() then
                                 isBuffClaimed = true
-                                break -- Đã click thành công -> Thoát vòng lặp
+                                task.wait(0.5) -- Chờ server load buff xong mới chạy
+                                break 
                             end
-                            
-                            -- Nếu chưa click được (UI chưa mở), lặp lại việc nhấn E
-                            task.wait(0.2)
                         end
                         
-                        -- Chốt kết quả
+                        -- 3. CHỐT KẾT QUẢ VÀ CHỐNG KÉO NGƯỢC (TUG-OF-WAR)
                         if isBuffClaimed then
-                            logTalent.Text = "TALENT: ĐÃ LẤY XONG.\nRA CỬA!"
-                            logTalent.TextColor3 = Color3.fromRGB(0, 255, 100)
+                            statusText.Text = "TALENT: ĐÃ LẤY XONG.\nRA CỬA!"
+                            statusText.TextColor3 = Color3.fromRGB(0, 255, 100)
                         else
-                            -- Fallback: Nếu lag quá 5 giây mà không lấy được, tự động bỏ qua để khỏi kẹt phòng
-                            logTalent.Text = "TALENT: LỖI BẢNG BUFF!\nÉP BỎ QUA RA CỬA."
-                            logTalent.TextColor3 = Color3.fromRGB(255, 100, 100)
+                            statusText.Text = "TALENT: TRỤ LỖI!\nĐÃ XÓA TRỤ, CHẠY RA CỬA."
+                            statusText.TextColor3 = Color3.fromRGB(255, 100, 100)
+                            
+                            -- Lớp bảo vệ 3: Xóa sổ cột buff lỗi để AI nội bộ của game không giật lùi nhân vật lại nữa
+                            -- pcall(function()
+                            --     if doGUI then doGUI:Destroy() end
+                            --     if prompt then prompt:Destroy() end
+                            -- end)
                         end
-                        -- =================================================
                     end
                 else
                     statusText.Text = "TALENT: LỖI TỌA ĐỘ TRỤ."
@@ -982,8 +1058,9 @@ local function coreAutoSystem()
         end
         isWaitingForTeleport = true
         _G.IsWaitingOnDoor = true 
-        logDoor.Text = "CỬA: ĐANG ĐỨNG CHỜ TELEPORT..."
-        logDoor.TextColor3 = Color3.fromRGB(0, 255, 255)
+        
+        statusText.Text = "CỬA: ĐANG ĐỨNG CHỜ TELEPORT..."
+        statusText.TextColor3 = Color3.fromRGB(0, 255, 255)
 
         -- ==========================================
         -- BẮT ĐẦU ÉP CHẶT VỊ TRÍ CHỐNG AI GAME KÉO 
@@ -991,19 +1068,14 @@ local function coreAutoSystem()
         if hum then
             local targetLockPos = chosenDoor.part.Position
             
-            -- Vòng lặp này sẽ chạy cho đến khi nhân vật thực sự bị dịch chuyển sang tầng mới
-            -- (Khi sang tầng mới, state machine ở trên sẽ tự động set isWaitingForTeleport = false để ngắt vòng lặp này)
             while isWaitingForTeleport and isAutoEnabled do
                 local dist = (rootPart.Position - targetLockPos).Magnitude
                 
-                -- Nếu bị AI kéo lệch khỏi tâm bục quá 2 stud -> Giật CFrame thẳng về lại tâm bục (Cao hơn 3 stud để không lún)
                 if dist > 2 then
                     rootPart.CFrame = CFrame.new(targetLockPos + Vector3.new(0, 3, 0))
                 end
                 
-                -- Liên tục spam MoveTo vào tâm bục để đè/hủy lệnh di chuyển của AI game
                 hum:MoveTo(targetLockPos)
-                
                 task.wait(0.05)
             end
         end

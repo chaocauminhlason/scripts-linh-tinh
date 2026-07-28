@@ -122,6 +122,34 @@ return function(Window, Utils, WebhookModule)
     DungeonTab:CreateToggle({ Name = Utils.t("dg_auto_attack"), Info = Utils.t("dg_auto_attack_info"), CurrentValue = false, Flag = "AutoAttack_V2", Callback = function(Value) autoAttackEnabled = Value end })
     DungeonTab:CreateToggle({ Name = Utils.t("dg_auto_exit_20"), Info = Utils.t("dg_auto_exit_20_info"), CurrentValue = false, Flag = "AutoExitDungeon", Callback = function(Value) autoExitEnabled = Value if not Value then autoExitTriggered = false stage20ClockStarted = false waitingForHost = false end end })
     
+    DungeonTab:CreateButton({
+        Name = Utils.t("dg_claim_reward"),
+        Info = Utils.t("dg_claim_reward_info"),
+        Callback = function()
+            task.spawn(function()
+                local rawUrl = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/refs/heads/test/pre-config-manager/dungoen-script/claim_reward.txt?t=" .. os.time()
+                local ok, data = pcall(function() return game:HttpGet(rawUrl) end)
+                if ok and type(data) == "string" and #data > 0 and not string.find(data, "File not found") then
+                    local func, err = loadstring(data)
+                    if func then
+                        task.spawn(func)
+                        pcall(function()
+                            game:GetService("StarterGui"):SetCore("SendNotification", {
+                                Title = "Auto Dungeon",
+                                Text = "Đã tải thành công GUI Claim Reward!",
+                                Duration = 3
+                            })
+                        end)
+                    else
+                        warn("Lỗi cú pháp claim_reward.txt: " .. tostring(err))
+                    end
+                else
+                    warn("Không thể tải file claim_reward.txt từ GitHub.")
+                end
+            end)
+        end
+    })
+
     DungeonTab:CreateSlider({
         Name = Utils.t("dg_wait_host_timeout"), 
         Info = Utils.t("dg_wait_host_timeout_info"),

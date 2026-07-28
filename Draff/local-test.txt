@@ -7,10 +7,9 @@ local HttpService = game:GetService("HttpService")
 -- ==========================================
 -- BƯỚC 1: ĐỊNH HƯỚNG ĐƯỜNG DẪN LOCAL (LOCALHOST)
 -- ==========================================
--- Server nội bộ trỏ thẳng vào thư mục Draff của bạn
 local repoUrl = "http://127.0.0.1:8000/Draff/"
 
-print("[System] Dev Mode: Loading assets from Localhost server...")
+print("[System] Dev Mode: Loading assets from Localhost server & Direct File...")
 
 -- Tải thư viện Fluent UI Pro & Addons
 local Fluent = loadstring(game:HttpGet("https://github.com/StyearX/Fluent-modded/releases/download/1.5.1/FluentPro"))()
@@ -44,15 +43,49 @@ local Tabs = {
 }
 
 -- ==========================================
--- BƯỚC 2: HÀM TẢI LOCAL AN TOÀN (SAFE LOAD)
+-- BƯỚC 2: HÀM TẢI LOCAL AN TOÀN (SAFE LOAD TỰ ĐỘNG THỬ MULTI-SOURCE)
 -- ==========================================
 local function SafeLoad(filePath)
-    local fullUrl = repoUrl .. filePath .. "?t=" .. tostring(os.time())
-    
-    local success, result = pcall(function() return game:HttpGet(fullUrl) end)
-    
-    if success and type(result) == "string" and #result > 0 then
-        local func, err = loadstring(result)
+    local content = nil
+
+    -- 1. Thử đọc file trực tiếp qua isfile / readfile của Roblox Executor
+    local possiblePaths = {
+        "d:/scripts/scripts-linh-tinh/Draff/" .. filePath,
+        "Draff/" .. filePath
+    }
+    for _, p in ipairs(possiblePaths) do
+        if isfile and isfile(p) then
+            local ok, data = pcall(readfile, p)
+            if ok and data then
+                content = data
+                break
+            end
+        end
+    end
+
+    -- 2. Thử đọc qua Localhost Web Server (nếu đang bật python http.server 8000 / 8002)
+    if not content then
+        for _, port in ipairs({8000, 8002}) do
+            local localUrl = "http://127.0.0.1:" .. port .. "/Draff/" .. filePath .. "?t=" .. tostring(os.time())
+            local ok, data = pcall(function() return game:HttpGet(localUrl) end)
+            if ok and type(data) == "string" and #data > 0 and not string.find(data, "404 File not found") then
+                content = data
+                break
+            end
+        end
+    end
+
+    -- 3. Thử đọc qua GitHub Raw làm phương án dự phòng 3
+    if not content then
+        local rawUrl = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/refs/heads/test/pre-config-manager/Draff/" .. filePath .. "?t=" .. tostring(os.time())
+        local ok, data = pcall(function() return game:HttpGet(rawUrl) end)
+        if ok and type(data) == "string" and #data > 0 and not string.find(data, "404: Not Found") then
+            content = data
+        end
+    end
+
+    if content then
+        local func, err = loadstring(content)
         if func then 
             local okExec, resExec = pcall(func)
             if okExec then
@@ -64,7 +97,7 @@ local function SafeLoad(filePath)
             warn("❌ Lỗi Cú Pháp tại file local: " .. filePath .. "\n" .. tostring(err)) 
         end
     else
-        warn("❌ Không kết nối được Local Server hoặc sai đường dẫn: " .. fullUrl)
+        warn("❌ SafeLoad thất bại cho file: " .. filePath)
     end
     return nil
 end
@@ -72,7 +105,7 @@ end
 -- ==========================================
 -- BƯỚC 3: THỰC THI NẠP MODULES
 -- ==========================================
--- 1. Kéo các file Core từ thư mục D:/scripts/scripts-linh-tinh/Draff/core/
+-- 1. Kéo các file Core
 local Utils = SafeLoad('core/utilities.txt')
 
 local floatButtonModule = SafeLoad('core/floating_button.txt')
@@ -80,11 +113,11 @@ if floatButtonModule then
     floatButtonModule(Window, Utils)
 end
 
--- 2. Kéo các Features từ thư mục D:/scripts/scripts-linh-tinh/Draff/features/
+-- 2. Kéo các Features từ thư mục features/
 if Utils then
-    local autoFischModule = SafeLoad('features/auto_fisch.txt')
-    if autoFischModule then
-        autoFischModule(Tabs, Fluent, Utils)
+    local autoFishModule = SafeLoad('features/auto_fish.txt') or SafeLoad('features/auto_fisch.txt')
+    if autoFishModule then
+        autoFishModule(Tabs, Fluent, Utils)
     end
 
     local sellerModule = SafeLoad('features/seller.txt')
@@ -114,8 +147,3 @@ SaveManager:BuildConfigSection(Tabs.Configuration)
 Window:SelectTab(1)
 
 Fluent:Notify({ Title = "Thành Công!", Content = "Chế độ Dev Local đã sẵn sàng!", Duration = 3 })
-
--- Hướng dẫn bật server test
--- Mở power shell
--- cd /d D:\scripts\scripts-linh-tinh
--- python -m http.server 8000
