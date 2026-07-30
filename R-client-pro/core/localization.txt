@@ -93,6 +93,8 @@ local Translations = {
     ["btn_fuse_now"] = { en = "⚡ Fuse All Duplicates Now", vi = "⚡ Dung Hợp Tất Cả Pet Trùng Ngay" },
     ["skip_locked_pets"] = { en = "Skip Locked Pets", vi = "Bỏ Qua Pet Đang Khóa" },
     ["skip_equipped_pets"] = { en = "Skip Equipped Pets", vi = "Bỏ Qua Pet Đang Ra Trận" },
+    ["prevent_rank_a_to_s"] = { en = "🛡️ Block Rank A ➔ S Auto Upgrade", vi = "🛡️ Không Tự Nâng Rank A ➔ Rank S" },
+    ["prevent_rank_a_to_s_info"] = { en = "Prevents auto fusing Grade 4 (Rank A) pets to Grade 5 (Rank S) to save rare evolution materials.", vi = "Ngăn tự động ghép các Pet Rank A (Grade 4) lên Rank S (Grade 5) để tránh tốn nguyên liệu nâng bậc quý hiếm." },
 
     -- Server Manager keys
     ["server"] = { en = "Server Manager", vi = "Quản Lý Server" },

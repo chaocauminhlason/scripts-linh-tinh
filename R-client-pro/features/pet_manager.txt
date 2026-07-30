@@ -1,6 +1,6 @@
 -- ====================================================================
 -- MODULE: PET MANAGER (QUẢN LÝ KHÓA/MỞ KHÓA & DUNG HỢP/TIẾN HÓA PET)
--- BẢN NÂNG CẤP: CHỐNG SPAM / DEBOUNCE / CHỐNG ANTI-CHEAT KICK
+-- BẢN NÂNG CẤP: CHỐNG SPAM / DEBOUNCE / CHẶN NÂNG RANK A -> S
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -10,6 +10,7 @@ return function(Window, Utils)
     local autoFuseEnabled = false
     local skipLockedPets = true
     local skipEquippedPets = true
+    local preventRankAToS = true -- Mặc định BẬT: Chặn tự nâng Rank A lên Rank S (Grade 4 -> 5)
     local minFuseGrade = 1
     local maxFuseGrade = 10
     
@@ -118,7 +119,7 @@ return function(Window, Utils)
     end
 
     -- ==========================================
-    -- 2. TÍNH NĂNG DUNG HỢP / TIẾN HÓA PET (DEBOUNCE SAFE)
+    -- 2. TÍNH NĂNG DUNG HỢP / TIẾN HÓA PET (DEBOUNCE SAFE & RANK A FILTER)
     -- ==========================================
     local function ProcessPetFuseOnce(isManualTrigger)
         local now = tick()
@@ -158,6 +159,11 @@ return function(Window, Utils)
             if skipLockedPets and isLocked then shouldInclude = false end
             if skipEquippedPets and isEquipped then shouldInclude = false end
             if grade < minFuseGrade or grade > maxFuseGrade then shouldInclude = false end
+
+            -- [QUAN TRỌNG]: Chặn tự động ghép các Pet Rank A (Grade 4) lên Rank S (Grade 5) để tiết kiệm nguyên liệu nâng bậc
+            if preventRankAToS and grade >= 4 then
+                shouldInclude = false
+            end
 
             if shouldInclude and tmplId then
                 local groupKey = tostring(tmplId) .. "_" .. tostring(grade)
@@ -264,6 +270,16 @@ return function(Window, Utils)
 
     -- SECTION: FUSE & EVOLVE
     PetTab:CreateSection(" " .. (Utils.t("sec_pet_fuse") or "🧬 DUNG HỢP & TIẾN HÓA PET") .. " ")
+
+    PetTab:CreateToggle({
+        Name = Utils.t("prevent_rank_a_to_s") or "🛡️ Không Tự Nâng Rank A ➔ Rank S",
+        Info = Utils.t("prevent_rank_a_to_s_info") or "Ngăn tự động ghép các Pet Rank A (Grade 4) lên Rank S (Grade 5) để tránh tốn nguyên liệu nâng bậc quý hiếm.",
+        CurrentValue = true,
+        Flag = "PreventRankAToSFlag",
+        Callback = function(Value)
+            preventRankAToS = Value
+        end
+    })
 
     PetTab:CreateToggle({
         Name = Utils.t("auto_fuse_pets") or "Auto Dung Hợp Pet (Auto Fuse)",
