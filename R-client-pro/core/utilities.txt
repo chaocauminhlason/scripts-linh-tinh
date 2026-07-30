@@ -65,11 +65,15 @@ function Utils.VerifyVIPKey(inputKey)
     local ok, data = pcall(function() return game:HttpGet(url) end)
     
     if ok and type(data) == "string" and #data > 0 and not string.find(data, "File not found") then
+        local myUserId = LocalPlayer and LocalPlayer.UserId
+        local keyToCheck = inputKey or (isfile and isfile(VIP_KEY_FILE) and readfile(VIP_KEY_FILE))
+        if keyToCheck then
+            keyToCheck = string.gsub(keyToCheck, "^%s*(.-)%s*$", "%1")
+        end
+
+        -- 1. Thử parse dạng JSON
         local decodeOk, json = pcall(function() return HttpService:JSONDecode(data) end)
         if decodeOk and json then
-            local myUserId = LocalPlayer and LocalPlayer.UserId
-            
-            -- 1. Kiểm tra UserId nếu Admin cấp trực tiếp theo ID
             if json.VIP_USERIDS then
                 for _, uid in ipairs(json.VIP_USERIDS) do
                     if tonumber(uid) == myUserId then
@@ -79,12 +83,26 @@ function Utils.VerifyVIPKey(inputKey)
                 end
             end
             
-            -- 2. Kiểm tra Key nhập vào
-            local keyToCheck = inputKey or (isfile and isfile(VIP_KEY_FILE) and readfile(VIP_KEY_FILE))
             if keyToCheck and json.VIP_KEYS then
-                keyToCheck = string.gsub(keyToCheck, "^%s*(.-)%s*$", "%1")
                 for _, vKey in ipairs(json.VIP_KEYS) do
                     if vKey == keyToCheck then
+                        _G.IsVIPUser = true
+                        if writefile and inputKey then
+                            pcall(function() writefile(VIP_KEY_FILE, keyToCheck) end)
+                        end
+                        return true, "Xác thực VIP Key thành công!"
+                    end
+                end
+            end
+        else
+            -- 2. Dự phòng: Parse dạng danh sách dòng chữ (Pastebin / Gist / Rentry raw text)
+            for line in string.gmatch(data, "[^\r\n]+") do
+                local cleanLine = string.gsub(line, "^%s*(.-)%s*$", "%1")
+                if cleanLine ~= "" then
+                    if tonumber(cleanLine) == myUserId then
+                        _G.IsVIPUser = true
+                        return true, "Tài khoản của bạn đã được kích hoạt VIP trực tiếp!"
+                    elseif keyToCheck and cleanLine == keyToCheck then
                         _G.IsVIPUser = true
                         if writefile and inputKey then
                             pcall(function() writefile(VIP_KEY_FILE, keyToCheck) end)
