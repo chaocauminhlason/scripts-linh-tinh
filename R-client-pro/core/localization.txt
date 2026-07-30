@@ -83,6 +83,17 @@ local Translations = {
     ["btn_pet_ride"] = { en = "🐎 Mounts Management", vi = "🐎 Quản Lý Thú Cưỡi" },
     ["btn_pet_transform"] = { en = "🔄 Pet Transform", vi = "🔄 Chuyển Hóa Pet" },
 
+    -- Pet Manager keys
+    ["pet_manager"] = { en = "Pet Manager", vi = "Quản Lý Pet" },
+    ["sec_pet_lock"] = { en = "🔒 PET LOCK & UNLOCK", vi = "🔒 KHÓA & MỞ KHÓA PET" },
+    ["btn_unlock_all_pets"] = { en = "🔓 Unlock All Pets", vi = "🔓 Mở Khóa Tất Cả Pet" },
+    ["btn_lock_all_pets"] = { en = "🔒 Lock All Pets", vi = "🔒 Khóa Tất Cả Pet" },
+    ["sec_pet_fuse"] = { en = "🧬 PET FUSE & EVOLVE", vi = "🧬 DUNG HỢP & TIẾN HÓA PET" },
+    ["auto_fuse_pets"] = { en = "Auto Fuse Pets", vi = "Auto Dung Hợp Pet" },
+    ["btn_fuse_now"] = { en = "⚡ Fuse All Duplicates Now", vi = "⚡ Dung Hợp Tất Cả Pet Trùng Ngay" },
+    ["skip_locked_pets"] = { en = "Skip Locked Pets", vi = "Bỏ Qua Pet Đang Khóa" },
+    ["skip_equipped_pets"] = { en = "Skip Equipped Pets", vi = "Bỏ Qua Pet Đang Ra Trận" },
+
     -- Server Manager keys
     ["server"] = { en = "Server Manager", vi = "Quản Lý Server" },
     ["sec_session_info"] = { en = "SESSION INFO", vi = "THÔNG TIN PHIÊN LÀM VIỆC" },

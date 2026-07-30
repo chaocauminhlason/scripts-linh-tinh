@@ -346,18 +346,67 @@ local isDoorExpanded = true
 local isBuffExpanded = false
 local isMinimized = false
 
+local function UpdateToggleButtonText()
+    if isAutoEnabled then
+        toggleBtn.BackgroundColor3 = Color3.fromRGB(34, 197, 94)
+        toggleBtn.Text = isMinimized and "🔴 ON" or "🔴 AUTO ON"
+    else
+        toggleBtn.BackgroundColor3 = Color3.fromRGB(220, 38, 38)
+        toggleBtn.Text = isMinimized and "⏹️ OFF" or "⏹️ AUTO OFF"
+    end
+end
+
 local function UpdateUILayout()
     if isMinimized then
-        mainFrame.Size = UDim2.new(0, 400, 0, 48)
+        mainFrame.Size = UDim2.new(0, 210, 0, 36)
+        header.Size = UDim2.new(1, 0, 0, 36)
+        
+        icon.Size = UDim2.new(0, 22, 0, 22)
+        icon.Position = UDim2.new(0, 6, 0, 7)
+        
+        title.Size = UDim2.new(0, 60, 0, 22)
+        title.Position = UDim2.new(0, 30, 0, 7)
+        title.Text = "ABYSS"
+        title.TextSize = 13
+        
+        toggleBtn.Size = UDim2.new(0, 72, 0, 24)
+        toggleBtn.Position = UDim2.new(1, -104, 0, 6)
+        toggleBtn.TextSize = 11
+        
+        minimizeBtn.Size = UDim2.new(0, 24, 0, 24)
+        minimizeBtn.Position = UDim2.new(1, -28, 0, 6)
+        minimizeBtn.TextSize = 15
+
         statusBar.Visible = false
         doorSection.Visible = false
         buffSection.Visible = false
+        UpdateToggleButtonText()
         return
     end
+
+    -- Khôi phục kích thước đầy đủ (Expanded)
+    header.Size = UDim2.new(1, 0, 0, 48)
+    
+    icon.Size = UDim2.new(0, 32, 0, 32)
+    icon.Position = UDim2.new(0, 12, 0, 8)
+    
+    title.Size = UDim2.new(0.6, 0, 0, 32)
+    title.Position = UDim2.new(0, 50, 0, 8)
+    title.Text = "ABYSS STRATEGY"
+    title.TextSize = 16
+    
+    toggleBtn.Size = UDim2.new(0, 100, 0, 32)
+    toggleBtn.Position = UDim2.new(1, -146, 0, 8)
+    toggleBtn.TextSize = 12
+    
+    minimizeBtn.Size = UDim2.new(0, 32, 0, 32)
+    minimizeBtn.Position = UDim2.new(1, -40, 0, 8)
+    minimizeBtn.TextSize = 18
 
     statusBar.Visible = true
     doorSection.Visible = true
     buffSection.Visible = true
+    UpdateToggleButtonText()
 
     local currentY = 104 -- Vị trí bắt đầu của door section
     
@@ -1097,14 +1146,11 @@ end)
 -- Cập nhật trạng thái toggle button
 toggleBtn.MouseButton1Click:Connect(function()
     isAutoEnabled = not isAutoEnabled
+    UpdateToggleButtonText()
     if isAutoEnabled then
-        toggleBtn.BackgroundColor3 = Color3.fromRGB(34, 197, 94)
-        toggleBtn.Text = "🔴 AUTO ON"
         statusText.Text = "ĐANG HOẠT ĐỘNG..."
         statusText.TextColor3 = Color3.fromRGB(100, 255, 100)
     else
-        toggleBtn.BackgroundColor3 = Color3.fromRGB(220, 38, 38)
-        toggleBtn.Text = "⏹️ AUTO OFF"
         statusText.Text = "ĐÃ TẠM DỪNG"
         statusText.TextColor3 = Color3.fromRGB(200, 200, 200)
         isProcessing = false

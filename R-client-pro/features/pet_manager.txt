@@ -1,0 +1,242 @@
+-- ====================================================================
+-- MODULE: PET MANAGER (QUẢN LÝ KHÓA/MỞ KHÓA & DUNG HỢP/TIẾN HÓA PET)
+-- ====================================================================
+return function(Window, Utils)
+    local Players = game:GetService("Players")
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local LocalPlayer = Players.LocalPlayer
+
+    -- Biến cấu hình & trạng thái
+    local autoFuseEnabled = false
+    local skipLockedPets = true
+    local skipEquippedPets = true
+    local minFuseGrade = 1
+    local maxFuseGrade = 10
+    local isProcessingFuse = false
+
+    -- ==========================================
+    -- HÀM TRUY XUẤT DỮ LIỆU PET TỪ GAME CORE
+    -- ==========================================
+    local function GetGamePlayer()
+        local success, env = pcall(function() return getrenv()._G.PathTool end)
+        if success and env and env.ClientPlayerManager then
+            return env.ClientPlayerManager.GetGamePlayer()
+        end
+        return nil
+    end
+
+    local function GetPetMap()
+        local player = GetGamePlayer()
+        if player and player.pet and player.pet._itemMap then
+            return player.pet._itemMap
+        end
+        return {}
+    end
+
+    local function CallRemote(channelName, ...)
+        local args = { channelName, ... }
+        return ReplicatedStorage:WaitForChild("CommonLibrary")
+            :WaitForChild("Tool")
+            :WaitForChild("RemoteManager")
+            :WaitForChild("Funcs")
+            :WaitForChild("DataPullFunc")
+            :InvokeServer(unpack(args))
+    end
+
+    -- ==========================================
+    -- 1. TÍNH NĂNG KHÓA / MỞ KHÓA PET (LOCK / UNLOCK)
+    -- ==========================================
+    local function SetAllPetLockStatus(targetLockState, filterGrade)
+        local itemMap = GetPetMap()
+        local count = 0
+
+        for guid, pet in pairs(itemMap) do
+            local isLocked = pet:IsLock()
+            local isEquipped = (pet:GetEquipedIndex() ~= nil and pet:GetEquipedIndex() > 0) or pet:IsInTeam()
+            local grade = pet:GetGrade() or 1
+
+            if isLocked ~= targetLockState then
+                if not filterGrade or grade == filterGrade then
+                    pcall(function()
+                        CallRemote("PetLockChannel", tostring(guid), targetLockState)
+                    end)
+                    count = count + 1
+                    task.wait(0.05)
+                end
+            end
+        end
+
+        local actionName = targetLockState and "Khóa" or "Mở Khóa"
+        pcall(function()
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title = "Pet Manager",
+                Text = string.format("Đã %s thành công %d Pet!", actionName, count),
+                Duration = 3
+            })
+        end)
+    end
+
+    -- ==========================================
+    -- 2. TÍNH NĂNG DUNG HỢP / TIẾN HÓA PET (FUSE / EVOLVE)
+    -- ==========================================
+    local function ProcessPetFuseOnce()
+        if isProcessingFuse then return end
+        isProcessingFuse = true
+
+        local itemMap = GetPetMap()
+        -- Nhóm các pet theo TmplId (loại pet) và Grade (cùng phẩm cấp)
+        local petGroups = {}
+
+        for guid, pet in pairs(itemMap) do
+            local isLocked = pet:IsLock()
+            local isEquipped = (pet:GetEquipedIndex() ~= nil and pet:GetEquipedIndex() > 0) or pet:IsInTeam()
+            local grade = pet:GetGrade() or 1
+            local tmplId = pet:GetTmplId()
+
+            local shouldInclude = true
+            if skipLockedPets and isLocked then shouldInclude = false end
+            if skipEquippedPets and isEquipped then shouldInclude = false end
+            if grade < minFuseGrade or grade > maxFuseGrade then shouldInclude = false end
+
+            if shouldInclude and tmplId then
+                local groupKey = tostring(tmplId) .. "_" .. tostring(grade)
+                if not petGroups[groupKey] then
+                    petGroups[groupKey] = {}
+                end
+                table.insert(petGroups[groupKey], {
+                    Guid = tostring(guid),
+                    PetObj = pet,
+                    IsEquipped = isEquipped,
+                    IsLocked = isLocked,
+                    Grade = grade
+                })
+            end
+        end
+
+        local totalFused = 0
+        -- Tiến hành dung hợp các nhóm có từ 2 pet trở lên (1 pet chính + các pet phôi)
+        for key, list in pairs(petGroups) do
+            if #list >= 2 then
+                -- Chọn pet chính (Ưu tiên pet đang trang bị nếu có, nếu không lấy pet đầu tiên)
+                local mainPetIndex = 1
+                for i, p in ipairs(list) do
+                    if p.IsEquipped then
+                        mainPetIndex = i
+                        break
+                    end
+                end
+
+                local mainPet = list[mainPetIndex]
+                local foodGuids = {}
+
+                for i, p in ipairs(list) do
+                    if i ~= mainPetIndex then
+                        table.insert(foodGuids, p.Guid)
+                    end
+                end
+
+                if #foodGuids > 0 then
+                    local ok, res = pcall(function()
+                        return CallRemote("PetEvolveChannel", mainPet.Guid, foodGuids)
+                    end)
+                    if ok then
+                        totalFused = totalFused + #foodGuids
+                    end
+                    task.wait(0.15)
+                end
+            end
+        end
+
+        isProcessingFuse = false
+        return totalFused
+    end
+
+    -- ==========================================
+    -- GIAO DIỆN UI (RAYFIELD TAB)
+    -- ==========================================
+    local PetTab = Window:CreateTab(Utils.t("pet_manager") or "Pet Manager", "dog")
+
+    -- SECTION: LOCK & UNLOCK
+    PetTab:CreateSection(" " .. (Utils.t("sec_pet_lock") or "🔒 QUẢN LÝ KHÓA PET") .. " ")
+
+    PetTab:CreateButton({
+        Name = Utils.t("btn_unlock_all_pets") or "🔓 Mở Khóa Tất Cả Pet (Unlock All)",
+        Info = "Mở khóa toàn bộ Pet trong túi để chuẩn bị dung hợp hoặc tái chế.",
+        Callback = function()
+            task.spawn(function()
+                SetAllPetLockStatus(false)
+            end)
+        end
+    })
+
+    PetTab:CreateButton({
+        Name = Utils.t("btn_lock_all_pets") or "🔒 Khóa Tất Cả Pet (Lock All)",
+        Info = "Khóa toàn bộ Pet trong túi để tránh lỡ tay bán/tái chế.",
+        Callback = function()
+            task.spawn(function()
+                SetAllPetLockStatus(true)
+            end)
+        end
+    })
+
+    -- SECTION: FUSE & EVOLVE
+    PetTab:CreateSection(" " .. (Utils.t("sec_pet_fuse") or "🧬 DUNG HỢP & TIẾN HÓA PET") .. " ")
+
+    PetTab:CreateToggle({
+        Name = Utils.t("auto_fuse_pets") or "Auto Dung Hợp Pet (Auto Fuse)",
+        Info = "Tự động quét và ghép các Pet trùng loại/cùng phẩm cấp liên tục.",
+        CurrentValue = false,
+        Flag = "AutoPetFuseToggle",
+        Callback = function(Value)
+            autoFuseEnabled = Value
+        end
+    })
+
+    PetTab:CreateButton({
+        Name = Utils.t("btn_fuse_now") or "⚡ Dung Hợp Tất Cả Pet Trùng Ngay",
+        Info = "Thực hiện ghép tất cả các Pet trùng loại trong túi 1 lần lập tức.",
+        Callback = function()
+            task.spawn(function()
+                local fusedCount = ProcessPetFuseOnce()
+                pcall(function()
+                    game:GetService("StarterGui"):SetCore("SendNotification", {
+                        Title = "Pet Fuse",
+                        Text = string.format("Đã dung hợp thành công %d Pet phôi!", fusedCount or 0),
+                        Duration = 3
+                    })
+                end)
+            end)
+        end
+    })
+
+    PetTab:CreateToggle({
+        Name = Utils.t("skip_locked_pets") or "Bỏ Qua Pet Đang Khóa",
+        Info = "Không sử dụng Pet đang bị khóa làm phôi dung hợp.",
+        CurrentValue = true,
+        Flag = "SkipLockedPetsFlag",
+        Callback = function(Value)
+            skipLockedPets = Value
+        end
+    })
+
+    PetTab:CreateToggle({
+        Name = Utils.t("skip_equipped_pets") or "Bỏ Qua Pet Đang Ra Trận",
+        Info = "Không sử dụng Pet đang ra trận/trang bị làm phôi.",
+        CurrentValue = true,
+        Flag = "SkipEquippedPetsFlag",
+        Callback = function(Value)
+            skipEquippedPets = Value
+        end
+    })
+
+    -- VÒNG LẶP AUTO FUSE
+    task.spawn(function()
+        while task.wait(3) do
+            if autoFuseEnabled then
+                pcall(function()
+                    ProcessPetFuseOnce()
+                end)
+            end
+        end
+    end)
+end

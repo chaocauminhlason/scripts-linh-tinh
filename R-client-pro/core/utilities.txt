@@ -377,9 +377,9 @@ function Utils.ClickButtonExact(button, debugName)
     task.wait(0.1)
     VirtualInputManager:SendMouseButtonEvent(centerX, finalY, 0, false, game, 1)
     
-    if debugName then
-        print("🖱️ [Utils] Đã click ảo vào: " .. debugName)
-    end
+    -- if debugName then
+    --     print("🖱️ [Utils] Đã click ảo vào: " .. debugName)
+    -- end
 end
 
 -- ==========================================

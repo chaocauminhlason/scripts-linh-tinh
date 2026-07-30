@@ -143,6 +143,9 @@ if Utils then
 
     local a = SafeLoad('features/ai_assistant.txt')
     if a then a(Window, Utils, WebhookModule) end
+
+    local petMgr = SafeLoad('features/pet_manager.txt')
+    if petMgr then petMgr(Window, Utils) end
 end
 
 if WebhookModule and WebhookModule.InitTab then
