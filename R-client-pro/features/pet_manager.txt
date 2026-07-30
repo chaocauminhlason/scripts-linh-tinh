@@ -1,6 +1,6 @@
 -- ====================================================================
 -- MODULE: PET MANAGER (QUẢN LÝ KHÓA/MỞ KHÓA & DUNG HỢP/TIẾN HÓA PET)
--- BẢN NÂNG CẤP: CHỐNG SPAM / DEBOUNCE / CHẶN NÂNG RANK A -> S
+-- BẢN QUY CHUẨN: CHỈ TỰ ĐỘNG DUNG HỢP PET RANK B ĐỔ XUỐNG (GRADE <= 3)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -10,9 +10,8 @@ return function(Window, Utils)
     local autoFuseEnabled = false
     local skipLockedPets = true
     local skipEquippedPets = true
-    local preventRankAToS = true -- Mặc định BẬT: Chặn tự nâng Rank A lên Rank S (Grade 4 -> 5)
     local minFuseGrade = 1
-    local maxFuseGrade = 10
+    local maxFuseGrade = 3 -- GIỚI HẠN CỨNG: Chỉ tự ghép Pet từ Rank B đổ xuống (Grade 1 -> 3)
     
     -- Biến chống click đúp & chống spam anti-cheat
     local isProcessingLock = false
@@ -119,7 +118,7 @@ return function(Window, Utils)
     end
 
     -- ==========================================
-    -- 2. TÍNH NĂNG DUNG HỢP / TIẾN HÓA PET (DEBOUNCE SAFE & RANK A FILTER)
+    -- 2. TÍNH NĂNG DUNG HỢP / TIẾN HÓA PET (RANK B ĐỔ XUỐNG)
     -- ==========================================
     local function ProcessPetFuseOnce(isManualTrigger)
         local now = tick()
@@ -146,7 +145,7 @@ return function(Window, Utils)
         end
 
         local itemMap = GetPetMap()
-        -- Nhóm các pet theo TmplId (loại pet) và Grade (cùng phẩm cấp)
+        -- Nhóm các pet theo TmplId (loại pet) và Grade (chỉ lọc Grade 1 -> 3, tức Rank B trở xuống)
         local petGroups = {}
 
         for guid, pet in pairs(itemMap) do
@@ -158,12 +157,8 @@ return function(Window, Utils)
             local shouldInclude = true
             if skipLockedPets and isLocked then shouldInclude = false end
             if skipEquippedPets and isEquipped then shouldInclude = false end
+            -- Giới hạn cứng: Chỉ tự động ghép các Pet từ Grade 1 đến Grade 3 (Rank B trở xuống)
             if grade < minFuseGrade or grade > maxFuseGrade then shouldInclude = false end
-
-            -- [QUAN TRỌNG]: Chặn tự động ghép các Pet Rank A (Grade 4) lên Rank S (Grade 5) để tiết kiệm nguyên liệu nâng bậc
-            if preventRankAToS and grade >= 4 then
-                shouldInclude = false
-            end
 
             if shouldInclude and tmplId then
                 local groupKey = tostring(tmplId) .. "_" .. tostring(grade)
@@ -269,21 +264,11 @@ return function(Window, Utils)
     })
 
     -- SECTION: FUSE & EVOLVE
-    PetTab:CreateSection(" " .. (Utils.t("sec_pet_fuse") or "🧬 DUNG HỢP & TIẾN HÓA PET") .. " ")
-
-    PetTab:CreateToggle({
-        Name = Utils.t("prevent_rank_a_to_s") or "🛡️ Không Tự Nâng Rank A ➔ Rank S",
-        Info = Utils.t("prevent_rank_a_to_s_info") or "Ngăn tự động ghép các Pet Rank A (Grade 4) lên Rank S (Grade 5) để tránh tốn nguyên liệu nâng bậc quý hiếm.",
-        CurrentValue = true,
-        Flag = "PreventRankAToSFlag",
-        Callback = function(Value)
-            preventRankAToS = Value
-        end
-    })
+    PetTab:CreateSection(" " .. (Utils.t("sec_pet_fuse") or "🧬 DUNG HỢP PET (RANK B ĐỔ XUỐNG)") .. " ")
 
     PetTab:CreateToggle({
         Name = Utils.t("auto_fuse_pets") or "Auto Dung Hợp Pet (Auto Fuse)",
-        Info = "Tự động quét và ghép các Pet trùng loại/cùng phẩm cấp liên tục.",
+        Info = "Tự động quét và ghép các Pet trùng loại từ Rank B đổ xuống (Grade 1 ➔ 3).",
         CurrentValue = false,
         Flag = "AutoPetFuseToggle",
         Callback = function(Value)
@@ -293,7 +278,7 @@ return function(Window, Utils)
 
     PetTab:CreateButton({
         Name = Utils.t("btn_fuse_now") or "⚡ Dung Hợp Tất Cả Pet Trùng Ngay",
-        Info = "Thực hiện ghép tất cả các Pet trùng loại trong túi 1 lần lập tức.",
+        Info = "Thực hiện ghép tất cả các Pet trùng loại từ Rank B đổ xuống trong túi 1 lần lập tức.",
         Callback = function()
             task.spawn(function()
                 local fusedCount = ProcessPetFuseOnce(true)
