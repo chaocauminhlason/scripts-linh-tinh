@@ -50,6 +50,63 @@ function Utils.ProcessQueue()
     end
 end
 -- ==========================================
+-- HỆ THỐNG XÁC THỰC VIP KEY (PRIVILEGE CHECK)
+-- ==========================================
+_G.IsVIPUser = false
+local VIP_KEY_FILE = "vip_key_cache.txt"
+local VIP_URL = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/refs/heads/test/pre-config-manager/vip_keys.json"
+
+function Utils.IsVIP()
+    return _G.IsVIPUser == true
+end
+
+function Utils.VerifyVIPKey(inputKey)
+    local url = VIP_URL .. "?t=" .. tostring(os.time())
+    local ok, data = pcall(function() return game:HttpGet(url) end)
+    
+    if ok and type(data) == "string" and #data > 0 and not string.find(data, "File not found") then
+        local decodeOk, json = pcall(function() return HttpService:JSONDecode(data) end)
+        if decodeOk and json then
+            local myUserId = LocalPlayer and LocalPlayer.UserId
+            
+            -- 1. Kiểm tra UserId nếu Admin cấp trực tiếp theo ID
+            if json.VIP_USERIDS then
+                for _, uid in ipairs(json.VIP_USERIDS) do
+                    if tonumber(uid) == myUserId then
+                        _G.IsVIPUser = true
+                        return true, "Tài khoản của bạn đã được kích hoạt VIP trực tiếp!"
+                    end
+                end
+            end
+            
+            -- 2. Kiểm tra Key nhập vào
+            local keyToCheck = inputKey or (isfile and isfile(VIP_KEY_FILE) and readfile(VIP_KEY_FILE))
+            if keyToCheck and json.VIP_KEYS then
+                keyToCheck = string.gsub(keyToCheck, "^%s*(.-)%s*$", "%1")
+                for _, vKey in ipairs(json.VIP_KEYS) do
+                    if vKey == keyToCheck then
+                        _G.IsVIPUser = true
+                        if writefile and inputKey then
+                            pcall(function() writefile(VIP_KEY_FILE, keyToCheck) end)
+                        end
+                        return true, "Xác thực VIP Key thành công!"
+                    end
+                end
+            end
+        end
+    end
+    _G.IsVIPUser = false
+    return false, "Key VIP không hợp lệ hoặc chưa được nhập!"
+end
+
+-- Tự động kiểm tra VIP khi khởi chạy nếu có cache key
+task.spawn(function()
+    pcall(function()
+        Utils.VerifyVIPKey(nil)
+    end)
+end)
+
+-- ==========================================
 -- CACHE REMOTE
 -- ==========================================
 local cachedRemote = nil

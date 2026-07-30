@@ -1,6 +1,6 @@
 -- ====================================================================
 -- MODULE: PET MANAGER (QUẢN LÝ KHÓA/MỞ KHÓA & DUNG HỢP/TIẾN HÓA PET)
--- BẢN QUY CHUẨN: CHỈ TỰ ĐỘNG DUNG HỢP PET RANK B ĐỔ XUỐNG (GRADE <= 3)
+-- BẢN QUY CHUẨN: CHỈ DÀNH CHO TÀI KHOẢN VIP KEY (CẤP RIÊNG)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -68,9 +68,22 @@ return function(Window, Utils)
     end
 
     -- ==========================================
+    -- HÀM KIỂM TRA QUYỀN HẠN VIP KEY
+    -- ==========================================
+    local function CheckVIPAccess()
+        if Utils and type(Utils.IsVIP) == "function" and Utils.IsVIP() then
+            return true
+        end
+        ShowNotify("🔒 Yêu Cầu Key VIP", "Chức năng Pet Manager chỉ dành cho tài khoản có Key VIP do Admin cấp riêng!", 5)
+        return false
+    end
+
+    -- ==========================================
     -- 1. TÍNH NĂNG KHÓA / MỞ KHÓA PET (DEBOUNCE SAFE)
     -- ==========================================
     local function SetAllPetLockStatus(targetLockState, filterGrade)
+        if not CheckVIPAccess() then return end
+
         local now = tick()
         if isProcessingLock then
             ShowNotify("Cảnh Báo", "Đang xử lý khóa/mở khóa Pet, vui lòng đợi!", 2)
@@ -121,6 +134,8 @@ return function(Window, Utils)
     -- 2. TÍNH NĂNG DUNG HỢP / TIẾN HÓA PET (RANK B ĐỔ XUỐNG)
     -- ==========================================
     local function ProcessPetFuseOnce(isManualTrigger)
+        if not CheckVIPAccess() then return 0 end
+
         local now = tick()
         if isProcessingFuse then
             if isManualTrigger then
@@ -240,12 +255,36 @@ return function(Window, Utils)
     -- ==========================================
     local PetTab = Window:CreateTab(Utils.t("pet_manager") or "Pet Manager", "dog")
 
+    -- SECTION: VIP KEY ACTIVATION
+    PetTab:CreateSection(" 👑 KÍCH HOẠT KEY VIP (CẤP RIÊNG) ")
+
+    local vipInputKey = ""
+    PetTab:CreateInput({
+        Name = "Nhập Key VIP (Do Admin Cấp)",
+        PlaceholderText = "Ví dụ: VIP-SON-8888",
+        RemoveTextAfterFocusLost = false,
+        Callback = function(Text)
+            vipInputKey = Text
+        end
+    })
+
+    PetTab:CreateButton({
+        Name = "🔑 Kích Hoạt VIP Key",
+        Info = "Xác thực Key VIP cấp riêng để mở khóa toàn bộ tính năng Pet Manager.",
+        Callback = function()
+            if Utils and type(Utils.VerifyVIPKey) == "function" then
+                local success, msg = Utils.VerifyVIPKey(vipInputKey)
+                ShowNotify("Xác Thực VIP", msg, 4)
+            end
+        end
+    })
+
     -- SECTION: LOCK & UNLOCK
     PetTab:CreateSection(" " .. (Utils.t("sec_pet_lock") or "🔒 QUẢN LÝ KHÓA PET") .. " ")
 
     PetTab:CreateButton({
         Name = Utils.t("btn_unlock_all_pets") or "🔓 Mở Khóa Tất Cả Pet (Unlock All)",
-        Info = "Mở khóa toàn bộ Pet trong túi để chuẩn bị dung hợp hoặc tái chế.",
+        Info = "Mở khóa toàn bộ Pet trong túi (Chỉ dành cho tài khoản VIP Key).",
         Callback = function()
             task.spawn(function()
                 SetAllPetLockStatus(false)
@@ -255,7 +294,7 @@ return function(Window, Utils)
 
     PetTab:CreateButton({
         Name = Utils.t("btn_lock_all_pets") or "🔒 Khóa Tất Cả Pet (Lock All)",
-        Info = "Khóa toàn bộ Pet trong túi để tránh lỡ tay bán/tái chế.",
+        Info = "Khóa toàn bộ Pet trong túi (Chỉ dành cho tài khoản VIP Key).",
         Callback = function()
             task.spawn(function()
                 SetAllPetLockStatus(true)
@@ -268,7 +307,7 @@ return function(Window, Utils)
 
     PetTab:CreateToggle({
         Name = Utils.t("auto_fuse_pets") or "Auto Dung Hợp Pet (Auto Fuse)",
-        Info = "Tự động quét và ghép các Pet trùng loại từ Rank B đổ xuống (Grade 1 ➔ 3).",
+        Info = "Tự động quét và ghép các Pet trùng loại từ Rank B đổ xuống (Chỉ dành cho VIP).",
         CurrentValue = false,
         Flag = "AutoPetFuseToggle",
         Callback = function(Value)
@@ -282,7 +321,9 @@ return function(Window, Utils)
         Callback = function()
             task.spawn(function()
                 local fusedCount = ProcessPetFuseOnce(true)
-                ShowNotify("Pet Fuse", string.format("Đã dung hợp thành công %d Pet phôi!", fusedCount or 0), 3)
+                if fusedCount and fusedCount > 0 then
+                    ShowNotify("Pet Fuse", string.format("Đã dung hợp thành công %d Pet phôi!", fusedCount), 3)
+                end
             end)
         end
     })
