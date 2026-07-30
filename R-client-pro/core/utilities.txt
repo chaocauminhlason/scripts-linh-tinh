@@ -54,7 +54,7 @@ end
 -- ==========================================
 _G.IsVIPUser = false
 local VIP_KEY_FILE = "key_cache.txt"
-local VIP_URL = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/refs/heads/test/pre-config-manager/vip_keys.json"
+local VIP_URL = "https://pastefy.app/URVSPTdO/raw"
 
 function Utils.IsVIP()
     return _G.IsVIPUser == true
