@@ -1,5 +1,6 @@
 -- ====================================================================
 -- MODULE: PET MANAGER (QUẢN LÝ KHÓA/MỞ KHÓA & DUNG HỢP/TIẾN HÓA PET)
+-- BẢN NÂNG CẤP: CHỐNG SPAM / DEBOUNCE / CHỐNG ANTI-CHEAT KICK
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -11,7 +12,13 @@ return function(Window, Utils)
     local skipEquippedPets = true
     local minFuseGrade = 1
     local maxFuseGrade = 10
+    
+    -- Biến chống click đúp & chống spam anti-cheat
+    local isProcessingLock = false
     local isProcessingFuse = false
+    local lastLockTime = 0
+    local lastFuseTime = 0
+    local COOLDOWN_DELAY = 3 -- Cooldown 3 giây giữa các lần bấm
 
     -- ==========================================
     -- HÀM TRUY XUẤT NATIVE PET SYSTEM TỪ GAME
@@ -50,13 +57,37 @@ return function(Window, Utils)
         return {}
     end
 
+    local function ShowNotify(title, text, duration)
+        pcall(function()
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title = title or "Pet Manager",
+                Text = text or "",
+                Duration = duration or 3
+            })
+        end)
+    end
+
     -- ==========================================
-    -- 1. TÍNH NĂNG KHÓA / MỞ KHÓA PET (LOCK / UNLOCK)
+    -- 1. TÍNH NĂNG KHÓA / MỞ KHÓA PET (DEBOUNCE SAFE)
     -- ==========================================
     local function SetAllPetLockStatus(targetLockState, filterGrade)
+        local now = tick()
+        if isProcessingLock then
+            ShowNotify("Cảnh Báo", "Đang xử lý khóa/mở khóa Pet, vui lòng đợi!", 2)
+            return
+        end
+        if now - lastLockTime < COOLDOWN_DELAY then
+            ShowNotify("Cảnh Báo", string.format("Vui lòng đợi %.1f giây trước khi bấm lại!", COOLDOWN_DELAY - (now - lastLockTime)), 2)
+            return
+        end
+
+        isProcessingLock = true
+        lastLockTime = now
+
         local PetSystem = GetPetSystem()
         if not PetSystem then
             warn("❌ [PetManager] Không tìm thấy PetSystem!")
+            isProcessingLock = false
             return
         end
 
@@ -75,27 +106,36 @@ return function(Window, Utils)
                     if ok then
                         count = count + 1
                     end
-                    task.wait(0.02)
+                    -- Delay 0.05s an toàn chống spam anti-cheat rate limit
+                    task.wait(0.05)
                 end
             end
         end
 
         local actionName = targetLockState and "Khóa" or "Mở Khóa"
-        pcall(function()
-            game:GetService("StarterGui"):SetCore("SendNotification", {
-                Title = "Pet Manager",
-                Text = string.format("Đã %s thành công %d Pet!", actionName, count),
-                Duration = 3
-            })
-        end)
+        ShowNotify("Pet Manager", string.format("Đã %s thành công %d Pet!", actionName, count), 3)
+        isProcessingLock = false
     end
 
     -- ==========================================
-    -- 2. TÍNH NĂNG DUNG HỢP / TIẾN HÓA PET (FUSE / EVOLVE)
+    -- 2. TÍNH NĂNG DUNG HỢP / TIẾN HÓA PET (DEBOUNCE SAFE)
     -- ==========================================
-    local function ProcessPetFuseOnce()
-        if isProcessingFuse then return end
+    local function ProcessPetFuseOnce(isManualTrigger)
+        local now = tick()
+        if isProcessingFuse then
+            if isManualTrigger then
+                ShowNotify("Cảnh Báo", "Đang xử lý Dung Hợp Pet, vui lòng đợi!", 2)
+            end
+            return 0
+        end
+
+        if isManualTrigger and (now - lastFuseTime < COOLDOWN_DELAY) then
+            ShowNotify("Cảnh Báo", string.format("Vui lòng đợi %.1f giây trước khi bấm lại!", COOLDOWN_DELAY - (now - lastFuseTime)), 2)
+            return 0
+        end
+
         isProcessingFuse = true
+        if isManualTrigger then lastFuseTime = now end
 
         local env = GetPathToolEnv()
         local PetSystem = GetPetSystem()
@@ -182,7 +222,8 @@ return function(Window, Utils)
                             if ok then
                                 totalFused = totalFused + reqFoodCount
                             end
-                            task.wait(0.15)
+                            -- Delay 0.2s an toàn giữa các lần ghép
+                            task.wait(0.2)
                         end
                     end
                 end
@@ -239,14 +280,8 @@ return function(Window, Utils)
         Info = "Thực hiện ghép tất cả các Pet trùng loại trong túi 1 lần lập tức.",
         Callback = function()
             task.spawn(function()
-                local fusedCount = ProcessPetFuseOnce()
-                pcall(function()
-                    game:GetService("StarterGui"):SetCore("SendNotification", {
-                        Title = "Pet Fuse",
-                        Text = string.format("Đã dung hợp thành công %d Pet phôi!", fusedCount or 0),
-                        Duration = 3
-                    })
-                end)
+                local fusedCount = ProcessPetFuseOnce(true)
+                ShowNotify("Pet Fuse", string.format("Đã dung hợp thành công %d Pet phôi!", fusedCount or 0), 3)
             end)
         end
     })
@@ -273,10 +308,10 @@ return function(Window, Utils)
 
     -- VÒNG LẶP AUTO FUSE
     task.spawn(function()
-        while task.wait(3) do
+        while task.wait(4) do
             if autoFuseEnabled then
                 pcall(function()
-                    ProcessPetFuseOnce()
+                    ProcessPetFuseOnce(false)
                 end)
             end
         end
