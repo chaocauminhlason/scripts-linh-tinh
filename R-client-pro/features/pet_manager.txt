@@ -3,7 +3,6 @@
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local LocalPlayer = Players.LocalPlayer
 
     -- Biến cấu hình & trạng thái
@@ -15,12 +14,30 @@ return function(Window, Utils)
     local isProcessingFuse = false
 
     -- ==========================================
-    -- HÀM TRUY XUẤT DỮ LIỆU PET TỪ GAME CORE
+    -- HÀM TRUY XUẤT NATIVE PET SYSTEM TỪ GAME
     -- ==========================================
-    local function GetGamePlayer()
+    local function GetPathToolEnv()
         local success, env = pcall(function() return getrenv()._G.PathTool end)
-        if success and env and env.ClientPlayerManager then
+        if success and env then return env end
+        return nil
+    end
+
+    local function GetGamePlayer()
+        local env = GetPathToolEnv()
+        if env and env.ClientPlayerManager then
             return env.ClientPlayerManager.GetGamePlayer()
+        end
+        return nil
+    end
+
+    local function GetPetSystem()
+        local env = GetPathToolEnv()
+        if env then
+            if env.PetSystem then return env.PetSystem end
+            if type(env.Require) == "function" then
+                local ok, sys = pcall(function() return env.Require("PetSystem") end)
+                if ok and sys then return sys end
+            end
         end
         return nil
     end
@@ -33,35 +50,32 @@ return function(Window, Utils)
         return {}
     end
 
-    local function CallRemote(channelName, ...)
-        local args = { channelName, ... }
-        return ReplicatedStorage:WaitForChild("CommonLibrary")
-            :WaitForChild("Tool")
-            :WaitForChild("RemoteManager")
-            :WaitForChild("Funcs")
-            :WaitForChild("DataPullFunc")
-            :InvokeServer(unpack(args))
-    end
-
     -- ==========================================
     -- 1. TÍNH NĂNG KHÓA / MỞ KHÓA PET (LOCK / UNLOCK)
     -- ==========================================
     local function SetAllPetLockStatus(targetLockState, filterGrade)
+        local PetSystem = GetPetSystem()
+        if not PetSystem then
+            warn("❌ [PetManager] Không tìm thấy PetSystem!")
+            return
+        end
+
         local itemMap = GetPetMap()
         local count = 0
 
         for guid, pet in pairs(itemMap) do
             local isLocked = pet:IsLock()
-            local isEquipped = (pet:GetEquipedIndex() ~= nil and pet:GetEquipedIndex() > 0) or pet:IsInTeam()
             local grade = pet:GetGrade() or 1
 
             if isLocked ~= targetLockState then
                 if not filterGrade or grade == filterGrade then
-                    pcall(function()
-                        CallRemote("PetLockChannel", tostring(guid), targetLockState)
+                    local ok = pcall(function()
+                        return PetSystem.ClientLockPet(tostring(guid), targetLockState)
                     end)
-                    count = count + 1
-                    task.wait(0.05)
+                    if ok then
+                        count = count + 1
+                    end
+                    task.wait(0.02)
                 end
             end
         end
@@ -82,6 +96,13 @@ return function(Window, Utils)
     local function ProcessPetFuseOnce()
         if isProcessingFuse then return end
         isProcessingFuse = true
+
+        local env = GetPathToolEnv()
+        local PetSystem = GetPetSystem()
+        if not (env and PetSystem) then
+            isProcessingFuse = false
+            return 0
+        end
 
         local itemMap = GetPetMap()
         -- Nhóm các pet theo TmplId (loại pet) và Grade (cùng phẩm cấp)
@@ -108,41 +129,62 @@ return function(Window, Utils)
                     PetObj = pet,
                     IsEquipped = isEquipped,
                     IsLocked = isLocked,
-                    Grade = grade
+                    Grade = grade,
+                    Tmpl = pet:GetTmpl()
                 })
             end
         end
 
         local totalFused = 0
-        -- Tiến hành dung hợp các nhóm có từ 2 pet trở lên (1 pet chính + các pet phôi)
-        for key, list in pairs(petGroups) do
+        -- Tiến hành dung hợp theo số lượng phôi yêu cầu (CostTmplAmount) của từng loại pet
+        for groupKey, list in pairs(petGroups) do
             if #list >= 2 then
-                -- Chọn pet chính (Ưu tiên pet đang trang bị nếu có, nếu không lấy pet đầu tiên)
-                local mainPetIndex = 1
-                for i, p in ipairs(list) do
-                    if p.IsEquipped then
-                        mainPetIndex = i
-                        break
-                    end
-                end
+                local samplePet = list[1].PetObj
+                local tmpl = list[1].Tmpl
+                local grade = list[1].Grade
+                local evolveInfo = (tmpl and tmpl.Evolve) and tmpl.Evolve[grade]
 
-                local mainPet = list[mainPetIndex]
-                local foodGuids = {}
+                if evolveInfo and evolveInfo.CostTmplAmount then
+                    local reqFoodCount = evolveInfo.CostTmplAmount
+                    local totalNeeded = reqFoodCount + 1
 
-                for i, p in ipairs(list) do
-                    if i ~= mainPetIndex then
-                        table.insert(foodGuids, p.Guid)
-                    end
-                end
+                    -- Tạo bản sao danh sách để nhặt phôi
+                    local groupList = { unpack(list) }
 
-                if #foodGuids > 0 then
-                    local ok, res = pcall(function()
-                        return CallRemote("PetEvolveChannel", mainPet.Guid, foodGuids)
-                    end)
-                    if ok then
-                        totalFused = totalFused + #foodGuids
+                    while #groupList >= totalNeeded do
+                        -- Tìm pet chính (Ưu tiên pet đang trang bị nếu có)
+                        local mainIndex = 1
+                        for i, p in ipairs(groupList) do
+                            if p.IsEquipped then
+                                mainIndex = i
+                                break
+                            end
+                        end
+
+                        local mainPet = table.remove(groupList, mainIndex)
+                        local foodGuids = {}
+
+                        for i = 1, reqFoodCount do
+                            local foodPet = table.remove(groupList, 1)
+                            if foodPet then
+                                table.insert(foodGuids, foodPet.Guid)
+                            end
+                        end
+
+                        if #foodGuids == reqFoodCount then
+                            local ok = pcall(function()
+                                if env.ViewUtil and type(env.ViewUtil.DoRequest) == "function" then
+                                    return env.ViewUtil.DoRequest(PetSystem.ClientEvolve, mainPet.Guid, foodGuids)
+                                else
+                                    return PetSystem.ClientEvolve(mainPet.Guid, foodGuids)
+                                end
+                            end)
+                            if ok then
+                                totalFused = totalFused + reqFoodCount
+                            end
+                            task.wait(0.15)
+                        end
                     end
-                    task.wait(0.15)
                 end
             end
         end
