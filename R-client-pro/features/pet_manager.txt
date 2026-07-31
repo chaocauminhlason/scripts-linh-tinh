@@ -1,6 +1,6 @@
 -- ====================================================================
--- MODULE: PET MANAGER V3.0 (QUẢN LÝ KHÓA/MỞ KHÓA & DUNG HỢP PET AN TOÀN)
--- BẢN NÂNG CẤP CAO CẤP: PHÂN LOẠI QUALITY TRAIT/THIÊN PHÚ CAO NHẤT (Q: 3 -> 6)
+-- MODULE: PET MANAGER V3.5 (QUẢN LÝ KHÓA/MỞ KHÓA & DUNG HỢP PET AN TOÀN)
+-- BẢN THIẾT KẾ GIAO DIỆN TINH GỌN: MULTI-SELECT DROPDOWN THÔNG MINH
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -17,6 +17,13 @@ return function(Window, Utils)
     local minFuseGrade = 1
     local maxFuseGrade = 3 -- FILTER 3: Mặc định Grade 3 (Rank B trở xuống)
     
+    -- Danh sách tiêu chí chọn Khóa/Mở Khóa đa năng (Multi-Select)
+    local selectedLockCriteria = {
+        "Rank A Trở Lên (Grade 4+)",
+        "Pet Có Dị Biến (Shiny/Huge...)",
+        "Pet Có Trait Cao Cấp (Q: 5-6)"
+    }
+
     -- Biến chống click đúp & chống spam anti-cheat
     local isProcessingLock = false
     local isProcessingFuse = false
@@ -140,9 +147,9 @@ return function(Window, Utils)
     end
 
     -- ==========================================
-    -- 1. TÍNH NĂNG KHÓA / MỞ KHÓA PET (DEBOUNCE SAFE)
+    -- 1. TÍNH NĂNG KHÓA / MỞ KHÓA BATCH PET (TINH GỌN VỚI MULTI-SELECT)
     -- ==========================================
-    local function SetAllPetLockStatus(targetLockState, filterMinGrade, filterOnlyMutations, filterOnlyTraits, filterMinTraitQuality)
+    local function ProcessBatchPetLock(targetLockState, criteriaList)
         if not CheckVIPAccess() then return end
 
         local now = tick()
@@ -166,6 +173,21 @@ return function(Window, Utils)
             return
         end
 
+        -- Phân tích tiêu chí được chọn từ Multi-Select Dropdown
+        local filterRankA = false
+        local filterMutation = false
+        local filterHighTrait = false
+        local filterAllTrait = false
+        local filterAllPets = false
+
+        for _, opt in ipairs(criteriaList or {}) do
+            if string.find(opt, "Grade 4+") then filterRankA = true end
+            if string.find(opt, "Dị Biến") then filterMutation = true end
+            if string.find(opt, "Q: 5-6") then filterHighTrait = true end
+            if string.find(opt, "Tất Cả Trait") then filterAllTrait = true end
+            if string.find(opt, "Tất Cả Pet Trong Túi") then filterAllPets = true end
+        end
+
         local itemMap = GetPetMap()
         local count = 0
 
@@ -176,21 +198,18 @@ return function(Window, Utils)
             local hasTrait = HasBreedTalent(pet)
             local traitQuality = GetPetMaxTraitQuality(pet, env)
 
-            local shouldProcess = false
+            local matchesCriteria = false
 
-            if filterMinTraitQuality then
-                if traitQuality >= filterMinTraitQuality then shouldProcess = true end
-            elseif filterOnlyTraits then
-                if hasTrait then shouldProcess = true end
-            elseif filterOnlyMutations then
-                if isMutated then shouldProcess = true end
-            elseif filterMinGrade then
-                if grade >= filterMinGrade then shouldProcess = true end
+            if filterAllPets then
+                matchesCriteria = true
             else
-                shouldProcess = true
+                if filterRankA and grade >= 4 then matchesCriteria = true end
+                if filterMutation and isMutated then matchesCriteria = true end
+                if filterHighTrait and traitQuality >= 5 then matchesCriteria = true end
+                if filterAllTrait and hasTrait then matchesCriteria = true end
             end
 
-            if shouldProcess and (isLocked ~= targetLockState) then
+            if matchesCriteria and (isLocked ~= targetLockState) then
                 local ok = pcall(function()
                     return PetSystem.ClientLockPet(tostring(guid), targetLockState)
                 end)
@@ -378,55 +397,43 @@ return function(Window, Utils)
     -- ==========================================
     local PetTab = Window:CreateTab(Utils.t("pet_manager") or "Pet Manager", "dog")
 
-    -- SECTION: LOCK & UNLOCK PET
-    PetTab:CreateSection(" " .. (Utils.t("sec_pet_lock") or "🔒 QUẢN LÝ KHÓA PET") .. " ")
+    -- SECTION: LOCK & UNLOCK PET (GIAO DIỆN MULTI-SELECT GỌN GÀNG)
+    PetTab:CreateSection(" " .. (Utils.t("sec_pet_lock") or "🔒 QUẢN LÝ KHÓA / MỞ KHÓA PET") .. " ")
+
+    PetTab:CreateDropdown({
+        Name = "Tiêu Chí Chọn Pet (Batch Lock Filter)",
+        Info = "Tích chọn 1 hoặc nhiều loại Pet bạn muốn thao tác Khóa / Mở Khóa.",
+        Options = {
+            "Rank A Trở Lên (Grade 4+)",
+            "Pet Có Dị Biến (Shiny/Huge...)",
+            "Pet Có Trait Cao Cấp (Q: 5-6)",
+            "Tất Cả Trait / Thiên Phú",
+            "Tất Cả Pet Trong Túi"
+        },
+        CurrentOption = selectedLockCriteria,
+        MultipleOptions = true,
+        Flag = "PetLockCriteriaDropdown",
+        Callback = function(Options)
+            selectedLockCriteria = Options
+        end
+    })
 
     PetTab:CreateButton({
-        Name = "🔒 Khóa Tất Cả Pet Rank A Trở Lên (Grade 4+)",
-        Info = "Khóa nhanh toàn bộ Pet từ Rank A, S, SS, SSS để tránh bán nhầm.",
+        Name = "🔒 KHÓA PET THEO TIÊU CHÍ ĐÃ CHỌN",
+        Info = "Thực hiện khóa tất cả Pet trùng khớp với các mục bạn đã tích ở trên.",
         Callback = function()
             task.spawn(function()
-                SetAllPetLockStatus(true, 4, false, false, nil)
+                ProcessBatchPetLock(true, selectedLockCriteria)
             end)
         end
     })
 
     PetTab:CreateButton({
-        Name = "🔒 Khóa Tất Cả Pet Có Dị Biến (Shiny/Huge...)",
-        Info = "Khóa nhanh toàn bộ Pet mang đặc tính dị biến (Shiny, Huge, Bloodlit, Fairy...).",
+        Name = "🔓 MỞ KHÓA PET THEO TIÊU CHÍ ĐÃ CHỌN",
+        Info = "Thực hiện mở khóa tất cả Pet trùng khớp với các mục bạn đã tích ở trên.",
         Callback = function()
             task.spawn(function()
-                SetAllPetLockStatus(true, nil, true, false, nil)
-            end)
-        end
-    })
-
-    PetTab:CreateButton({
-        Name = "🔒 Khóa Tất Cả Pet Có Trait Cao Cấp (Quality 5-6)",
-        Info = "Khóa nhanh toàn bộ Pet sở hữu Trait/Thiên phú Phẩm chất Cao Cấp (Impair IV, Fortify IV, Rebirth...).",
-        Callback = function()
-            task.spawn(function()
-                SetAllPetLockStatus(true, nil, false, false, 5)
-            end)
-        end
-    })
-
-    PetTab:CreateButton({
-        Name = "🔒 Khóa Tất Cả Pet Có Trait / Thiên Phú",
-        Info = "Khóa nhanh toàn bộ Pet sở hữu Trait/Thiên phú (Bất kỳ phẩm chất nào).",
-        Callback = function()
-            task.spawn(function()
-                SetAllPetLockStatus(true, nil, false, true, nil)
-            end)
-        end
-    })
-
-    PetTab:CreateButton({
-        Name = Utils.t("btn_unlock_all_pets") or "🔓 Mở Khóa Tất Cả Pet (Unlock All)",
-        Info = "Mở khóa toàn bộ Pet trong túi (Chỉ dành cho tài khoản VIP Key).",
-        Callback = function()
-            task.spawn(function()
-                SetAllPetLockStatus(false, nil, false, false, nil)
+                ProcessBatchPetLock(false, selectedLockCriteria)
             end)
         end
     })
