@@ -28,18 +28,51 @@ return function(Window, Utils)
     local function LoadEggData()
         local env = getrenv()._G.PathTool
         if env and env.CfgEgg and env.CfgEgg.Tmpls then
+            local player = env.ClientPlayerManager and env.ClientPlayerManager.GetGamePlayer()
+            local eggData = player and player.egg
+
+            local ownedList = {}
+            local unownedList = {}
+
             for id, info in pairs(env.CfgEgg.Tmpls) do
                 local eId = tonumber(id)
                 if eId then
                     local eName = info.Name or info.name or info.EggName or (Utils.t("egg_fallback_name") .. tostring(eId))
                     eName = string.gsub(eName, '"', '')
                     eName = string.gsub(eName, '\n', ' ')
-                    local displayStr = eName .. " (ID: " .. eId .. ")"
-                    table.insert(eggOptions, displayStr)
-                    eggIdMap[displayStr] = eId
+                    
+                    local amt = 0
+                    if eggData and type(eggData.GetEggAmount) == "function" then
+                        amt = eggData:GetEggAmount(eId) or 0
+                    end
+
+                    if amt > 0 then
+                        local displayStr = "⭐ " .. eName .. " (x" .. tostring(amt) .. ") [ID: " .. eId .. "]"
+                        table.insert(ownedList, { str = displayStr, count = amt, id = eId })
+                    else
+                        local displayStr = eName .. " (x0) [ID: " .. eId .. "]"
+                        table.insert(unownedList, { str = displayStr, count = 0, id = eId })
+                    end
                 end
             end
-            table.sort(eggOptions)
+
+            -- Sắp xếp: Trứng đang sở hữu lên đầu (số lượng nhiều nhất trước)
+            table.sort(ownedList, function(a, b) return a.count > b.count end)
+            table.sort(unownedList, function(a, b) return a.id < b.id end)
+
+            eggOptions = {}
+            eggIdMap = {}
+
+            for _, item in ipairs(ownedList) do
+                table.insert(eggOptions, item.str)
+                eggIdMap[item.str] = item.id
+            end
+
+            for _, item in ipairs(unownedList) do
+                table.insert(eggOptions, item.str)
+                eggIdMap[item.str] = item.id
+            end
+
             return true
         end
         return false
