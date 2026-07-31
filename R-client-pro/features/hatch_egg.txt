@@ -156,6 +156,39 @@ return function(Window, Utils)
 
     EggTab:CreateSection(" " .. string.upper(Utils.t("auto_breed")) .. " ")
     
+    local function GetHighQualityTraits(pet, env)
+        if not (pet and pet:IsHasBreedTalent()) then return {} end
+        local highTraits = {}
+        local cfgTalent = env and env.CfgPetBreedTalent and env.CfgPetBreedTalent.Tmpls
+        
+        local allT = type(pet.GetAllBreedTalent) == "function" and pet:GetAllBreedTalent()
+        if type(allT) == "table" then
+            for slot, tVal in pairs(allT) do
+                local tId = tonumber(tVal) or (type(tVal) == "table" and (tVal.TmplId or tVal.id))
+                local tInfo = tId and cfgTalent and cfgTalent[tId]
+                if tInfo and tInfo.Quality and tonumber(tInfo.Quality) >= 4 then -- Quality 4, 5, 6 (Rare, Epic, Mythic)
+                    table.insert(highTraits, tInfo.Name)
+                end
+            end
+        end
+
+        if #highTraits == 0 and type(pet.IterBreedTalent) == "function" then
+            pcall(function()
+                pet:IterBreedTalent(function(tData)
+                    if type(tData) == "table" and tData.Name and tData.Quality and tonumber(tData.Quality) >= 4 then
+                        table.insert(highTraits, tData.Name)
+                    elseif tonumber(tData) and cfgTalent and cfgTalent[tonumber(tData)] then
+                        local tInfo = cfgTalent[tonumber(tData)]
+                        if tInfo and tInfo.Quality and tonumber(tInfo.Quality) >= 4 then
+                            table.insert(highTraits, tInfo.Name)
+                        end
+                    end
+                end)
+            end)
+        end
+        return highTraits
+    end
+
     local function FormatPetOptionString(pet, env)
         local tmpl = pet:GetTmpl()
         local name = tmpl.Name or tmpl.name or "Unknown"
@@ -186,9 +219,14 @@ return function(Window, Utils)
             end
         end
         
+        local highTraits = GetHighQualityTraits(pet, env)
+
         local displayStr = name .. " (" .. gradeName .. ")"
         if #muts > 0 then
             displayStr = displayStr .. " [" .. table.concat(muts, "+") .. "]"
+        end
+        if #highTraits > 0 then
+            displayStr = displayStr .. " ✨[" .. table.concat(highTraits, ", ") .. "]"
         end
         displayStr = displayStr .. " (ID: " .. tostring(pet.itemId) .. ")"
         return displayStr
