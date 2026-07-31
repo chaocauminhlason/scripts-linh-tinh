@@ -1,6 +1,6 @@
 -- ====================================================================
--- MODULE: PET MANAGER V2.0 (QUẢN LÝ KHÓA/MỞ KHÓA & DUNG HỢP PET AN TOÀN)
--- BẢN NÂNG CẤP THÔNG MINH: BỘ LỌC DỊ BIẾN, KHÓA RANK CAO & TÚI ĐẦY
+-- MODULE: PET MANAGER V2.5 (QUẢN LÝ KHÓA/MỞ KHÓA & DUNG HỢP PET AN TOÀN)
+-- BẢN NÂNG CẤP CAO CẤP: LỌC DỊ BIẾN, TRAIT/THIÊN PHÚ, KHÓA RANK & TÚI ĐẦY
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -11,6 +11,7 @@ return function(Window, Utils)
     local skipLockedPets = true
     local skipEquippedPets = true
     local skipMutatedPets = true -- FILTER 1: Mặc định BẬT - Không dùng Pet Dị biến làm phôi
+    local skipTraitPets = true -- FILTER 6: Mặc định BẬT - Không dùng Pet có Trait/Thiên phú làm phôi
     local autoFuseOnBagFull = false -- FILTER 5: Mặc định TẮT - Chỉ auto fuse khi túi còn ít slot
     local bagFreeSlotThreshold = 5
     local minFuseGrade = 1
@@ -60,6 +61,7 @@ return function(Window, Utils)
         return {}
     end
 
+    -- Kiêm tra Dị biến (Mutation: Shiny, Huge, Bloodlit, Fairy...)
     local function HasSpecialProperty(pet)
         if not pet then return false end
         local spProp = pet:GetSpecialProp()
@@ -73,6 +75,13 @@ return function(Window, Utils)
             return true
         end
         return false
+    end
+
+    -- Kiểm tra Trait / Thiên phú (Breed Talent: Impair, Fortify, Hasten, Rebirth...)
+    local function HasBreedTalent(pet)
+        if not pet then return false end
+        local ok, hasTalent = pcall(function() return pet:IsHasBreedTalent() end)
+        return ok and hasTalent == true
     end
 
     local function ShowNotify(title, text, duration)
@@ -99,7 +108,7 @@ return function(Window, Utils)
     -- ==========================================
     -- 1. TÍNH NĂNG KHÓA / MỞ KHÓA PET (DEBOUNCE SAFE)
     -- ==========================================
-    local function SetAllPetLockStatus(targetLockState, filterMinGrade, filterOnlyMutations)
+    local function SetAllPetLockStatus(targetLockState, filterMinGrade, filterOnlyMutations, filterOnlyTraits)
         if not CheckVIPAccess() then return end
 
         local now = tick()
@@ -129,10 +138,13 @@ return function(Window, Utils)
             local isLocked = pet:IsLock()
             local grade = pet:GetGrade() or 1
             local isMutated = HasSpecialProperty(pet)
+            local hasTrait = HasBreedTalent(pet)
 
             local shouldProcess = false
 
-            if filterOnlyMutations then
+            if filterOnlyTraits then
+                if hasTrait then shouldProcess = true end
+            elseif filterOnlyMutations then
                 if isMutated then shouldProcess = true end
             elseif filterMinGrade then
                 if grade >= filterMinGrade then shouldProcess = true end
@@ -209,6 +221,7 @@ return function(Window, Utils)
             local grade = pet:GetGrade() or 1
             local tmplId = pet:GetTmplId()
             local hasMutation = HasSpecialProperty(pet)
+            local hasTrait = HasBreedTalent(pet)
 
             local shouldInclude = true
             if skipLockedPets and isLocked then shouldInclude = false end
@@ -226,6 +239,7 @@ return function(Window, Utils)
                     IsEquipped = isEquipped,
                     IsLocked = isLocked,
                     HasMutation = hasMutation,
+                    HasTrait = hasTrait,
                     Grade = grade,
                     Tmpl = pet:GetTmpl()
                 })
@@ -244,9 +258,9 @@ return function(Window, Utils)
                     local reqFoodCount = evolveInfo.CostTmplAmount
                     local totalNeeded = reqFoodCount + 1
 
-                    -- FILTER 2 & 1: Phân loại Pet làm Pet Chính vs Pet Phôi
-                    -- Pet chính: Ưu tiên (1) Pet đang trang bị, (2) Pet có Dị biến tốt nhất.
-                    -- Pet phôi: Nếu skipMutatedPets = true ➔ Loại bỏ hoàn toàn Pet có Dị biến khỏi danh sách phôi!
+                    -- FILTER 2, 1, 6: Phân loại Pet làm Pet Chính vs Pet Phôi
+                    -- Pet chính: Ưu tiên (1) Pet đang trang bị, (2) Pet có Trait/Thiên phú, (3) Pet có Dị biến.
+                    -- Pet phôi: Loại bỏ Pet Dị biến (nếu skipMutatedPets) & Loại bỏ Pet Trait (nếu skipTraitPets)!
                     
                     local validGroupList = {}
                     for _, p in ipairs(list) do
@@ -256,10 +270,13 @@ return function(Window, Utils)
                     -- Sắp xếp danh sách: Pet ưu tiên làm Pet chính đứng ĐẦU mảng
                     table.sort(validGroupList, function(a, b)
                         if a.IsEquipped ~= b.IsEquipped then
-                            return a.IsEquipped -- Trang bị lên trước
+                            return a.IsEquipped -- 1. Pet đang trang bị đứng đầu
+                        end
+                        if a.HasTrait ~= b.HasTrait then
+                            return a.HasTrait -- 2. Pet có Trait/Thiên phú đứng đầu làm Pet chính
                         end
                         if a.HasMutation ~= b.HasMutation then
-                            return a.HasMutation -- Dị biến lên trước làm pet chính
+                            return a.HasMutation -- 3. Pet có Dị biến đứng đầu làm Pet chính
                         end
                         return a.Guid < b.Guid
                     end)
@@ -273,8 +290,12 @@ return function(Window, Utils)
                         while i <= #validGroupList and #foodGuids < reqFoodCount do
                             local candidateFood = validGroupList[i]
                             
-                            -- FILTER 1: Nếu bật Bỏ Qua Pet Dị Biến Làm Phôi ➔ Bỏ qua nếu pet phôi có Dị Biến
-                            if skipMutatedPets and candidateFood.HasMutation then
+                            -- FILTER 1 & 6: Bỏ qua nếu pet phôi có Dị biến hoặc Trait/Thiên phú
+                            local isInvalidFood = false
+                            if skipMutatedPets and candidateFood.HasMutation then isInvalidFood = true end
+                            if skipTraitPets and candidateFood.HasTrait then isInvalidFood = true end
+
+                            if isInvalidFood then
                                 i = i + 1
                             else
                                 local foodPet = table.remove(validGroupList, i)
@@ -296,7 +317,7 @@ return function(Window, Utils)
                             -- Delay 0.2s an toàn giữa các lần ghép
                             task.wait(0.2)
                         else
-                            -- Không đủ phôi hợp lệ (do vướng filter dị biến), hoàn trả mainPet
+                            -- Không đủ phôi hợp lệ (do vướng filter dị biến/trait), hoàn trả mainPet
                             table.insert(validGroupList, 1, mainPet)
                             break
                         end
@@ -322,7 +343,7 @@ return function(Window, Utils)
         Info = "Khóa nhanh toàn bộ Pet từ Rank A, S, SS, SSS để tránh bán nhầm.",
         Callback = function()
             task.spawn(function()
-                SetAllPetLockStatus(true, 4, false)
+                SetAllPetLockStatus(true, 4, false, false)
             end)
         end
     })
@@ -332,7 +353,17 @@ return function(Window, Utils)
         Info = "Khóa nhanh toàn bộ Pet mang đặc tính dị biến (Shiny, Huge, Bloodlit, Fairy...).",
         Callback = function()
             task.spawn(function()
-                SetAllPetLockStatus(true, nil, true)
+                SetAllPetLockStatus(true, nil, true, false)
+            end)
+        end
+    })
+
+    PetTab:CreateButton({
+        Name = "🔒 Khóa Tất Cả Pet Có Trait / Thiên Phú",
+        Info = "Khóa nhanh toàn bộ Pet sở hữu Trait/Thiên phú (Impair, Fortify, Hasten, Rebirth...).",
+        Callback = function()
+            task.spawn(function()
+                SetAllPetLockStatus(true, nil, false, true)
             end)
         end
     })
@@ -342,7 +373,7 @@ return function(Window, Utils)
         Info = "Mở khóa toàn bộ Pet trong túi (Chỉ dành cho tài khoản VIP Key).",
         Callback = function()
             task.spawn(function()
-                SetAllPetLockStatus(false, nil, false)
+                SetAllPetLockStatus(false, nil, false, false)
             end)
         end
     })
@@ -377,6 +408,16 @@ return function(Window, Utils)
         Flag = "SkipMutatedPetsFlag",
         Callback = function(Value)
             skipMutatedPets = Value
+        end
+    })
+
+    PetTab:CreateToggle({
+        Name = "🛡️ Bỏ Qua Pet Có Trait / Thiên Phú Làm Phôi",
+        Info = "Tuyệt đối KHÔNG dùng Pet sở hữu Trait/Thiên phú (Impair, Fortify, Hasten...) làm phôi dung hợp.",
+        CurrentValue = true,
+        Flag = "SkipTraitPetsFlag",
+        Callback = function(Value)
+            skipTraitPets = Value
         end
     })
 
