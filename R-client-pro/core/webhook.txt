@@ -1,16 +1,27 @@
 -- ====================================================================
--- MODULE: WEBHOOK & THÔNG BÁO DISCORD
+-- MODULE: WEBHOOK & THÔNG BÁO DISCORD (V2.0 - CẢNH BÁO TÚI PET ĐẦY CHỐNG SPAM)
 -- ====================================================================
 local WebhookModule = {}
 
 local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
 local currentWebhookURL = ""
 local webhookEnabled = false
+local notifyPetBagFull = true -- Toggle thông báo túi Pet đầy
+
+-- BIẾN CHỐNG SPAM WEBHOOK TÚI PET ĐẦY
+local isBagFullState = false       -- Trạng thái túi pet đầy (State Transition)
+local lastBagFullNotifyTime = 0     -- Thời gian gửi thông báo gần nhất
+local BAG_FULL_COOLDOWN = 300      -- Cooldown 5 phút giữa các lần gửi lại nếu vẫn đầy
 
 WebhookModule.Utils = nil
 
--- 1. HÀM GỬI THÔNG BÁO (Để các file khác gọi lại)
-function WebhookModule.SendNotification(message)
+-- ==========================================
+-- 1. HÀM GỬI THÔNG BÁO TỔNG QUÁT
+-- ==========================================
+function WebhookModule.SendNotification(message, title, colorHex)
     if not webhookEnabled or currentWebhookURL == "" or not string.find(currentWebhookURL, "api/webhooks") then 
         return 
     end
@@ -18,39 +29,139 @@ function WebhookModule.SendNotification(message)
     local req = (syn and syn.request) or (http and http.request) or http_request or fluxus and fluxus.request or request
     
     if req then
-        local tFunc = function(k)
-            if WebhookModule.Utils and WebhookModule.Utils.t then
-                return WebhookModule.Utils.t(k)
-            end
-            local fallbacks = {
-                webhook_notification_title = "🎉 Update Auto-Farm"
-            }
-            return fallbacks[k] or k
-        end
-
         local data = {
             ["content"] = "",
             ["embeds"] = {
                 {
-                    ["title"] = tFunc("webhook_notification_title"),
+                    ["title"] = title or "🎉 Update Auto-Farm",
                     ["description"] = message,
                     ["type"] = "rich",
-                    ["color"] = tonumber(0x00FF00),
+                    ["color"] = colorHex or tonumber(0x00FF00),
                     ["timestamp"] = DateTime.now():ToIsoDate()
                 }
             }
         }
         
-        req({ 
-            Url = currentWebhookURL, 
-            Method = "POST", 
-            Headers = { ["Content-Type"] = "application/json" }, 
-            Body = HttpService:JSONEncode(data) 
-        })
+        pcall(function()
+            req({ 
+                Url = currentWebhookURL, 
+                Method = "POST", 
+                Headers = { ["Content-Type"] = "application/json" }, 
+                Body = HttpService:JSONEncode(data) 
+            })
+        end)
     end
 end
 
--- 2. HÀM TẠO GIAO DIỆN (Được gọi từ main.txt)
+-- ==========================================
+-- 2. HÀM GỬI THÔNG BÁO TÚI PET ĐẦY (VỚI EMBED CHI TIẾT)
+-- ==========================================
+function WebhookModule.SendPetBagFullNotification(currentBag, maxBag)
+    if not webhookEnabled or not notifyPetBagFull or currentWebhookURL == "" or not string.find(currentWebhookURL, "api/webhooks") then
+        return
+    end
+
+    local req = (syn and syn.request) or (http and http.request) or http_request or fluxus and fluxus.request or request
+    if not req then return end
+
+    local playerName = LocalPlayer and (LocalPlayer.DisplayName .. " (@" .. LocalPlayer.Name .. ")") or "Unknown"
+    local percent = (maxBag > 0) and math.floor((currentBag / maxBag) * 100) or 100
+
+    local data = {
+        ["content"] = "🚨 **CẢNH BÁO: TÚI PET ĐÃ ĐẦY!**",
+        ["embeds"] = {
+            {
+                ["title"] = "🎒 TÚI PET ĐÃ ĐẠT GIỚI HẠN TỐI ĐA!",
+                ["description"] = "Túi Pet của bạn đã đầy slot. Vui lòng mở game để bán, tái chế hoặc dung hợp Pet!",
+                ["color"] = tonumber(0xFF3333), -- Màu đỏ cảnh báo
+                ["fields"] = {
+                    {
+                        ["name"] = "👤 Người Chơi",
+                        ["value"] = playerName,
+                        ["inline"] = true
+                    },
+                    {
+                        ["name"] = "🎒 Sức Chứa Túi",
+                        ["value"] = string.format("**%d / %d** (%d%%)", currentBag, maxBag, percent),
+                        ["inline"] = true
+                    },
+                    {
+                        ["name"] = "💡 Lời Khuyên Khắc Phục",
+                        ["value"] = "• Bật **Auto Fuse** trong tab *Pet Manager*\n• Hoặc bán/tái chế Pet rác để giải phóng ô trống.",
+                        ["inline"] = false
+                    }
+                },
+                ["footer"] = {
+                    ["text"] = "R-Client Pro Auto System"
+                },
+                ["timestamp"] = DateTime.now():ToIsoDate()
+            }
+        }
+    }
+
+    pcall(function()
+        req({
+            Url = currentWebhookURL,
+            Method = "POST",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body = HttpService:JSONEncode(data)
+        })
+    end)
+end
+
+-- ==========================================
+-- 3. VÒNG LẶP MONITOR THEO DÕI TÚI PET CHỐNG SPAM (BACKGROUND TASK)
+-- ==========================================
+task.spawn(function()
+    while task.wait(10) do
+        pcall(function()
+            if not (webhookEnabled and notifyPetBagFull) then return end
+
+            local env = getrenv()._G and getrenv()._G.PathTool
+            if not (env and env.ClientPlayerManager) then return end
+
+            local player = env.ClientPlayerManager.GetGamePlayer()
+            if not (player and player.pet) then return end
+
+            local currentBag = player.pet:GetBagAmount() or 0
+            local maxBag = player.pet:GetBagCapacity() or 0
+
+            if maxBag > 0 and currentBag >= maxBag then
+                -- Túi đang ở trạng thái ĐẦY
+                if not isBagFullState then
+                    -- BẠN VỪA CHUYỂN TRẠNG THÁI TỪ THƯỜNG -> ĐẦY (State Transition)
+                    -- Đợi 3s hoãn để nếu Auto Fuse đang chạy thì nó kịp gom phôi dọn túi trước
+                    task.wait(3)
+                    currentBag = player.pet:GetBagAmount() or 0
+                    if currentBag >= maxBag then
+                        local now = tick()
+                        if now - lastBagFullNotifyTime >= BAG_FULL_COOLDOWN then
+                            isBagFullState = true
+                            lastBagFullNotifyTime = now
+                            WebhookModule.SendPetBagFullNotification(currentBag, maxBag)
+                        end
+                    end
+                else
+                    -- Túi ĐÃ đầy từ trước. Kiểm tra xem có đủ thời gian Cooldown 5 phút để nhắc lại không
+                    local now = tick()
+                    if now - lastBagFullNotifyTime >= BAG_FULL_COOLDOWN then
+                        lastBagFullNotifyTime = now
+                        WebhookModule.SendPetBagFullNotification(currentBag, maxBag)
+                    end
+                end
+            else
+                -- Túi ĐÃ CÓ CHỖ TRỐNG (Cơ chế Reset Trạng Thái)
+                if isBagFullState then
+                    isBagFullState = false
+                end
+            end
+        end)
+    end
+end)
+
+-- ==========================================
+-- 4. HÀM TẠO GIAO DIỆN (Được gọi từ main.txt)
+-- ==========================================
 function WebhookModule.InitTab(Window, Rayfield, Utils)
     WebhookModule.Utils = Utils
     
@@ -84,6 +195,16 @@ function WebhookModule.InitTab(Window, Rayfield, Utils)
         Flag = "WebhookToggleConfig",
         Callback = function(Value)
             webhookEnabled = Value
+        end,
+    })
+
+    WebhookTab:CreateToggle({
+        Name = "🎒 Thông Báo Khi Túi Pet Đầy",
+        Info = "Gửi thông báo qua Discord Webhook khi túi Pet đạt giới hạn tối đa (Chống spam tự động).",
+        CurrentValue = true,
+        Flag = "WebhookNotifyPetBagFullFlag",
+        Callback = function(Value)
+            notifyPetBagFull = Value
         end,
     })
 

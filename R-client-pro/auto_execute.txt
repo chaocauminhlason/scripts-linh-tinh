@@ -62,4 +62,4 @@ task.spawn(function()
     end
 end)
 
-print("🚀 Đã kích hoạt hệ thống Bám Dính Vĩnh Cửu (Nhánh: " .. branch .. ")!")
+--print("🚀 Đã kích hoạt hệ thống Bám Dính Vĩnh Cửu (Nhánh: " .. branch .. ")!")
