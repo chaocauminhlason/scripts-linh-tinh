@@ -1,6 +1,6 @@
 -- ====================================================================
--- MODULE: PET MANAGER V2.5 (QUẢN LÝ KHÓA/MỞ KHÓA & DUNG HỢP PET AN TOÀN)
--- BẢN NÂNG CẤP CAO CẤP: LỌC DỊ BIẾN, TRAIT/THIÊN PHÚ, KHÓA RANK & TÚI ĐẦY
+-- MODULE: PET MANAGER V3.0 (QUẢN LÝ KHÓA/MỞ KHÓA & DUNG HỢP PET AN TOÀN)
+-- BẢN NÂNG CẤP CAO CẤP: PHÂN LOẠI QUALITY TRAIT/THIÊN PHÚ CAO NHẤT (Q: 3 -> 6)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -84,6 +84,40 @@ return function(Window, Utils)
         return ok and hasTalent == true
     end
 
+    -- Phân loại Phẩm Chất Trait Cao Nhất của Pet (Quality: 6=Mythic/Gold, 5=Epic, 4=Rare, 3=Common, 0=None)
+    local function GetPetMaxTraitQuality(pet, env)
+        if not (pet and HasBreedTalent(pet)) then return 0 end
+        local maxQ = 0
+        local cfgTalent = env and env.CfgPetBreedTalent and env.CfgPetBreedTalent.Tmpls
+        
+        local allT = type(pet.GetAllBreedTalent) == "function" and pet:GetAllBreedTalent()
+        if type(allT) == "table" then
+            for slot, tVal in pairs(allT) do
+                local tId = tonumber(tVal) or (type(tVal) == "table" and (tVal.TmplId or tVal.id))
+                local tInfo = tId and cfgTalent and cfgTalent[tId]
+                if tInfo and tInfo.Quality then
+                    local q = tonumber(tInfo.Quality) or 0
+                    if q > maxQ then maxQ = q end
+                end
+            end
+        end
+
+        if maxQ == 0 and type(pet.IterBreedTalent) == "function" then
+            pcall(function()
+                pet:IterBreedTalent(function(tData)
+                    if type(tData) == "table" and tData.Quality then
+                        local q = tonumber(tData.Quality) or 0
+                        if q > maxQ then maxQ = q end
+                    elseif tonumber(tData) and cfgTalent and cfgTalent[tonumber(tData)] then
+                        local q = tonumber(cfgTalent[tonumber(tData)].Quality) or 0
+                        if q > maxQ then maxQ = q end
+                    end
+                end)
+            end)
+        end
+        return maxQ
+    end
+
     local function ShowNotify(title, text, duration)
         pcall(function()
             game:GetService("StarterGui"):SetCore("SendNotification", {
@@ -108,7 +142,7 @@ return function(Window, Utils)
     -- ==========================================
     -- 1. TÍNH NĂNG KHÓA / MỞ KHÓA PET (DEBOUNCE SAFE)
     -- ==========================================
-    local function SetAllPetLockStatus(targetLockState, filterMinGrade, filterOnlyMutations, filterOnlyTraits)
+    local function SetAllPetLockStatus(targetLockState, filterMinGrade, filterOnlyMutations, filterOnlyTraits, filterMinTraitQuality)
         if not CheckVIPAccess() then return end
 
         local now = tick()
@@ -124,6 +158,7 @@ return function(Window, Utils)
         isProcessingLock = true
         lastLockTime = now
 
+        local env = GetPathToolEnv()
         local PetSystem = GetPetSystem()
         if not PetSystem then
             warn("❌ [PetManager] Không tìm thấy PetSystem!")
@@ -139,10 +174,13 @@ return function(Window, Utils)
             local grade = pet:GetGrade() or 1
             local isMutated = HasSpecialProperty(pet)
             local hasTrait = HasBreedTalent(pet)
+            local traitQuality = GetPetMaxTraitQuality(pet, env)
 
             local shouldProcess = false
 
-            if filterOnlyTraits then
+            if filterMinTraitQuality then
+                if traitQuality >= filterMinTraitQuality then shouldProcess = true end
+            elseif filterOnlyTraits then
                 if hasTrait then shouldProcess = true end
             elseif filterOnlyMutations then
                 if isMutated then shouldProcess = true end
@@ -222,6 +260,7 @@ return function(Window, Utils)
             local tmplId = pet:GetTmplId()
             local hasMutation = HasSpecialProperty(pet)
             local hasTrait = HasBreedTalent(pet)
+            local traitQuality = GetPetMaxTraitQuality(pet, env)
 
             local shouldInclude = true
             if skipLockedPets and isLocked then shouldInclude = false end
@@ -240,6 +279,7 @@ return function(Window, Utils)
                     IsLocked = isLocked,
                     HasMutation = hasMutation,
                     HasTrait = hasTrait,
+                    TraitQuality = traitQuality,
                     Grade = grade,
                     Tmpl = pet:GetTmpl()
                 })
@@ -258,8 +298,8 @@ return function(Window, Utils)
                     local reqFoodCount = evolveInfo.CostTmplAmount
                     local totalNeeded = reqFoodCount + 1
 
-                    -- FILTER 2, 1, 6: Phân loại Pet làm Pet Chính vs Pet Phôi
-                    -- Pet chính: Ưu tiên (1) Pet đang trang bị, (2) Pet có Trait/Thiên phú, (3) Pet có Dị biến.
+                    -- FILTER PHÂN LOẠI MAIN PET THÔNG MINH:
+                    -- Pet chính: Ưu tiên (1) Pet đang trang bị, (2) Pet có Trait Phẩm Chất Cao Nhất (Quality: 6 > 5 > 4...), (3) Pet có Dị biến.
                     -- Pet phôi: Loại bỏ Pet Dị biến (nếu skipMutatedPets) & Loại bỏ Pet Trait (nếu skipTraitPets)!
                     
                     local validGroupList = {}
@@ -272,11 +312,14 @@ return function(Window, Utils)
                         if a.IsEquipped ~= b.IsEquipped then
                             return a.IsEquipped -- 1. Pet đang trang bị đứng đầu
                         end
+                        if a.TraitQuality ~= b.TraitQuality then
+                            return a.TraitQuality > b.TraitQuality -- 2. Pet có Trait PHẨM CHẤT CAO NHẤT đứng đầu (Q: 6 > 5 > 4...)
+                        end
                         if a.HasTrait ~= b.HasTrait then
-                            return a.HasTrait -- 2. Pet có Trait/Thiên phú đứng đầu làm Pet chính
+                            return a.HasTrait -- 3. Pet có Trait đứng đầu làm Pet chính
                         end
                         if a.HasMutation ~= b.HasMutation then
-                            return a.HasMutation -- 3. Pet có Dị biến đứng đầu làm Pet chính
+                            return a.HasMutation -- 4. Pet có Dị biến đứng đầu làm Pet chính
                         end
                         return a.Guid < b.Guid
                     end)
@@ -343,7 +386,7 @@ return function(Window, Utils)
         Info = "Khóa nhanh toàn bộ Pet từ Rank A, S, SS, SSS để tránh bán nhầm.",
         Callback = function()
             task.spawn(function()
-                SetAllPetLockStatus(true, 4, false, false)
+                SetAllPetLockStatus(true, 4, false, false, nil)
             end)
         end
     })
@@ -353,17 +396,27 @@ return function(Window, Utils)
         Info = "Khóa nhanh toàn bộ Pet mang đặc tính dị biến (Shiny, Huge, Bloodlit, Fairy...).",
         Callback = function()
             task.spawn(function()
-                SetAllPetLockStatus(true, nil, true, false)
+                SetAllPetLockStatus(true, nil, true, false, nil)
+            end)
+        end
+    })
+
+    PetTab:CreateButton({
+        Name = "🔒 Khóa Tất Cả Pet Có Trait Cao Cấp (Quality 5-6)",
+        Info = "Khóa nhanh toàn bộ Pet sở hữu Trait/Thiên phú Phẩm chất Cao Cấp (Impair IV, Fortify IV, Rebirth...).",
+        Callback = function()
+            task.spawn(function()
+                SetAllPetLockStatus(true, nil, false, false, 5)
             end)
         end
     })
 
     PetTab:CreateButton({
         Name = "🔒 Khóa Tất Cả Pet Có Trait / Thiên Phú",
-        Info = "Khóa nhanh toàn bộ Pet sở hữu Trait/Thiên phú (Impair, Fortify, Hasten, Rebirth...).",
+        Info = "Khóa nhanh toàn bộ Pet sở hữu Trait/Thiên phú (Bất kỳ phẩm chất nào).",
         Callback = function()
             task.spawn(function()
-                SetAllPetLockStatus(true, nil, false, true)
+                SetAllPetLockStatus(true, nil, false, true, nil)
             end)
         end
     })
@@ -373,7 +426,7 @@ return function(Window, Utils)
         Info = "Mở khóa toàn bộ Pet trong túi (Chỉ dành cho tài khoản VIP Key).",
         Callback = function()
             task.spawn(function()
-                SetAllPetLockStatus(false, nil, false, false)
+                SetAllPetLockStatus(false, nil, false, false, nil)
             end)
         end
     })
