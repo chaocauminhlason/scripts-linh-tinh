@@ -160,16 +160,27 @@ return function(Window, Utils)
         local tmpl = pet:GetTmpl()
         local name = tmpl.Name or tmpl.name or "Unknown"
         local grade = pet:GetGrade()
-        local gradeName = env.Constants.PetGradeName[grade] or tostring(grade)
+        local gradeName = (env.Constants and env.Constants.PetGradeName and env.Constants.PetGradeName[grade]) or ("Grade " .. tostring(grade))
         
         local muts = {}
-        local spProp = pet:GetSpecialProp() or 0
-        if spProp > 0 then
-            for _, v in pairs(env.PetSpecialPropUtil.SpecialPropertyDef) do
-                if bit32.band(spProp, v) > 0 then
-                    local desc = env.PetSpecialPropUtil.SpecialPropertyDesc[v]
+        local spProp = pet:GetSpecialProp()
+        local spUtil = env and env.PetSpecialPropUtil
+
+        if spProp and spUtil and spUtil.SpecialPropertyDesc then
+            if type(spProp) == "table" then
+                for propId, _ in pairs(spProp) do
+                    local desc = spUtil.SpecialPropertyDesc[propId] or spUtil.SpecialPropertyDesc[tonumber(propId)]
                     if desc and desc.Name then
                         table.insert(muts, desc.Name)
+                    end
+                end
+            elseif type(spProp) == "number" and spProp > 0 and spUtil.SpecialPropertyDef then
+                for _, v in pairs(spUtil.SpecialPropertyDef) do
+                    if bit32.band(spProp, v) > 0 then
+                        local desc = spUtil.SpecialPropertyDesc[v]
+                        if desc and desc.Name then
+                            table.insert(muts, desc.Name)
+                        end
                     end
                 end
             end
