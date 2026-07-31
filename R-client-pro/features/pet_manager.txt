@@ -255,30 +255,6 @@ return function(Window, Utils)
     -- ==========================================
     local PetTab = Window:CreateTab(Utils.t("pet_manager") or "Pet Manager", "dog")
 
-    -- SECTION: VIP KEY ACTIVATION
-    PetTab:CreateSection(" 👑 KÍCH HOẠT KEY VIP (CẤP RIÊNG) ")
-
-    local vipInputKey = ""
-    PetTab:CreateInput({
-        Name = "Nhập Key VIP (Do Admin Cấp)",
-        PlaceholderText = "Ví dụ: VIP-SON-8888",
-        RemoveTextAfterFocusLost = false,
-        Callback = function(Text)
-            vipInputKey = Text
-        end
-    })
-
-    PetTab:CreateButton({
-        Name = "🔑 Kích Hoạt VIP Key",
-        Info = "Xác thực Key VIP cấp riêng để mở khóa toàn bộ tính năng Pet Manager.",
-        Callback = function()
-            if Utils and type(Utils.VerifyVIPKey) == "function" then
-                local success, msg = Utils.VerifyVIPKey(vipInputKey)
-                ShowNotify("Xác Thực VIP", msg, 4)
-            end
-        end
-    })
-
     -- SECTION: LOCK & UNLOCK
     PetTab:CreateSection(" " .. (Utils.t("sec_pet_lock") or "🔒 QUẢN LÝ KHÓA PET") .. " ")
 
