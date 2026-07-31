@@ -205,6 +205,7 @@ return function(Window, Utils)
     end
 
     -- Core Loop
+    local lastSelectedMemePart = nil
     task.spawn(function()
         while task.wait(0.5) do
             if not eventSettings.enabled then continue end
@@ -356,13 +357,20 @@ return function(Window, Utils)
                         local bestPart = nil
                         local maxVotes = -1
                         local hudLines = { "Sự kiện: Tìm Meme Pet" }
+
+                        -- Xóa vết ô đã chọn nếu ô đó không còn tồn tại trong folder
+                        if lastSelectedMemePart and not lastSelectedMemePart:IsDescendantOf(memeFolder) then
+                            lastSelectedMemePart = nil
+                        end
+
+                        local currentTargetOtherVotes = 0
                         
                         for _, cell in ipairs(memeFolder:GetChildren()) do
                             if cell:IsA("BasePart") then
-                                -- Tính số người chơi đang đứng trên bục này
+                                -- Tính số NGUỜI CHƠI KHÁC đang đứng trên bục này (LOẠI TRỪ LOCALPLAYER TỰ ĐỨNG)
                                 local playerCount = 0
                                 for _, p in ipairs(Players:GetPlayers()) do
-                                    if p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                                    if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
                                         local dist = (p.Character.HumanoidRootPart.Position - cell.Position).Magnitude
                                         if dist < 15 then
                                             playerCount = playerCount + 1
@@ -375,6 +383,10 @@ return function(Window, Utils)
                                 if groupLabel then
                                     labelName = labelName .. " (" .. groupLabel.Text .. ")"
                                 end
+
+                                if cell == lastSelectedMemePart then
+                                    currentTargetOtherVotes = playerCount
+                                end
                                 
                                 table.insert(hudLines, string.format("  • %s: Số người đứng = %d", labelName, playerCount))
                                 if playerCount > maxVotes then
@@ -384,16 +396,31 @@ return function(Window, Utils)
                             end
                         end
                         
-                        activeObbyPart = bestPart
+                        -- CHỐNG NHẢY TARGET (TARGET LOCKING HYSTERESIS):
+                        -- Chỉ đổi ô khi có ô khác có số người chơi NGUYÊN NGUYÊN HƠN (maxVotes > currentTargetOtherVotes).
+                        -- Nếu vote bằng nhau (hoặc không có người đứng), GIỮ NGUYÊN ô hiện tại để đứng yên an toàn!
+                        if lastSelectedMemePart and lastSelectedMemePart:IsDescendantOf(memeFolder) then
+                            if maxVotes > currentTargetOtherVotes then
+                                lastSelectedMemePart = bestPart
+                            end
+                        else
+                            lastSelectedMemePart = bestPart or memeFolder:GetChildren()[1]
+                        end
+                        
+                        activeObbyPart = lastSelectedMemePart
                         if activeObbyPart then
-                            table.insert(hudLines, "Đang chọn theo số đông: " .. activeObbyPart.Name)
+                            table.insert(hudLines, "Đang chọn ổn định: " .. activeObbyPart.Name)
                         end
                         
                         LiveHud:Set({
                             Title = "📡 SỰ KIỆN TÌM MEME PET LIVE",
                             Content = table.concat(hudLines, "\n")
                         })
+                    else
+                        lastSelectedMemePart = nil
                     end
+                else
+                    lastSelectedMemePart = nil
                 end
             end
             
