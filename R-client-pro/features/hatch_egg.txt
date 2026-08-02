@@ -110,10 +110,23 @@ return function(Window, Utils)
         MultipleOptions = true, -- Bật tính năng chọn nhiều
         Flag = "EggSelectDropdown",
         Callback = function(Options)
-            if not Options or #Options == 0 then return end
-            -- Nạp danh sách ID được chọn vào
+            if not Options then return end
+            
+            local selectedList = {}
+            if type(Options) == "table" then
+                for k, v in pairs(Options) do
+                    if type(v) == "string" then
+                        table.insert(selectedList, v)
+                    elseif type(k) == "string" and v == true then
+                        table.insert(selectedList, k)
+                    end
+                end
+            elseif type(Options) == "string" then
+                table.insert(selectedList, Options)
+            end
+
             local newIds = {}
-            for _, selectedString in ipairs(Options) do
+            for _, selectedString in ipairs(selectedList) do
                 local eId = eggIdMap[selectedString]
                 if not eId then
                     eId = tonumber(string.match(selectedString, "%[ID:%s*(%d+)%]"))
@@ -384,27 +397,33 @@ return function(Window, Utils)
 
             local currentTime = (env.Utils and env.Utils.GetServerTime()) or workspace:GetServerTimeNow()
 
-            -- Đếm và lọc các loại trứng ĐÃ CHỌN mà CÒN SỐ LƯỢNG SỞ HỮU (> 0) trong túi
+            -- Đếm và lọc các loại trứng ĐÃ CHỌN trong túi
             local availableSelectedEggs = {}
             if hatchSettings.autoStart then
                 if #hatchSettings.eggIdsToHatch > 0 then
                     for _, id in ipairs(hatchSettings.eggIdsToHatch) do
-                        local amt = (type(clientEgg.GetEggAmount) == "function") and clientEgg:GetEggAmount(id) or 0
+                        local amt = 0
+                        pcall(function()
+                            local oldId = get_thread_id()
+                            set_thread_id(2)
+                            if type(clientEgg.GetEggAmount) == "function" then
+                                amt = clientEgg:GetEggAmount(id) or clientEgg:GetEggAmount(tostring(id)) or clientEgg:GetEggAmount(tonumber(id)) or 0
+                            else
+                                amt = 1
+                            end
+                            set_thread_id(oldId)
+                        end)
+
                         if amt > 0 then
                             table.insert(availableSelectedEggs, id)
                         end
                     end
-                end
 
-                -- FALLBACK THÔNG MINH: Nếu tất cả các trứng được chọn đã hết hàng (x0), tự động chuyển sang trứng khác còn dư trong túi
-                if #availableSelectedEggs == 0 and env.CfgEgg and env.CfgEgg.Tmpls then
-                    for id, _ in pairs(env.CfgEgg.Tmpls) do
-                        local eId = tonumber(id)
-                        if eId then
-                            local amt = (type(clientEgg.GetEggAmount) == "function") and clientEgg:GetEggAmount(eId) or 0
-                            if amt > 0 then
-                                table.insert(availableSelectedEggs, eId)
-                            end
+                    -- Nếu không kiểm tra được số lượng (amt <= 0 cho tất cả), giữ nguyên danh sách các trứng người dùng ĐÃ CHỌN
+                    -- tuyệt đối KHÔNG tự động nhảy sang trứng ngẫu nhiên khác!
+                    if #availableSelectedEggs == 0 then
+                        for _, id in ipairs(hatchSettings.eggIdsToHatch) do
+                            table.insert(availableSelectedEggs, id)
                         end
                     end
                 end
