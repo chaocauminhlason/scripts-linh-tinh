@@ -108,8 +108,12 @@ return function(Window, Utils)
             -- Làm sạch mảng cũ và nạp danh sách ID mới vào
             hatchSettings.eggIdsToHatch = {}
             for _, selectedString in ipairs(Options) do
-                if eggIdMap[selectedString] then
-                    table.insert(hatchSettings.eggIdsToHatch, eggIdMap[selectedString])
+                local eId = eggIdMap[selectedString]
+                if not eId then
+                    eId = tonumber(string.match(selectedString, "%[ID:%s*(%d+)%]"))
+                end
+                if eId then
+                    table.insert(hatchSettings.eggIdsToHatch, eId)
                 end
             end
         end,
@@ -342,6 +346,8 @@ return function(Window, Utils)
     -- ==========================================
     -- LUỒNG 2: CORE LOGIC & NATIVE UI SYNC
     -- ==========================================
+    local hatchCycleIndex = 1
+
     task.spawn(function()
         while task.wait(0.5) do
             if not hatchSettings.autoStart and not hatchSettings.autoClaim then continue end
@@ -354,6 +360,17 @@ return function(Window, Utils)
 
             local currentTime = (env.Utils and env.Utils.GetServerTime()) or workspace:GetServerTimeNow()
 
+            -- Đếm và lọc các loại trứng ĐÃ CHỌN mà CÒN SỐ LƯỢNG SỞ HỮU (> 0) trong túi
+            local availableSelectedEggs = {}
+            if hatchSettings.autoStart and #hatchSettings.eggIdsToHatch > 0 then
+                for _, id in ipairs(hatchSettings.eggIdsToHatch) do
+                    local amt = (type(clientEgg.GetEggAmount) == "function") and clientEgg:GetEggAmount(id) or 0
+                    if amt > 0 then
+                        table.insert(availableSelectedEggs, id)
+                    end
+                end
+            end
+
             for slotNum = 1, 10 do
                 if not clientEgg:IsHatchUnlocked(slotNum) then continue end
                 local eggId = clientEgg:GetHatchEggTmplId(slotNum)
@@ -361,11 +378,11 @@ return function(Window, Utils)
 
                 -- AUTO START: Khi Lò trống
                 if hatchSettings.autoStart and not eggId then
-                    -- Kiểm tra xem có chọn trứng nào chưa
-                    if #hatchSettings.eggIdsToHatch > 0 then
-                        -- Random một quả trong danh sách bạn đã chọn để đưa vào lò
-                        local randomIdx = math.random(1, #hatchSettings.eggIdsToHatch)
-                        local targetEggId = hatchSettings.eggIdsToHatch[randomIdx]
+                    if #availableSelectedEggs > 0 then
+                        -- Phân bổ luân phiên các loại trứng đã chọn vào từng lò trống
+                        if hatchCycleIndex > #availableSelectedEggs then hatchCycleIndex = 1 end
+                        local targetEggId = availableSelectedEggs[hatchCycleIndex]
+                        hatchCycleIndex = hatchCycleIndex + 1
 
                         pcall(function()
                             local oldId = get_thread_id()
