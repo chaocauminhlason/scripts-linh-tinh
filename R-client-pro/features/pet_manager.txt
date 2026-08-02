@@ -1,6 +1,6 @@
 -- ====================================================================
--- MODULE: PET MANAGER V3.5 (QUẢN LÝ KHÓA/MỞ KHÓA & DUNG HỢP PET AN TOÀN)
--- BẢN THIẾT KẾ GIAO DIỆN TINH GỌN: MULTI-SELECT DROPDOWN THÔNG MINH
+-- MODULE: PET MANAGER V4.0 (QUẢN LÝ KHÓA/MỞ KHÓA & DUNG HỢP PET AN TOÀN)
+-- BẢN HOÀN THIỆN: HỖ TRỢ ĐA NGÔN NGỮ ANH - VIỆT (FULL BILINGUAL LOCALIZATION)
 -- ====================================================================
 return function(Window, Utils)
     local Players = game:GetService("Players")
@@ -19,9 +19,9 @@ return function(Window, Utils)
     
     -- Danh sách tiêu chí chọn Khóa/Mở Khóa đa năng (Multi-Select)
     local selectedLockCriteria = {
-        "Rank A Trở Lên (Grade 4+)",
-        "Pet Có Dị Biến (Shiny/Huge...)",
-        "Pet Có Trait Cao Cấp (Q: 5-6)"
+        Utils.t("criteria_rank_a"),
+        Utils.t("criteria_mutation"),
+        Utils.t("criteria_high_trait")
     }
 
     -- Biến chống click đúp & chống spam anti-cheat
@@ -142,7 +142,7 @@ return function(Window, Utils)
         if Utils and type(Utils.IsVIP) == "function" and Utils.IsVIP() then
             return true
         end
-        ShowNotify("🔒 Yêu Cầu Key VIP", "Chức năng Pet Manager chỉ dành cho tài khoản có Key VIP do Admin cấp riêng!", 5)
+        ShowNotify(Utils.t("vip_key_required_title"), Utils.t("vip_key_required_msg"), 5)
         return false
     end
 
@@ -154,11 +154,11 @@ return function(Window, Utils)
 
         local now = tick()
         if isProcessingLock then
-            ShowNotify("Cảnh Báo", "Đang xử lý khóa/mở khóa Pet, vui lòng đợi!", 2)
+            ShowNotify(Utils.t("warning_title"), Utils.t("warning_processing_lock"), 2)
             return
         end
         if now - lastLockTime < COOLDOWN_DELAY then
-            ShowNotify("Cảnh Báo", string.format("Vui lòng đợi %.1f giây trước khi bấm lại!", COOLDOWN_DELAY - (now - lastLockTime)), 2)
+            ShowNotify(Utils.t("warning_title"), string.format(Utils.t("warning_cooldown_wait"), COOLDOWN_DELAY - (now - lastLockTime)), 2)
             return
         end
 
@@ -168,12 +168,12 @@ return function(Window, Utils)
         local env = GetPathToolEnv()
         local PetSystem = GetPetSystem()
         if not PetSystem then
-            warn("❌ [PetManager] Không tìm thấy PetSystem!")
+            warn("❌ [PetManager] Not found PetSystem!")
             isProcessingLock = false
             return
         end
 
-        -- Phân tích tiêu chí được chọn từ Multi-Select Dropdown
+        -- Phân tích tiêu chí được chọn từ Multi-Select Dropdown (So sánh bối cảnh đa ngôn ngữ)
         local filterRankA = false
         local filterMutation = false
         local filterHighTrait = false
@@ -181,11 +181,11 @@ return function(Window, Utils)
         local filterAllPets = false
 
         for _, opt in ipairs(criteriaList or {}) do
-            if string.find(opt, "Grade 4+") then filterRankA = true end
-            if string.find(opt, "Dị Biến") then filterMutation = true end
-            if string.find(opt, "Q: 5-6") then filterHighTrait = true end
-            if string.find(opt, "Tất Cả Trait") then filterAllTrait = true end
-            if string.find(opt, "Tất Cả Pet Trong Túi") then filterAllPets = true end
+            if string.find(opt, "Grade 4+") or string.find(opt, "Rank A") then filterRankA = true end
+            if string.find(opt, "Shiny") or string.find(opt, "Dị Biến") or string.find(opt, "Mutated") then filterMutation = true end
+            if string.find(opt, "5-6") or string.find(opt, "Q:") then filterHighTrait = true end
+            if string.find(opt, "All Trait") or string.find(opt, "Tất Cả Trait") then filterAllTrait = true end
+            if string.find(opt, "Inventory") or string.find(opt, "Trong Túi") then filterAllPets = true end
         end
 
         local itemMap = GetPetMap()
@@ -221,8 +221,8 @@ return function(Window, Utils)
             end
         end
 
-        local actionName = targetLockState and "Khóa" or "Mở Khóa"
-        ShowNotify("Pet Manager", string.format("Đã %s thành công %d Pet!", actionName, count), 3)
+        local actionName = targetLockState and (Utils.getLang() == "vi" and "Khóa" or "Locked") or (Utils.getLang() == "vi" and "Mở Khóa" or "Unlocked")
+        ShowNotify("Pet Manager", string.format(Utils.t("notify_lock_success"), actionName, count), 3)
         isProcessingLock = false
     end
 
@@ -248,13 +248,13 @@ return function(Window, Utils)
         local now = tick()
         if isProcessingFuse then
             if isManualTrigger then
-                ShowNotify("Cảnh Báo", "Đang xử lý Dung Hợp Pet, vui lòng đợi!", 2)
+                ShowNotify(Utils.t("warning_title"), Utils.t("warning_processing_fuse"), 2)
             end
             return 0
         end
 
         if isManualTrigger and (now - lastFuseTime < COOLDOWN_DELAY) then
-            ShowNotify("Cảnh Báo", string.format("Vui lòng đợi %.1f giây trước khi bấm lại!", COOLDOWN_DELAY - (now - lastFuseTime)), 2)
+            ShowNotify(Utils.t("warning_title"), string.format(Utils.t("warning_cooldown_wait"), COOLDOWN_DELAY - (now - lastFuseTime)), 2)
             return 0
         end
 
@@ -395,20 +395,20 @@ return function(Window, Utils)
     -- ==========================================
     -- GIAO DIỆN UI (RAYFIELD TAB)
     -- ==========================================
-    local PetTab = Window:CreateTab(Utils.t("pet_manager") or "Pet Manager", "dog")
+    local PetTab = Window:CreateTab(Utils.t("pet_manager"), "dog")
 
     -- SECTION: LOCK & UNLOCK PET (GIAO DIỆN MULTI-SELECT GỌN GÀNG)
-    PetTab:CreateSection(" " .. (Utils.t("sec_pet_lock") or "🔒 QUẢN LÝ KHÓA / MỞ KHÓA PET") .. " ")
+    PetTab:CreateSection(" " .. Utils.t("sec_pet_lock") .. " ")
 
     PetTab:CreateDropdown({
-        Name = "Tiêu Chí Chọn Pet (Batch Lock Filter)",
-        Info = "Tích chọn 1 hoặc nhiều loại Pet bạn muốn thao tác Khóa / Mở Khóa.",
+        Name = Utils.t("batch_lock_filter"),
+        Info = Utils.t("batch_lock_filter_info"),
         Options = {
-            "Rank A Trở Lên (Grade 4+)",
-            "Pet Có Dị Biến (Shiny/Huge...)",
-            "Pet Có Trait Cao Cấp (Q: 5-6)",
-            "Tất Cả Trait / Thiên Phú",
-            "Tất Cả Pet Trong Túi"
+            Utils.t("criteria_rank_a"),
+            Utils.t("criteria_mutation"),
+            Utils.t("criteria_high_trait"),
+            Utils.t("criteria_all_trait"),
+            Utils.t("criteria_all_pets")
         },
         CurrentOption = selectedLockCriteria,
         MultipleOptions = true,
@@ -419,8 +419,8 @@ return function(Window, Utils)
     })
 
     PetTab:CreateButton({
-        Name = "🔒 KHÓA PET THEO TIÊU CHÍ ĐÃ CHỌN",
-        Info = "Thực hiện khóa tất cả Pet trùng khớp với các mục bạn đã tích ở trên.",
+        Name = Utils.t("btn_batch_lock"),
+        Info = Utils.t("btn_batch_lock_info"),
         Callback = function()
             task.spawn(function()
                 ProcessBatchPetLock(true, selectedLockCriteria)
@@ -429,8 +429,8 @@ return function(Window, Utils)
     })
 
     PetTab:CreateButton({
-        Name = "🔓 MỞ KHÓA PET THEO TIÊU CHÍ ĐÃ CHỌN",
-        Info = "Thực hiện mở khóa tất cả Pet trùng khớp với các mục bạn đã tích ở trên.",
+        Name = Utils.t("btn_batch_unlock"),
+        Info = Utils.t("btn_batch_unlock_info"),
         Callback = function()
             task.spawn(function()
                 ProcessBatchPetLock(false, selectedLockCriteria)
@@ -439,31 +439,31 @@ return function(Window, Utils)
     })
 
     -- SECTION: FUSE & EVOLVE
-    PetTab:CreateSection(" " .. (Utils.t("sec_pet_fuse") or "🧬 DUNG HỢP PET THÔNG MINH") .. " ")
+    PetTab:CreateSection(" " .. Utils.t("sec_pet_fuse") .. " ")
 
     PetTab:CreateDropdown({
-        Name = "Phẩm Chất Dung Hợp Tối Đa",
-        Info = "Chọn Rank Pet tối đa được phép gom làm phôi dung hợp.",
+        Name = Utils.t("max_fuse_rank"),
+        Info = Utils.t("max_fuse_rank_info"),
         Options = {
-            "Rank B (Grade 3 - Mặc định an toàn)",
-            "Rank C (Grade 2 trở xuống)",
-            "Rank D (Grade 1)",
-            "Rank A (Grade 4)"
+            Utils.t("fuse_option_rank_b"),
+            Utils.t("fuse_option_rank_c"),
+            Utils.t("fuse_option_rank_d"),
+            Utils.t("fuse_option_rank_a")
         },
-        CurrentOption = {"Rank B (Grade 3 - Mặc định an toàn)"},
+        CurrentOption = {Utils.t("fuse_option_rank_b")},
         Flag = "MaxFuseRankDropdown",
         Callback = function(Options)
             local sel = Options[1] or ""
-            if string.find(sel, "Grade 1") then maxFuseGrade = 1
-            elseif string.find(sel, "Grade 2") then maxFuseGrade = 2
-            elseif string.find(sel, "Grade 4") then maxFuseGrade = 4
+            if string.find(sel, "Grade 1") or string.find(sel, "Rank D") then maxFuseGrade = 1
+            elseif string.find(sel, "Grade 2") or string.find(sel, "Rank C") then maxFuseGrade = 2
+            elseif string.find(sel, "Grade 4") or string.find(sel, "Rank A") then maxFuseGrade = 4
             else maxFuseGrade = 3 end
         end
     })
 
     PetTab:CreateToggle({
-        Name = "🛡️ Bỏ Qua Pet Dị Biến Làm Phôi (Skip Mutated)",
-        Info = "Tuyệt đối KHÔNG dùng Pet Dị biến (Shiny, Huge, Bloodlit, Fairy...) làm phôi dung hợp.",
+        Name = Utils.t("skip_mutated_pets"),
+        Info = Utils.t("skip_mutated_pets_info"),
         CurrentValue = true,
         Flag = "SkipMutatedPetsFlag",
         Callback = function(Value)
@@ -472,8 +472,8 @@ return function(Window, Utils)
     })
 
     PetTab:CreateToggle({
-        Name = "🛡️ Bỏ Qua Pet Có Trait / Thiên Phú Làm Phôi",
-        Info = "Tuyệt đối KHÔNG dùng Pet sở hữu Trait/Thiên phú (Impair, Fortify, Hasten...) làm phôi dung hợp.",
+        Name = Utils.t("skip_trait_pets"),
+        Info = Utils.t("skip_trait_pets_info"),
         CurrentValue = true,
         Flag = "SkipTraitPetsFlag",
         Callback = function(Value)
@@ -482,8 +482,8 @@ return function(Window, Utils)
     })
 
     PetTab:CreateToggle({
-        Name = Utils.t("skip_locked_pets") or "Bỏ Qua Pet Đang Khóa",
-        Info = "Không sử dụng Pet đang bị khóa làm phôi dung hợp.",
+        Name = Utils.t("skip_locked_pets"),
+        Info = Utils.t("skip_locked_pets_info"),
         CurrentValue = true,
         Flag = "SkipLockedPetsFlag",
         Callback = function(Value)
@@ -492,8 +492,8 @@ return function(Window, Utils)
     })
 
     PetTab:CreateToggle({
-        Name = Utils.t("skip_equipped_pets") or "Bỏ Qua Pet Đang Ra Trận",
-        Info = "Không sử dụng Pet đang ra trận/trang bị làm phôi.",
+        Name = Utils.t("skip_equipped_pets"),
+        Info = Utils.t("skip_equipped_pets_info"),
         CurrentValue = true,
         Flag = "SkipEquippedPetsFlag",
         Callback = function(Value)
@@ -502,8 +502,8 @@ return function(Window, Utils)
     })
 
     PetTab:CreateToggle({
-        Name = "🎒 Chỉ Auto Fuse Khi Túi Sắp Đầy",
-        Info = "Chỉ tự động ghép Pet khi số ô trống trong túi còn ít hơn 5 chỗ.",
+        Name = Utils.t("auto_fuse_bag_full"),
+        Info = Utils.t("auto_fuse_bag_full_info"),
         CurrentValue = false,
         Flag = "AutoFuseOnBagFullFlag",
         Callback = function(Value)
@@ -512,8 +512,8 @@ return function(Window, Utils)
     })
 
     PetTab:CreateToggle({
-        Name = Utils.t("auto_fuse_pets") or "Auto Dung Hợp Pet (Auto Fuse)",
-        Info = "Tự động quét và ghép các Pet trùng loại liên tục theo cấu hình an toàn.",
+        Name = Utils.t("auto_fuse_pets"),
+        Info = Utils.t("auto_fuse_pets_info"),
         CurrentValue = false,
         Flag = "AutoPetFuseToggle",
         Callback = function(Value)
@@ -522,13 +522,13 @@ return function(Window, Utils)
     })
 
     PetTab:CreateButton({
-        Name = Utils.t("btn_fuse_now") or "⚡ Dung Hợp Tất Cả Pet Trùng Ngay",
-        Info = "Thực hiện ghép tất cả các Pet trùng loại trong túi 1 lần lập tức.",
+        Name = Utils.t("btn_fuse_now"),
+        Info = Utils.t("btn_fuse_now_info"),
         Callback = function()
             task.spawn(function()
                 local fusedCount = ProcessPetFuseOnce(true)
                 if fusedCount and fusedCount > 0 then
-                    ShowNotify("Pet Fuse", string.format("Đã dung hợp thành công %d Pet phôi!", fusedCount), 3)
+                    ShowNotify("Pet Fuse", string.format(Utils.t("notify_fuse_success"), fusedCount), 3)
                 end
             end)
         end
