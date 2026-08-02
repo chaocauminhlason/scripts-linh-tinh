@@ -83,30 +83,47 @@ return function(Window, Utils)
         eggIdMap[Utils.t("refresh_warning_name")] = 1
     end
     
-    -- Khởi tạo giá trị mặc định cho mảng chọn: Mặc định chọn TẤT CẢ các trứng đang sở hữu (> 0)
+    -- Khởi tạo hoặc khôi phục danh sách chọn từ phiên làm việc trước (khi Hop Server)
     local defaultSelectedEggStrings = {}
     hatchSettings.eggIdsToHatch = {}
-    pcall(function()
-        local env = getrenv()._G.PathTool
-        local player = env and env.ClientPlayerManager and env.ClientPlayerManager.GetGamePlayer()
-        local eggData = player and player.egg
-        if env and env.CfgEgg and env.CfgEgg.Tmpls then
-            for id, info in pairs(env.CfgEgg.Tmpls) do
-                local eId = tonumber(id)
-                if eId then
-                    local amt = (eggData and type(eggData.GetEggAmount) == "function") and eggData:GetEggAmount(eId) or 0
-                    if amt > 0 then
-                        local eName = info.Name or info.name or info.EggName or (Utils.t("egg_fallback_name") .. tostring(eId))
-                        eName = string.gsub(eName, '"', '')
-                        eName = string.gsub(eName, '\n', ' ')
-                        local displayStr = "⭐ " .. eName .. " (x" .. tostring(amt) .. ") [ID: " .. eId .. "]"
-                        table.insert(hatchSettings.eggIdsToHatch, eId)
-                        table.insert(defaultSelectedEggStrings, displayStr)
+
+    local savedEggIds = getgenv().R_Client_SavedHatchEggIds
+
+    if savedEggIds and type(savedEggIds) == "table" and #savedEggIds > 0 then
+        -- KHÔI PHỤC CHÍNH XÁC CÁC LOẠI TRỨNG NGƯỜI DÙNG ĐÃ TÍCH CHỌN TRƯỚC KHI HOP SERVER
+        local savedSet = {}
+        for _, id in ipairs(savedEggIds) do savedSet[id] = true end
+
+        for str, eId in pairs(eggIdMap) do
+            if savedSet[eId] then
+                table.insert(defaultSelectedEggStrings, str)
+                table.insert(hatchSettings.eggIdsToHatch, eId)
+            end
+        end
+    else
+        -- Lần đầu tiên bật tool: Mặc định chọn các trứng đang sở hữu (> 0)
+        pcall(function()
+            local env = getrenv()._G.PathTool
+            local player = env and env.ClientPlayerManager and env.ClientPlayerManager.GetGamePlayer()
+            local eggData = player and player.egg
+            if env and env.CfgEgg and env.CfgEgg.Tmpls then
+                for id, info in pairs(env.CfgEgg.Tmpls) do
+                    local eId = tonumber(id)
+                    if eId then
+                        local amt = (eggData and type(eggData.GetEggAmount) == "function") and eggData:GetEggAmount(eId) or 0
+                        if amt > 0 then
+                            local eName = info.Name or info.name or info.EggName or (Utils.t("egg_fallback_name") .. tostring(eId))
+                            eName = string.gsub(eName, '"', '')
+                            eName = string.gsub(eName, '\n', ' ')
+                            local displayStr = "⭐ " .. eName .. " (x" .. tostring(amt) .. ") [ID: " .. eId .. "]"
+                            table.insert(hatchSettings.eggIdsToHatch, eId)
+                            table.insert(defaultSelectedEggStrings, displayStr)
+                        end
                     end
                 end
             end
-        end
-    end)
+        end)
+    end
 
     if #defaultSelectedEggStrings == 0 and #eggOptions > 0 then
         table.insert(defaultSelectedEggStrings, eggOptions[1])
@@ -144,6 +161,8 @@ return function(Window, Utils)
             end
             if #newIds > 0 then
                 hatchSettings.eggIdsToHatch = newIds
+                -- LƯU LẠI VÀO GLOBAL ENVIRONMENT ĐỂ KHÔI PHỤC CHÍNH XÁC KHI HOP SERVER
+                getgenv().R_Client_SavedHatchEggIds = newIds
             end
         end,
     })
