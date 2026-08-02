@@ -101,28 +101,11 @@ return function(Window, Utils)
             end
         end
     else
-        -- Lần đầu tiên bật tool: Mặc định chọn các trứng đang sở hữu (> 0)
-        pcall(function()
-            local env = getrenv()._G.PathTool
-            local player = env and env.ClientPlayerManager and env.ClientPlayerManager.GetGamePlayer()
-            local eggData = player and player.egg
-            if env and env.CfgEgg and env.CfgEgg.Tmpls then
-                for id, info in pairs(env.CfgEgg.Tmpls) do
-                    local eId = tonumber(id)
-                    if eId then
-                        local amt = (eggData and type(eggData.GetEggAmount) == "function") and eggData:GetEggAmount(eId) or 0
-                        if amt > 0 then
-                            local eName = info.Name or info.name or info.EggName or (Utils.t("egg_fallback_name") .. tostring(eId))
-                            eName = string.gsub(eName, '"', '')
-                            eName = string.gsub(eName, '\n', ' ')
-                            local displayStr = "⭐ " .. eName .. " (x" .. tostring(amt) .. ") [ID: " .. eId .. "]"
-                            table.insert(hatchSettings.eggIdsToHatch, eId)
-                            table.insert(defaultSelectedEggStrings, displayStr)
-                        end
-                    end
-                end
-            end
-        end)
+        -- Lần đầu tiên bật tool: Mặc định CHỈ chọn 1 loại trứng đầu tiên (số lượng nhiều nhất) để người dùng tự chọn thêm dễ dàng
+        if #eggOptions > 0 and eggIdMap[eggOptions[1]] then
+            table.insert(defaultSelectedEggStrings, eggOptions[1])
+            table.insert(hatchSettings.eggIdsToHatch, eggIdMap[eggOptions[1]])
+        end
     end
 
     if #defaultSelectedEggStrings == 0 and #eggOptions > 0 then
