@@ -83,8 +83,26 @@ return function(Window, Utils)
         eggIdMap[Utils.t("refresh_warning_name")] = 1
     end
     
-    -- Khởi tạo giá trị mặc định cho mảng chọn
-    if #eggOptions > 0 and eggIdMap[eggOptions[1]] then
+    -- Khởi tạo giá trị mặc định cho mảng chọn: Mặc định chọn TẤT CẢ các trứng đang sở hữu (> 0)
+    hatchSettings.eggIdsToHatch = {}
+    pcall(function()
+        local env = getrenv()._G.PathTool
+        local player = env and env.ClientPlayerManager and env.ClientPlayerManager.GetGamePlayer()
+        local eggData = player and player.egg
+        if env and env.CfgEgg and env.CfgEgg.Tmpls then
+            for id, info in pairs(env.CfgEgg.Tmpls) do
+                local eId = tonumber(id)
+                if eId then
+                    local amt = (eggData and type(eggData.GetEggAmount) == "function") and eggData:GetEggAmount(eId) or 0
+                    if amt > 0 then
+                        table.insert(hatchSettings.eggIdsToHatch, eId)
+                    end
+                end
+            end
+        end
+    end)
+
+    if #hatchSettings.eggIdsToHatch == 0 and #eggOptions > 0 and eggIdMap[eggOptions[1]] then
         table.insert(hatchSettings.eggIdsToHatch, eggIdMap[eggOptions[1]])
     end
 
@@ -316,8 +334,11 @@ return function(Window, Utils)
     })
 
     -- ==========================================
-    -- LUỒNG 1: THEO DÕI TÚI PET
+    -- LUỒNG 1: THEO DÕI TÚI PET (TẠM DỪNG THÔNG MINH - TỰ CHẠY LẠI KHI CÓ CHỖ TRỐNG)
     -- ==========================================
+    local isBagFullPaused = false
+    local lastBagFullNotifyTime = 0
+
     task.spawn(function()
         while task.wait(1) do
             local env = getrenv()._G.PathTool
@@ -330,12 +351,21 @@ return function(Window, Utils)
                     BagStatusLabel:Set(Utils.t("bag_status") .. currentPets .. " / " .. maxPets)
                     
                     if hatchSettings.stopIfBagFull and currentPets >= maxPets and maxPets > 0 then
-                        if hatchSettings.autoClaim or hatchSettings.autoStart then
-                            hatchSettings.autoClaim = false
-                            hatchSettings.autoStart = false
-                            ToggleStart:Set(false)
-                            ToggleClaim:Set(false)
-                            game.StarterGui:SetCore("SendNotification", {Title = Utils.t("warning_title"), Text = Utils.t("bag_full_warning"), Duration = 5})
+                        if not isBagFullPaused then
+                            isBagFullPaused = true
+                            local now = tick()
+                            if now - lastBagFullNotifyTime > 15 then
+                                lastBagFullNotifyTime = now
+                                game.StarterGui:SetCore("SendNotification", {
+                                    Title = Utils.t("warning_title"), 
+                                    Text = Utils.t("bag_full_warning") .. " (Tạm dừng ấp, tự chạy lại khi túi có chỗ trống)", 
+                                    Duration = 4
+                                })
+                            end
+                        end
+                    else
+                        if isBagFullPaused then
+                            isBagFullPaused = false
                         end
                     end
                 end)
@@ -351,6 +381,7 @@ return function(Window, Utils)
     task.spawn(function()
         while task.wait(0.5) do
             if not hatchSettings.autoStart and not hatchSettings.autoClaim then continue end
+            if isBagFullPaused then continue end -- TẠM DỪNG KHI TÚI ĐẦY, TỰ ĐỘNG CHẠY TIẾP KHI AUTO FUSE / BÁN PET XONG!
             
             local env = getrenv()._G.PathTool
             if not env or not env.BossRoomSystemClient then continue end
@@ -362,11 +393,26 @@ return function(Window, Utils)
 
             -- Đếm và lọc các loại trứng ĐÃ CHỌN mà CÒN SỐ LƯỢNG SỞ HỮU (> 0) trong túi
             local availableSelectedEggs = {}
-            if hatchSettings.autoStart and #hatchSettings.eggIdsToHatch > 0 then
-                for _, id in ipairs(hatchSettings.eggIdsToHatch) do
-                    local amt = (type(clientEgg.GetEggAmount) == "function") and clientEgg:GetEggAmount(id) or 0
-                    if amt > 0 then
-                        table.insert(availableSelectedEggs, id)
+            if hatchSettings.autoStart then
+                if #hatchSettings.eggIdsToHatch > 0 then
+                    for _, id in ipairs(hatchSettings.eggIdsToHatch) do
+                        local amt = (type(clientEgg.GetEggAmount) == "function") and clientEgg:GetEggAmount(id) or 0
+                        if amt > 0 then
+                            table.insert(availableSelectedEggs, id)
+                        end
+                    end
+                end
+
+                -- FALLBACK THÔNG MINH: Nếu tất cả các trứng được chọn đã hết hàng (x0), tự động chuyển sang trứng khác còn dư trong túi
+                if #availableSelectedEggs == 0 and env.CfgEgg and env.CfgEgg.Tmpls then
+                    for id, _ in pairs(env.CfgEgg.Tmpls) do
+                        local eId = tonumber(id)
+                        if eId then
+                            local amt = (type(clientEgg.GetEggAmount) == "function") and clientEgg:GetEggAmount(eId) or 0
+                            if amt > 0 then
+                                table.insert(availableSelectedEggs, eId)
+                            end
+                        end
                     end
                 end
             end
