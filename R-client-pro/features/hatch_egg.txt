@@ -84,6 +84,7 @@ return function(Window, Utils)
     end
     
     -- Khởi tạo giá trị mặc định cho mảng chọn: Mặc định chọn TẤT CẢ các trứng đang sở hữu (> 0)
+    local defaultSelectedEggStrings = {}
     hatchSettings.eggIdsToHatch = {}
     pcall(function()
         local env = getrenv()._G.PathTool
@@ -95,15 +96,23 @@ return function(Window, Utils)
                 if eId then
                     local amt = (eggData and type(eggData.GetEggAmount) == "function") and eggData:GetEggAmount(eId) or 0
                     if amt > 0 then
+                        local eName = info.Name or info.name or info.EggName or (Utils.t("egg_fallback_name") .. tostring(eId))
+                        eName = string.gsub(eName, '"', '')
+                        eName = string.gsub(eName, '\n', ' ')
+                        local displayStr = "⭐ " .. eName .. " (x" .. tostring(amt) .. ") [ID: " .. eId .. "]"
                         table.insert(hatchSettings.eggIdsToHatch, eId)
+                        table.insert(defaultSelectedEggStrings, displayStr)
                     end
                 end
             end
         end
     end)
 
-    if #hatchSettings.eggIdsToHatch == 0 and #eggOptions > 0 and eggIdMap[eggOptions[1]] then
-        table.insert(hatchSettings.eggIdsToHatch, eggIdMap[eggOptions[1]])
+    if #defaultSelectedEggStrings == 0 and #eggOptions > 0 then
+        table.insert(defaultSelectedEggStrings, eggOptions[1])
+        if eggIdMap[eggOptions[1]] then
+            table.insert(hatchSettings.eggIdsToHatch, eggIdMap[eggOptions[1]])
+        end
     end
 
     -- ==========================================
@@ -112,27 +121,29 @@ return function(Window, Utils)
     EggTab:CreateSection(" " .. string.upper(Utils.t("bag_status")) .. " ")
     local BagStatusLabel = EggTab:CreateLabel(Utils.t("bag_loading"))
 
-
-
     EggTab:CreateSection(" " .. string.upper(Utils.t("select_eggs")) .. " ")
     local EggDropdown = EggTab:CreateDropdown({
         Name = Utils.t("select_eggs"),
         Info = Utils.t("select_eggs_info"),
         Options = eggOptions,
-        CurrentOption = {eggOptions[1]},
+        CurrentOption = defaultSelectedEggStrings,
         MultipleOptions = true, -- Bật tính năng chọn nhiều
         Flag = "EggSelectDropdown",
         Callback = function(Options)
-            -- Làm sạch mảng cũ và nạp danh sách ID mới vào
-            hatchSettings.eggIdsToHatch = {}
+            if not Options or #Options == 0 then return end
+            -- Nạp danh sách ID được chọn vào
+            local newIds = {}
             for _, selectedString in ipairs(Options) do
                 local eId = eggIdMap[selectedString]
                 if not eId then
                     eId = tonumber(string.match(selectedString, "%[ID:%s*(%d+)%]"))
                 end
                 if eId then
-                    table.insert(hatchSettings.eggIdsToHatch, eId)
+                    table.insert(newIds, eId)
                 end
+            end
+            if #newIds > 0 then
+                hatchSettings.eggIdsToHatch = newIds
             end
         end,
     })
