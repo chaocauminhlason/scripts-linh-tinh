@@ -15,6 +15,8 @@ return function(Window, Utils)
         breedMother = "Any"
     }
 
+    local hatchCycleIndex = 1
+
     -- Hàm can thiệp quyền hạn của Executor
     local get_thread_id = getthreadcontext or getthreadidentity or getidentity or (syn and syn.get_thread_identity)
     local set_thread_id = setthreadcontext or setthreadidentity or setidentity or (syn and syn.set_thread_identity)
@@ -137,6 +139,7 @@ return function(Window, Utils)
             end
             if #newIds > 0 then
                 hatchSettings.eggIdsToHatch = newIds
+                hatchCycleIndex = 1 -- Reset chỉ số luân phiên ngay lập tức khi chọn trứng mới
                 -- LƯU LẠI VÀO GLOBAL ENVIRONMENT ĐỂ KHÔI PHỤC CHÍNH XÁC KHI HOP SERVER
                 getgenv().R_Client_SavedHatchEggIds = newIds
             end
@@ -382,8 +385,6 @@ return function(Window, Utils)
     -- ==========================================
     -- LUỒNG 2: CORE LOGIC & NATIVE UI SYNC
     -- ==========================================
-    local hatchCycleIndex = 1
-
     task.spawn(function()
         while task.wait(0.5) do
             if not hatchSettings.autoStart and not hatchSettings.autoClaim then continue end
