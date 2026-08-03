@@ -1,7 +1,7 @@
 import os
 
 def bundle():
-    # Danh sách các file cần gộp theo đúng thứ tự
+    # Danh sách các file core
     core_files = [
         'core/utilities.txt',
         'core/system_controller.txt',
@@ -9,6 +9,7 @@ def bundle():
         'core/localization.txt'
     ]
     
+    # Danh sách các file feature
     feature_files = [
         'features/farm.txt',
         'features/boss_hunt.txt',
@@ -23,6 +24,11 @@ def bundle():
         'features/auto_event.txt'
     ]
 
+    # Các file khác cần đóng gói vào modules
+    other_files = [
+        'auto_execute.txt'
+    ]
+
     base_dir = os.path.dirname(os.path.abspath(__file__))
     output_dir = os.path.join(base_dir, 'build')
     os.makedirs(output_dir, exist_ok=True)
@@ -32,14 +38,33 @@ def bundle():
     
     bundle_content = []
     bundle_content.append("-- ====================================================================")
-    bundle_content.append("-- R-CLIENT PRO BUNDLE (AUTO-BUNDLED ALL MODULES)")
+    bundle_content.append("-- R-CLIENT PRO BUNDLE (AUTO-BUNDLED ALL MODULES & AUTO EXECUTE)")
     bundle_content.append("-- ====================================================================\n")
     
+    # 0. Nạp phần khởi động (Global Lock & Teleport Queue) từ auto_execute.txt
+    auto_exec_path = os.path.join(base_dir, 'auto_execute.txt')
+    if os.path.exists(auto_exec_path):
+        print("-> Loading: auto_execute.txt (Auto Execute Header)")
+        with open(auto_exec_path, 'r', encoding='utf-8') as f:
+            auto_exec_content = f.read()
+        
+        # Cắt bỏ phần task.spawn chạy main.txt cũ vì Bundle sẽ tự nạp main.txt ở bên dưới
+        main_spawn_idx = auto_exec_content.find("-- 2. CHẠY MAIN SCRIPT")
+        if main_spawn_idx != -1:
+            header_code = auto_exec_content[:main_spawn_idx].strip()
+        else:
+            header_code = auto_exec_content.strip()
+            
+        bundle_content.append(header_code)
+        bundle_content.append("\n-- ====================================================================\n")
+    else:
+        print("[Warning] auto_execute.txt not found for header section.")
+
     # 1. Khởi tạo bảng chứa tất cả module
     bundle_content.append("local modules = {}")
     
     # 2. Đọc và nhúng code của từng file vào bảng modules
-    all_files = core_files + feature_files
+    all_files = other_files + core_files + feature_files
     for file_rel_path in all_files:
         file_path = os.path.join(base_dir, file_rel_path)
         if not os.path.exists(file_path):
@@ -66,7 +91,6 @@ def bundle():
         main_content = f.read()
 
     # 4. Định nghĩa lại hàm SafeLoad và nhúng nội dung main.txt
-    # Ta sẽ thay thế định nghĩa SafeLoad gốc bằng SafeLoad đọc từ bảng modules cục bộ
     custom_safeload_code = """
 -- ==========================================
 -- HÀM TẢI LOCAL IN-MEMORY (BYPASS HTTP)
@@ -90,11 +114,8 @@ end
 """
     
     # Loại bỏ định nghĩa SafeLoad cũ trong main_content
-    # Tìm và cắt bỏ phần hàm SafeLoad cũ trong main_content để thay bằng hàm mới
     import_start = main_content.find("local function SafeLoad")
     if import_start != -1:
-        # Tìm vị trí kết thúc của hàm SafeLoad (end cuối cùng trước các file core)
-        # Ta sẽ đơn giản là xóa từ 'local function SafeLoad' tới dòng '-- 1. Kéo các file Core'
         anchor = "-- 1. Kéo các file Core"
         anchor_idx = main_content.find(anchor)
         if anchor_idx != -1:
