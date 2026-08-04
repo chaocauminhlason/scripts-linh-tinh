@@ -68,6 +68,7 @@ local Window = Rayfield:CreateWindow({
     Name = "Have a good day!",
     LoadingTitle = "Đang tải hệ thống...",
     LoadingSubtitle = "Dev by Son",
+    Theme = "Light",
     ConfigurationSaving = { Enabled = true, FileName = "AutoFarmConfig" },
     KeySystem = false,
     DisableRayfieldPrompts = true,
