@@ -68,12 +68,68 @@ local Window = Rayfield:CreateWindow({
     Name = "Have a good day!",
     LoadingTitle = "Đang tải hệ thống...",
     LoadingSubtitle = "Dev by Son",
-    Theme = "Amethyst",
+    Theme = "Default",
     ConfigurationSaving = { Enabled = true, FileName = "AutoFarmConfig" },
     KeySystem = false,
     DisableRayfieldPrompts = true,
     DisableBuildWarnings = true 
 })
+
+-- Tùy biến phong cách UI: Độ trong suốt 50% & Giảm độ bo góc Slider
+task.spawn(function()
+    local CoreGui = game:GetService("CoreGui")
+    local Players = game:GetService("Players")
+    local player = Players.LocalPlayer
+    local pgui = player and player:FindFirstChild("PlayerGui")
+
+    local function getGuiRoot()
+        if gethui then
+            local h = gethui()
+            if h then return h end
+        end
+        return CoreGui
+    end
+
+    local function applyCustomStyles()
+        local root = getGuiRoot()
+        local rayfieldGui = root:FindFirstChild("Rayfield") or (pgui and pgui:FindFirstChild("Rayfield"))
+        if not rayfieldGui then
+            for _, g in ipairs(root:GetChildren()) do
+                if g:IsA("ScreenGui") and (g:FindFirstChild("Main", true) or g:FindFirstChild("Holder", true)) then
+                    rayfieldGui = g
+                    break
+                end
+            end
+        end
+
+        if rayfieldGui then
+            for _, desc in ipairs(rayfieldGui:GetDescendants()) do
+                -- 1. Độ trong suốt 50% cho các khung giao diện chính
+                if desc:IsA("Frame") or desc:IsA("ScrollingFrame") then
+                    local nl = string.lower(desc.Name)
+                    if nl == "main" or nl == "background" or nl == "holder" or nl == "container" or nl == "topbar" or nl == "sidebar" or nl == "tabcontainer" then
+                        desc.BackgroundTransparency = 0.05
+                    end
+                end
+                
+                -- 2. Đồng bộ giảm độ bo góc 6px cho CẢ 2 phần của Slider: Khung viền ngoài (Main/Shadow) và Thanh tiến trình (Progress)
+                if desc:IsA("UICorner") and desc.Parent then
+                    local p = desc.Parent
+                    local pName = string.lower(p.Name)
+                    local grandParent = p.Parent and string.lower(p.Parent.Name) or ""
+                    if pName == "progress" or pName == "slider" or p:FindFirstChild("Progress") or (p.Parent and p.Parent:FindFirstChild("Progress")) or string.find(pName, "slider") or string.find(grandParent, "slider") then
+                        desc.CornerRadius = UDim.new(0, 6)
+                    end
+                end
+            end
+        end
+    end
+
+    for _ = 1, 20 do
+        applyCustomStyles()
+        task.wait(0.5)
+    end
+end)
 
 -- ==========================================
 -- BƯỚC 3: HÀM TẢI AN TOÀN (SAFE LOAD)
