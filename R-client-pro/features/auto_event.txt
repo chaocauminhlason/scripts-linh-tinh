@@ -10,12 +10,23 @@ return function(Window, Utils)
 
     local eventSettings = {
         enabled = false,
+        autoReturnSkyheart = true,
+        returnAfterEvent = true,
+        stopOnLimit = true,
         xrayEnabled = false,
         priorityMode = "Smart Scoring",
         weightEgg = 80,
         weightChest = 100,
         weightGem = 50,
         weightGold = 1
+    }
+
+    local SkyheartCenterPos = Vector3.new(507, 3626, -256)
+    local eventSessionState = {
+        isEventActive = false,
+        savedFarmCFrame = nil,
+        savedAreaId = nil,
+        lastEventSeenTime = 0
     }
 
     local claimedCache = {}
@@ -52,6 +63,36 @@ return function(Window, Utils)
             else
                 EventStatus:Set(Utils.t("event_status_farming"))
             end
+        end
+    })
+
+    EventTab:CreateToggle({
+        Name = Utils.t("auto_return_skyheart"),
+        Info = Utils.t("auto_return_skyheart_info"),
+        CurrentValue = true,
+        Flag = "AutoReturnSkyheartOnEvent",
+        Callback = function(Value)
+            eventSettings.autoReturnSkyheart = Value
+        end
+    })
+
+    EventTab:CreateToggle({
+        Name = Utils.t("return_farm_after_event"),
+        Info = Utils.t("return_farm_after_event_info"),
+        CurrentValue = true,
+        Flag = "ReturnFarmAfterEventFinish",
+        Callback = function(Value)
+            eventSettings.returnAfterEvent = Value
+        end
+    })
+
+    EventTab:CreateToggle({
+        Name = Utils.t("event_stop_on_limit"),
+        Info = Utils.t("event_stop_on_limit_info"),
+        CurrentValue = true,
+        Flag = "EventStopOnLimitReached",
+        Callback = function(Value)
+            eventSettings.stopOnLimit = Value
         end
     })
 
@@ -204,6 +245,70 @@ return function(Window, Utils)
         return 0, nil
     end
 
+    local function IsPlayerOnSkyheart(hrp)
+        if not hrp then return false end
+        local centerArea = Workspace:FindFirstChild("Area") and Workspace.Area:FindFirstChild("center")
+        if centerArea then
+            local region = centerArea:FindFirstChild("AreaRegion") or centerArea:FindFirstChild("SpawnLocation")
+            if region and region:IsA("BasePart") then
+                return (hrp.Position - region.Position).Magnitude < 800 or hrp.Position.Y > 3000
+            end
+        end
+        return hrp.Position.Y > 3000 or (hrp.Position - SkyheartCenterPos).Magnitude < 800
+    end
+
+    local function HasActiveEvent()
+        local obbyFolder = Workspace:FindFirstChild("ObbyEventFolder")
+        if obbyFolder then
+            local qaFolder = obbyFolder:FindFirstChild("QAFolder")
+            if qaFolder and #qaFolder:GetChildren() > 0 then return true end
+
+            local newSelectFolder = obbyFolder:FindFirstChild("NewSelectFolder")
+            if newSelectFolder and #newSelectFolder:GetChildren() > 0 then return true end
+
+            for _, child in ipairs(obbyFolder:GetChildren()) do
+                if string.find(child.Name, "MemePetFind") then
+                    local memeFolder = child:FindFirstChild("MemePetFindRuntimeZones")
+                    if memeFolder and #memeFolder:GetChildren() > 0 then return true end
+                end
+            end
+
+            local robbery = obbyFolder:FindFirstChild("Robbery")
+            if robbery and #robbery:GetChildren() > 0 then return true end
+
+            local snowman = obbyFolder:FindFirstChild("MakeSnowmanFolder")
+            if snowman and #snowman:GetChildren() > 0 then return true end
+
+            local trick = obbyFolder:FindFirstChild("TrickOrTreatFolder")
+            if trick and #trick:GetChildren() > 0 then return true end
+        end
+
+        local items = getEventClaimables()
+        if #items > 0 then return true end
+
+        return false
+    end
+
+    local function CheckEventLimitReached()
+        local pgui = LocalPlayer:FindFirstChild("PlayerGui")
+        local dialogView = pgui and pgui:FindFirstChild("MainGui") and pgui.MainGui:FindFirstChild("ScreenGui") and pgui.MainGui.ScreenGui:FindFirstChild("DialogView")
+        if dialogView then
+            for _, desc in ipairs(dialogView:GetDescendants()) do
+                if desc:IsA("TextLabel") and desc.Text ~= "" then
+                    local current, maxVal = string.match(desc.Text, "%((%d+)%s*/%s*(%d+)%)")
+                    if current and maxVal then
+                        local cNum = tonumber(current)
+                        local mNum = tonumber(maxVal)
+                        if cNum and mNum and mNum > 0 and cNum >= mNum then
+                            return true, cNum, mNum, desc.Text
+                        end
+                    end
+                end
+            end
+        end
+        return false, 0, 0, nil
+    end
+
     -- Core Loop
     local lastSelectedMemePart = nil
     task.spawn(function()
@@ -212,6 +317,119 @@ return function(Window, Utils)
             
             local hrp = getHrp()
             if not hrp then continue end
+
+            -- KIỂM TRA GIỚI HẠN SỰ KIỆN (100/100)
+            if eventSettings.stopOnLimit then
+                local limitReached, currentVal, maxVal = CheckEventLimitReached()
+                if limitReached then
+                    EventStatus:Set(string.format(Utils.t("event_status_limit_reached"), currentVal, maxVal))
+                    LiveHud:Set({
+                        Title = "📡 SỰ KIỆN ĐÃ ĐẠT GIỚI HẠN",
+                        Content = string.format(Utils.t("event_limit_hud"), currentVal, maxVal)
+                    })
+                    
+                    -- Nếu đang kích hoạt cờ sự kiện -> Nhả cờ và quay về bãi farm cũ
+                    if eventSessionState.isEventActive then
+                        print("[AutoEvent] Đã đạt giới hạn sự kiện: " .. tostring(currentVal) .. "/" .. tostring(maxVal) .. ". Tự động dừng tham gia.")
+                        _G.IsEventActive = false
+                        eventSessionState.isEventActive = false
+                        
+                        if eventSettings.returnAfterEvent and eventSessionState.savedFarmCFrame then
+                            EventStatus:Set(Utils.t("event_status_returning_farm"))
+                            pcall(function()
+                                if Utils and type(Utils.SendNotify) == "function" then
+                                    Utils.SendNotify(Utils.t("event_notify_title"), Utils.t("event_notify_finished"))
+                                end
+                            end)
+                            
+                            if eventSessionState.savedAreaId and Utils and type(Utils.GetCurrentAreaId) == "function" and Utils.GetCurrentAreaId() ~= eventSessionState.savedAreaId and type(eventSessionState.savedAreaId) == "number" then
+                                pcall(function() Utils.TeleportToArea(eventSessionState.savedAreaId) end)
+                                task.wait(4)
+                            end
+                            
+                            local charHrp = getHrp()
+                            if charHrp then
+                                charHrp.CFrame = eventSessionState.savedFarmCFrame
+                            end
+                            
+                            eventSessionState.savedFarmCFrame = nil
+                            eventSessionState.savedAreaId = nil
+                            task.wait(1)
+                        end
+                    end
+                    
+                    task.wait(1)
+                    continue
+                end
+            end
+
+            -- KIỂM TRA NHẬN DIỆN SỰ KIỆN ĐANG DIỄN RA
+            local isEventRunning = HasActiveEvent()
+            
+            if isEventRunning then
+                eventSessionState.lastEventSeenTime = os.time()
+                
+                -- Nếu phát hiện sự kiện và chưa ở đảo Skyheart -> Tự động dịch chuyển về Skyheart
+                if eventSettings.autoReturnSkyheart and not IsPlayerOnSkyheart(hrp) then
+                    -- Lưu vị trí bãi farm trước khi bay về Skyheart (chỉ lưu 1 lần)
+                    if not eventSessionState.savedFarmCFrame then
+                        eventSessionState.savedFarmCFrame = hrp.CFrame
+                        eventSessionState.savedAreaId = Utils and type(Utils.GetCurrentAreaId) == "function" and Utils.GetCurrentAreaId() or nil
+                    end
+                    
+                    _G.IsEventActive = true
+                    eventSessionState.isEventActive = true
+                    EventStatus:Set(Utils.t("event_status_teleporting_skyheart"))
+                    
+                    pcall(function()
+                        if Utils and type(Utils.SendNotify) == "function" then
+                            Utils.SendNotify(Utils.t("event_notify_title"), Utils.t("event_notify_skyheart"))
+                        end
+                    end)
+                    
+                    -- Dịch chuyển an toàn về đảo Skyheart
+                    Utils.SafeTeleport(CFrame.new(SkyheartCenterPos), 5)
+                    task.wait(2)
+                    continue
+                end
+                
+                _G.IsEventActive = true
+                eventSessionState.isEventActive = true
+            else
+                -- Sự kiện đã kết thúc (hoặc chưa có sự kiện)
+                if eventSessionState.isEventActive then
+                    -- Kiểm tra xem đã hết event thực sự chưa (buffer 3 giây để tránh giật lag)
+                    if os.time() - eventSessionState.lastEventSeenTime >= 3 then
+                        print("[AutoEvent] Sự kiện trên Skyheart đã kết thúc!")
+                        _G.IsEventActive = false
+                        eventSessionState.isEventActive = false
+                        
+                        -- Tự động quay về bãi farm cũ nếu bật cài đặt
+                        if eventSettings.returnAfterEvent and eventSessionState.savedFarmCFrame then
+                            EventStatus:Set(Utils.t("event_status_returning_farm"))
+                            pcall(function()
+                                if Utils and type(Utils.SendNotify) == "function" then
+                                    Utils.SendNotify(Utils.t("event_notify_title"), Utils.t("event_notify_finished"))
+                                end
+                            end)
+                            
+                            if eventSessionState.savedAreaId and Utils and type(Utils.GetCurrentAreaId) == "function" and Utils.GetCurrentAreaId() ~= eventSessionState.savedAreaId and type(eventSessionState.savedAreaId) == "number" then
+                                pcall(function() Utils.TeleportToArea(eventSessionState.savedAreaId) end)
+                                task.wait(4)
+                            end
+                            
+                            local charHrp = getHrp()
+                            if charHrp then
+                                charHrp.CFrame = eventSessionState.savedFarmCFrame
+                            end
+                            
+                            eventSessionState.savedFarmCFrame = nil
+                            eventSessionState.savedAreaId = nil
+                            task.wait(1)
+                        end
+                    end
+                end
+            end
             
             -- ƯU TIÊN 1: KIỂM TRA SỰ KIỆN LỰA CHỌN (Q&A / CHỌN HÌNH ĐÚNG) ĐANG DIỄN RA
             local obbyFolder = Workspace:FindFirstChild("ObbyEventFolder")
@@ -424,11 +642,17 @@ return function(Window, Utils)
                 end
             end
             
-            -- Nếu phát hiện ô lựa chọn chính xác đang hoạt động, dịch chuyển đến đó và đứng yên
+            -- Nếu phát hiện ô lựa chọn chính xác đang hoạt động, chỉ dịch chuyển nếu chưa đứng trên bục và đứng yên an toàn
             if activeObbyPart then
                 EventStatus:Set(Utils.t("event_status_standing"))
-                hrp.CFrame = CFrame.new(activeObbyPart.Position + Vector3.new(0, 3.5, 0))
-                task.wait(0.5) -- Chờ chu kỳ quét tiếp theo (để đứng yên trên bục)
+                local targetPos = activeObbyPart.Position + Vector3.new(0, 3.5, 0)
+                local dist = (hrp.Position - targetPos).Magnitude
+                
+                -- Chỉ set CFrame nếu đang ở xa bục (> 4 studs) để tránh nhân vật bị nhảy giật giật liên tục
+                if dist > 4 then
+                    hrp.CFrame = CFrame.new(targetPos)
+                end
+                task.wait(0.5) -- Đứng yên trên bục chờ kết quả
                 continue
             end
             
@@ -474,9 +698,14 @@ return function(Window, Utils)
                 if target then
                     print("[EventAuto] Teleporting to claim: " .. target.object.Name .. " at " .. tostring(target.pos))
                     
-                    -- Dịch chuyển nhân vật đến vật thể (độ cao cách 3 studs)
-                    hrp.CFrame = CFrame.new(target.pos + Vector3.new(0, 3, 0))
-                    task.wait(0.3) -- Chờ game stream/load vị trí vật lý
+                    local targetClaimPos = target.pos + Vector3.new(0, 3, 0)
+                    local distItem = (hrp.Position - targetClaimPos).Magnitude
+                    
+                    -- Chỉ dịch chuyển nếu chưa ở sát vật phẩm
+                    if distItem > 4 then
+                        hrp.CFrame = CFrame.new(targetClaimPos)
+                        task.wait(0.2) -- Chờ game stream/load vị trí vật lý
+                    end
                     
                     local env = getrenv()._G.PathTool
                     

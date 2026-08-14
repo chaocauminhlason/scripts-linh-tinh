@@ -61,6 +61,17 @@ return function(Window, Utils)
         blacklist = {}
     }
 
+    local DuckPickupSettings = {
+        enabled = false,
+        pickupDelay = 0.3,
+        heightOffset = 0
+    }
+
+    local DuckPickupState = {
+        collectedCount = 0,
+        blacklist = {}
+    }
+
     pcall(function()
         if Utils and Utils.LoadSelectedAreas then
             local savedWorlds = Utils.LoadSelectedAreas("R_SelectedEggPickupWorlds.json")
@@ -178,26 +189,18 @@ return function(Window, Utils)
         return uniqueNames
     end
 
-    -- [Logic] Nhận diện vật phẩm Trứng (Egg) trong AreaPickUp và loại bỏ Vịt (Duck)
+    -- [Logic] Nhận diện vật phẩm Trứng (Egg) trong AreaPickUp và loại bỏ Vịt (Duck) / Hộp đồ không phải trứng
     local function IsEggPickupItem(itemModel, groupName)
         if not itemModel then return false end
         local groupId = tonumber(groupName) or tonumber(itemModel.Name)
-        -- Bỏ qua nếu là các nhóm quái vịt
-        if groupId == 1620 or groupId == 1625 or groupId == 1631 or groupId == 1633 then
+        -- Bỏ qua nếu là spawn Vịt (10001) hoặc các nhóm vật phẩm phụ
+        if groupId == 10001 or groupId == 8020 or groupId == 8030 or groupId == 8040 then
             return false
         end
 
         for _, desc in ipairs(itemModel:GetDescendants()) do
             local nl = string.lower(desc.Name)
-            local meshId = ""
-            if desc:IsA("MeshPart") then
-                meshId = tostring(desc.MeshId)
-            elseif desc:FindFirstChildOfClass("SpecialMesh") then
-                meshId = tostring(desc:FindFirstChildOfClass("SpecialMesh").MeshId)
-            end
-
-            -- Bỏ qua nếu phát hiện các bộ phận chân vịt
-            if string.find(nl, "jiao") or string.find(meshId, "88642162124289") or string.find(meshId, "126256160571190") or string.find(meshId, "112034122779558") or string.find(meshId, "84736413000979") then
+            if string.find(nl, "box") or string.find(nl, "duck") then
                 return false
             end
         end
@@ -418,11 +421,224 @@ return function(Window, Utils)
         return false
     end
 
+
+    -- [Logic] Quét tất cả Vịt AreaPickUp trên Map hiện tại mà nhân vật đang đứng
+    local function ScanCurrentIslandDucks(hrp, maxRadius)
+        local ducks = {}
+        local now = os.time()
+        for k, exp in pairs(DuckPickupState.blacklist) do
+            if now > exp then DuckPickupState.blacklist[k] = nil end
+        end
+
+        -- 1. Ưu tiên quét qua bảng dữ liệu AreaPickUpShower (Chính xác tuyệt đối 100% qua TmplId 2016)
+        local foundViaShower = false
+        pcall(function()
+            local env = getrenv and getrenv()._G and getrenv()._G.PathTool
+            local shower = env and env.AreaPickUpShower
+            local uvs = shower and debug.getupvalues(shower._onUpdateAreaPickUp)
+            local subUvs = uvs and uvs[4] and debug.getupvalues(uvs[4])
+            local pickUpTable = subUvs and subUvs[4]
+
+            if type(pickUpTable) == "table" then
+                for keyId, info in pairs(pickUpTable) do
+                    if type(info) == "table" and not DuckPickupState.blacklist[tostring(keyId)] then
+                        local isDuck = false
+                        if info._rwd and info._rwd.TmplId == 2016 then
+                            isDuck = true
+                        elseif info._rwdJson and string.find(info._rwdJson, "\"TmplId\":2016") then
+                            isDuck = true
+                        end
+
+                        if isDuck then
+                            local model = info.Model
+                            local root = model and (model:FindFirstChild("Root") or model:FindFirstChild("RootPart") or (model:IsA("BasePart") and model) or model:FindFirstChildWhichIsA("BasePart"))
+                            local pos = (root and root.Position) or (info.ModelGui and info.ModelGui._guiPos)
+                            if pos and typeof(pos) == "Vector3" then
+                                local dist = (pos - hrp.Position).Magnitude
+                                if not maxRadius or dist <= maxRadius then
+                                    table.insert(ducks, {
+                                        key = tostring(keyId),
+                                        keyId = keyId,
+                                        model = model,
+                                        root = root,
+                                        position = pos,
+                                        dist = dist,
+                                        showerEntry = info
+                                    })
+                                    foundViaShower = true
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+
+        -- 2. Phương án dự phòng qua Workspace.AreaPickUp và tọa độ Spawn_10001
+        if not foundViaShower or #ducks == 0 then
+            local areaPickUpFolder = Workspace:FindFirstChild("AreaPickUp")
+            local duckSpawnPositions = {}
+            pcall(function()
+                local areaFolder = Workspace:FindFirstChild("Area")
+                if areaFolder then
+                    for _, island in ipairs(areaFolder:GetChildren()) do
+                        local sz = island:FindFirstChild("ServerZone")
+                        local eggF = sz and sz:FindFirstChild("Egg")
+                        if eggF then
+                            for _, sp in ipairs(eggF:GetChildren()) do
+                                if sp.Name == "Spawn_10001" then
+                                    table.insert(duckSpawnPositions, sp.Position)
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+
+            if areaPickUpFolder and #duckSpawnPositions > 0 then
+                for _, group in ipairs(areaPickUpFolder:GetChildren()) do
+                    for _, item in ipairs(group:GetChildren()) do
+                        local key = group.Name .. "_" .. item.Name
+                        if not DuckPickupState.blacklist[key] then
+                            local root = item:FindFirstChild("Root") or item:FindFirstChild("RootPart") or (item:IsA("BasePart") and item) or item:FindFirstChildWhichIsA("BasePart")
+                            if root then
+                                local isNearDuckSpawn = false
+                                for _, sPos in ipairs(duckSpawnPositions) do
+                                    if (root.Position - sPos).Magnitude < 12 then
+                                        isNearDuckSpawn = true
+                                        break
+                                    end
+                                end
+                                if isNearDuckSpawn then
+                                    local dist = (root.Position - hrp.Position).Magnitude
+                                    if not maxRadius or dist <= maxRadius then
+                                        table.insert(ducks, {
+                                            key = key,
+                                            keyId = tonumber(group.Name) or group.Name,
+                                            group = group.Name,
+                                            model = item,
+                                            root = root,
+                                            position = root.Position,
+                                            dist = dist
+                                        })
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        table.sort(ducks, function(a, b) return a.dist < b.dist end)
+        return ducks
+    end
+
+    -- [Action] Dịch chuyển và thu thập an toàn vật phẩm Vịt
+    local function CollectDuckItem(duckItem, charData)
+        if not duckItem or not charData or not charData.RootPart then return false end
+        local hrp = charData.RootPart
+        local hum = charData.Humanoid
+        local duckModel = duckItem.model
+        local duckPos = duckItem.position
+
+        -- Dịch chuyển trực tiếp vào trọng tâm của vật phẩm vịt
+        local targetCFrame = CFrame.new(duckPos + Vector3.new(0, math.max(DuckPickupSettings.heightOffset or 0, 0), 0))
+        hrp.CFrame = targetCFrame
+
+        if hum then
+            pcall(function() hum:MoveTo(duckPos) end)
+        end
+        pcall(function()
+            hrp.AssemblyLinearVelocity = Vector3.new(0, -1, 0)
+        end)
+
+        -- 1. Kích hoạt trực tiếp BtDo trong Shower UI (Đã kiểm chứng cộng chính xác +1 vịt vào túi)
+        if duckItem.showerEntry and duckItem.showerEntry.ModelGui and duckItem.showerEntry.ModelGui.ButtonInfos and duckItem.showerEntry.ModelGui.ButtonInfos.BtDo then
+            pcall(function() duckItem.showerEntry.ModelGui.ButtonInfos.BtDo() end)
+        end
+
+        -- 2. Kích hoạt ProximityPrompt nếu có
+        if duckModel and duckModel.Parent then
+            for _, prompt in ipairs(duckModel:GetDescendants()) do
+                if prompt:IsA("ProximityPrompt") then
+                    if fireproximityprompt then
+                        pcall(function() fireproximityprompt(prompt) end)
+                    else
+                        pcall(function()
+                            prompt:InputHoldBegin()
+                            task.wait(prompt.HoldDuration or 0.05)
+                            prompt:InputHoldEnd()
+                        end)
+                    end
+                end
+            end
+        end
+
+        -- 3. Giả lập bấm phím E vật lý
+        pcall(function()
+            local VIM = game:GetService("VirtualInputManager")
+            if VIM then
+                VIM:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                task.wait(0.04)
+                VIM:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+            end
+        end)
+
+        -- 4. Gọi firetouchinterest trên các BasePart
+        if firetouchinterest and duckModel and duckModel.Parent then
+            for _, desc in ipairs(duckModel:GetDescendants()) do
+                if desc:IsA("BasePart") then
+                    pcall(function()
+                        firetouchinterest(hrp, desc, 0)
+                        task.wait(0.01)
+                        firetouchinterest(hrp, desc, 1)
+                    end)
+                end
+            end
+        end
+
+        -- 5. Gửi Remote DataPullFunc AreaPickUpChannel trực tiếp
+        local remote = nil
+        pcall(function()
+            remote = ReplicatedStorage:FindFirstChild("CommonLibrary")
+                and ReplicatedStorage.CommonLibrary:FindFirstChild("Tool")
+                and ReplicatedStorage.CommonLibrary.Tool:FindFirstChild("RemoteManager")
+                and ReplicatedStorage.CommonLibrary.Tool.RemoteManager:FindFirstChild("Funcs")
+                and ReplicatedStorage.CommonLibrary.Tool.RemoteManager.Funcs:FindFirstChild("DataPullFunc")
+        end)
+        if remote and duckItem.keyId then
+            pcall(function() remote:InvokeServer("AreaPickUpChannel", tonumber(duckItem.keyId) or duckItem.keyId) end)
+            pcall(function() remote:InvokeServer("AreaPickUpChannel", tostring(duckItem.keyId)) end)
+        end
+
+        -- 6. Chờ kiểm tra xem vịt đã được nhặt (biến mất) chưa
+        local waitTimeout = tick() + 0.6
+        while tick() < waitTimeout do
+            local exists = false
+            if duckModel and duckModel.Parent then exists = true end
+            if not exists then
+                DuckPickupState.collectedCount = DuckPickupState.collectedCount + 1
+                return true
+            end
+            task.wait(0.1)
+        end
+
+        if not duckModel or not duckModel.Parent then
+            DuckPickupState.collectedCount = DuckPickupState.collectedCount + 1
+            return true
+        end
+
+        -- Nếu chưa nhặt được, đưa vào blacklist 60s
+        DuckPickupState.blacklist[duckItem.key] = os.time() + 60
+        return false
+    end
+
     -- [Validation] Kiểm tra xem hệ thống có đang bận hoặc bị khóa không
     local function IsSystemBusy()
         local controller = _G.SystemController
         if controller and (controller.IsPaused or controller.CurrentLock ~= nil) then return true end
-        if _G.PendingBossHunt or _G.PendingSpecialBoss then return true end
+        if _G.PendingBossHunt or _G.PendingSpecialBoss or _G.IsEventActive then return true end
         
         -- Kiểm tra xem nhân vật có đang trong map/phó bản đặc biệt (Rift, Abyss...) không
         if Utils and type(Utils.IsInSpecialArea) == "function" and Utils.IsInSpecialArea() then
@@ -991,6 +1207,55 @@ return function(Window, Utils)
     })
 
     -- ==========================================
+    -- SECTION: AUTO NHẶT VỊT (MAP HIỆN TẠI)
+    -- ==========================================
+    CamTab:CreateSection(" " .. Utils.t("sec_duck_pickup") .. " ")
+
+    local DuckPickupStatus = CamTab:CreateLabel(Utils.t("duck_pickup_status_off"))
+    local DuckPickupCountLabel = CamTab:CreateLabel(Utils.t("duck_pickup_count_label") .. "0")
+
+    CamTab:CreateToggle({
+        Name = Utils.t("duck_pickup_master_toggle"),
+        Info = Utils.t("duck_pickup_master_toggle_info"),
+        CurrentValue = false,
+        Flag = "AutoDuckPickupMasterToggle",
+        Callback = function(Value)
+            DuckPickupSettings.enabled = Value
+            if not Value then
+                DuckPickupStatus:Set(Utils.t("duck_pickup_status_off"))
+            else
+                DuckPickupStatus:Set(Utils.t("duck_pickup_status_prep"))
+            end
+        end
+    })
+
+    CamTab:CreateSlider({
+        Name = Utils.t("duck_pickup_delay"),
+        Info = Utils.t("duck_pickup_delay_info"),
+        Range = {0.1, 2.0},
+        Increment = 0.1,
+        Suffix = "s",
+        CurrentValue = 0.3,
+        Flag = "DuckPickupDelaySlider",
+        Callback = function(Value)
+            DuckPickupSettings.pickupDelay = Value
+        end
+    })
+
+    CamTab:CreateSlider({
+        Name = Utils.t("duck_pickup_height_offset"),
+        Info = Utils.t("duck_pickup_height_offset_info"),
+        Range = {0, 4.0},
+        Increment = 0.5,
+        Suffix = " studs",
+        CurrentValue = 0,
+        Flag = "DuckPickupHeightOffsetSlider",
+        Callback = function(Value)
+            DuckPickupSettings.heightOffset = Value
+        end
+    })
+
+    -- ==========================================
     -- 6. TẦNG THỰC THI (BACKGROUND WORKERS / COROUTINES)
     -- ==========================================
 
@@ -1520,4 +1785,37 @@ return function(Window, Utils)
         end
     end)
 
-end
+    -- Luồng 7: Auto Duck Pickup (Chỉ nhặt vịt trên Map hiện tại đang đứng)
+    task.spawn(function()
+        while task.wait(0.5) do
+            if not DuckPickupSettings.enabled then continue end
+            if IsSystemBusy() or AppState.isHealing then continue end
+
+            local charData = GetValidCharacterData()
+            if not charData then continue end
+
+            -- Quét toàn bộ vịt trên map hiện tại
+            local islandDucks = ScanCurrentIslandDucks(charData.RootPart)
+            if #islandDucks > 0 then
+                local duck = islandDucks[1]
+                if DuckPickupStatus then
+                    DuckPickupStatus:Set(string.format(Utils.t("duck_pickup_status_collecting"), #islandDucks))
+                end
+
+                local success = CollectDuckItem(duck, charData)
+                if DuckPickupCountLabel then
+                    DuckPickupCountLabel:Set(Utils.t("duck_pickup_count_label") .. tostring(DuckPickupState.collectedCount))
+                end
+
+                task.wait(math.max(DuckPickupSettings.pickupDelay or 0.3, 0.1))
+            else
+                -- Không còn vịt trên map hiện tại -> Chờ vịt hồi sinh
+                if DuckPickupStatus then
+                    DuckPickupStatus:Set(Utils.t("duck_pickup_status_waiting"))
+                end
+                task.wait(1.0)
+            end
+        end
+    end)
+
+end

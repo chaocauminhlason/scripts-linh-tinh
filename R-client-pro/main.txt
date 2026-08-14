@@ -75,7 +75,7 @@ local Window = Rayfield:CreateWindow({
     DisableBuildWarnings = true 
 })
 
--- Tùy biến phong cách UI: Độ trong suốt 50% & Giảm độ bo góc Slider
+-- Tùy biến phong cách UI: Độ trong suốt 5% & Giảm độ bo góc Slider
 task.spawn(function()
     local CoreGui = game:GetService("CoreGui")
     local Players = game:GetService("Players")
@@ -104,7 +104,7 @@ task.spawn(function()
 
         if rayfieldGui then
             for _, desc in ipairs(rayfieldGui:GetDescendants()) do
-                -- 1. Độ trong suốt 50% cho các khung giao diện chính
+                -- 1. Độ trong suốt 5% cho các khung giao diện chính
                 if desc:IsA("Frame") or desc:IsA("ScrollingFrame") then
                     local nl = string.lower(desc.Name)
                     if nl == "main" or nl == "background" or nl == "holder" or nl == "container" or nl == "topbar" or nl == "sidebar" or nl == "tabcontainer" then

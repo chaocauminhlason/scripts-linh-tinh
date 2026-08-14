@@ -400,6 +400,20 @@ local Translations = {
     ["egg_pickup_height_offset"] = { en = "Height Offset (Studs)", vi = "Độ Cao Dịch Chuyển (Studs)" },
     ["egg_pickup_height_offset_info"] = { en = "Vertical height above the egg when teleporting to collect.", vi = "Khoảng cách độ cao bên trên quả trứng khi bay đến nhặt." },
 
+    -- Auto Duck Pickup keys
+    ["sec_duck_pickup"] = { en = "🦆 AUTO DUCK PICKUP (CURRENT MAP)", vi = "🦆 TỰ ĐỘNG NHẶT VỊT (MAP HIỆN TẠI)" },
+    ["duck_pickup_master_toggle"] = { en = "Auto Duck Pickup", vi = "Auto Nhặt Vịt" },
+    ["duck_pickup_master_toggle_info"] = { en = "Automatically scans and collects all rubber ducks on the current map.", vi = "Tự động quét và nhặt tất cả vịt xuất hiện trên map hiện tại đang đứng." },
+    ["duck_pickup_status_off"] = { en = "STATUS: AUTO DUCK PICKUP OFF", vi = "TRẠNG THÁI: AUTO NHẶT VỊT ĐANG TẮT" },
+    ["duck_pickup_status_prep"] = { en = "STATUS: SCANNING DUCKS ON CURRENT MAP...", vi = "TRẠNG THÁI: ĐANG QUÉT VỊT TRÊN MAP HIỆN TẠI..." },
+    ["duck_pickup_status_collecting"] = { en = "STATUS: Collecting Duck (%d left on map)...", vi = "TRẠNG THÁI: Đang nhặt vịt (Còn %d con trên map)..." },
+    ["duck_pickup_status_waiting"] = { en = "STATUS: All ducks collected! Waiting for respawn...", vi = "TRẠNG THÁI: Đã nhặt hết vịt trên map! Đang chờ hồi sinh..." },
+    ["duck_pickup_count_label"] = { en = "Ducks Collected: ", vi = "Vịt đã nhặt: " },
+    ["duck_pickup_delay"] = { en = "Pickup Delay (Seconds)", vi = "Tốc độ nhặt (Giây)" },
+    ["duck_pickup_delay_info"] = { en = "Delay between collecting ducks to avoid lag or kick.", vi = "Thời gian nghỉ giữa mỗi lần nhặt vịt để tránh giật lag hoặc bị ngắt kết nối." },
+    ["duck_pickup_height_offset"] = { en = "Height Offset (Studs)", vi = "Độ Cao Dịch Chuyển (Studs)" },
+    ["duck_pickup_height_offset_info"] = { en = "Vertical height offset above the duck when teleporting.", vi = "Khoảng cách độ cao bên trên con vịt khi bay đến nhặt." },
+
     -- AI Assistant keys
     ["ai_title"] = { en = "🧠 Catch A Monster | AI", vi = "🧠 Catch A Monster | AI" },
     ["ai_key_saved"] = { en = "Saved Key", vi = "Key đã lưu" },
@@ -444,7 +458,22 @@ local Translations = {
     ["webhook_invalid_msg"] = { en = "Invalid Webhook URL!", vi = "Link Webhook không hợp lệ!" },
     ["webhook_test_sent_msg"] = { en = "Test notification sent to Discord!", vi = "Đã gửi thông báo test qua Discord!" },
     ["webhook_notification_title"] = { en = "🎉 Auto-Farm Update", vi = "🎉 Cập nhật Auto-Farm" },
-    ["webhook_test_payload"] = { en = "🛠️ Webhook Test Successful! R-Client Pro system is running smoothly.", vi = "🛠️ Test Webhook thành công! Hệ thống R-Client Pro đang hoạt động tốt." }
+    ["webhook_test_payload"] = { en = "🛠️ Webhook Test Successful! R-Client Pro system is running smoothly.", vi = "🛠️ Test Webhook thành công! Hệ thống R-Client Pro đang hoạt động tốt." },
+
+    -- Auto Event Skyheart keys
+    ["auto_return_skyheart"] = { en = "Auto Teleport to Skyheart on Event", vi = "Tự Động Về Skyheart Khi Event" },
+    ["auto_return_skyheart_info"] = { en = "Automatically detects when an event starts and teleports directly to Skyheart Island to participate.", vi = "Tự động nhận diện khi sự kiện bắt đầu và dịch chuyển tức thời về đảo Skyheart để tham gia." },
+    ["return_farm_after_event"] = { en = "Return to Farm Spot After Event", vi = "Quay Về Bãi Farm Sau Khi Hết Event" },
+    ["return_farm_after_event_info"] = { en = "Automatically teleports back to your previous farming spot after the Skyheart event finishes.", vi = "Tự động bay về vị trí bãi farm trước đó sau khi sự kiện trên đảo Skyheart kết thúc." },
+    ["event_status_teleporting_skyheart"] = { en = "STATUS: EVENT DETECTED! TELEPORTING TO SKYHEART...", vi = "TRẠNG THÁI: PHÁT HIỆN EVENT! ĐANG VỀ SKYHEART..." },
+    ["event_status_returning_farm"] = { en = "STATUS: EVENT FINISHED! RETURNING TO FARM SPOT...", vi = "TRẠNG THÁI: HẾT EVENT! ĐANG VỀ LẠI BÃI FARM..." },
+    ["event_notify_title"] = { en = "🎉 Auto Event", vi = "🎉 Auto Event" },
+    ["event_notify_skyheart"] = { en = "Event started! Teleporting to Skyheart Island...", vi = "Sự kiện đã bắt đầu! Đang dịch chuyển về đảo Skyheart..." },
+    ["event_notify_finished"] = { en = "Event completed! Returning to previous farming spot...", vi = "Sự kiện đã kết thúc! Đang quay về bãi farm trước đó..." },
+    ["event_stop_on_limit"] = { en = "Stop On Limit Reached (100/100)", vi = "Dừng Khi Đạt Giới Hạn Quà (100/100)" },
+    ["event_stop_on_limit_info"] = { en = "Automatically detects when the event has reached max reward limit (e.g. 100/100) to stop participating and resume auto-farming.", vi = "Tự động phát hiện khi sự kiện đã nhận đủ quà tối đa (100/100) để dừng tham gia và quay về tiếp tục auto farm." },
+    ["event_status_limit_reached"] = { en = "STATUS: EVENT LIMIT REACHED (%d/%d)! PAUSED...", vi = "TRẠNG THÁI: ĐÃ ĐẠT GIỚI HẠN (%d/%d)! ĐANG DỪNG..." },
+    ["event_limit_hud"] = { en = "⚠️ Event reward limit reached: %d/%d. Auto-stopped to save time.", vi = "⚠️ Đã đạt giới hạn nhận quà: %d/%d. Tự động dừng để tiết kiệm thời gian." }
 }
 
 local currentLang = "en"
