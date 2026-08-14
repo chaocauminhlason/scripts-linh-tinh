@@ -64,11 +64,16 @@ return function(Window, Utils)
     local DuckPickupSettings = {
         enabled = false,
         pickupDelay = 0.3,
+        restTimeMinutes = 1,
+        autoHop = false,
         heightOffset = 0
     }
 
     local DuckPickupState = {
         collectedCount = 0,
+        isResting = false,
+        restEndTime = 0,
+        loopCount = 1,
         blacklist = {}
     }
 
@@ -1213,6 +1218,7 @@ return function(Window, Utils)
 
     local DuckPickupStatus = CamTab:CreateLabel(Utils.t("duck_pickup_status_off"))
     local DuckPickupCountLabel = CamTab:CreateLabel(Utils.t("duck_pickup_count_label") .. "0")
+    local DuckPickupLoopLabel = CamTab:CreateLabel(Utils.t("duck_pickup_cycle_label") .. "1")
 
     CamTab:CreateToggle({
         Name = Utils.t("duck_pickup_master_toggle"),
@@ -1223,8 +1229,12 @@ return function(Window, Utils)
             DuckPickupSettings.enabled = Value
             if not Value then
                 DuckPickupStatus:Set(Utils.t("duck_pickup_status_off"))
+                DuckPickupState.isResting = false
             else
                 DuckPickupStatus:Set(Utils.t("duck_pickup_status_prep"))
+                DuckPickupState.isResting = false
+                DuckPickupState.loopCount = 1
+                DuckPickupLoopLabel:Set(Utils.t("duck_pickup_cycle_label") .. "1")
             end
         end
     })
@@ -1243,6 +1253,19 @@ return function(Window, Utils)
     })
 
     CamTab:CreateSlider({
+        Name = Utils.t("duck_pickup_rest_time"),
+        Info = Utils.t("duck_pickup_rest_time_info"),
+        Range = {1, 30},
+        Increment = 1,
+        Suffix = " min",
+        CurrentValue = 1,
+        Flag = "DuckPickupRestTimeSlider",
+        Callback = function(Value)
+            DuckPickupSettings.restTimeMinutes = Value
+        end
+    })
+
+    CamTab:CreateSlider({
         Name = Utils.t("duck_pickup_height_offset"),
         Info = Utils.t("duck_pickup_height_offset_info"),
         Range = {0, 4.0},
@@ -1252,6 +1275,16 @@ return function(Window, Utils)
         Flag = "DuckPickupHeightOffsetSlider",
         Callback = function(Value)
             DuckPickupSettings.heightOffset = Value
+        end
+    })
+
+    CamTab:CreateToggle({
+        Name = Utils.t("duck_pickup_auto_hop"),
+        Info = Utils.t("duck_pickup_auto_hop_info"),
+        CurrentValue = false,
+        Flag = "DuckPickupAutoHopToggle",
+        Callback = function(Value)
+            DuckPickupSettings.autoHop = Value
         end
     })
 
@@ -1794,6 +1827,34 @@ return function(Window, Utils)
             local charData = GetValidCharacterData()
             if not charData then continue end
 
+            -- Xử lý thời gian nghỉ giữa các vòng (Rest Time)
+            if DuckPickupState.isResting then
+                if DuckPickupSettings.autoHop then
+                    if DuckPickupStatus then DuckPickupStatus:Set(Utils.t("duck_pickup_status_done_hop")) end
+                    pcall(function() Utils.HopServer("Hoàn thành 1 vòng nhặt vịt trên map") end)
+                    task.wait(5)
+                    continue
+                else
+                    local timeLeft = DuckPickupState.restEndTime - os.time()
+                    if timeLeft > 0 then
+                        local timeStr = string.format("%02d:%02d", math.floor(timeLeft / 60), timeLeft % 60)
+                        if DuckPickupStatus then
+                            DuckPickupStatus:Set(string.format(Utils.t("duck_pickup_status_resting"), timeStr))
+                        end
+                        if DuckPickupLoopLabel then
+                            DuckPickupLoopLabel:Set(Utils.t("duck_pickup_cycle_label") .. timeStr)
+                        end
+                        continue
+                    else
+                        DuckPickupState.isResting = false
+                        DuckPickupState.loopCount = DuckPickupState.loopCount + 1
+                        if DuckPickupLoopLabel then
+                            DuckPickupLoopLabel:Set(Utils.t("duck_pickup_cycle_label") .. tostring(DuckPickupState.loopCount))
+                        end
+                    end
+                end
+            end
+
             -- Quét toàn bộ vịt trên map hiện tại
             local islandDucks = ScanCurrentIslandDucks(charData.RootPart)
             if #islandDucks > 0 then
@@ -1809,13 +1870,25 @@ return function(Window, Utils)
 
                 task.wait(math.max(DuckPickupSettings.pickupDelay or 0.3, 0.1))
             else
-                -- Không còn vịt trên map hiện tại -> Chờ vịt hồi sinh
-                if DuckPickupStatus then
-                    DuckPickupStatus:Set(Utils.t("duck_pickup_status_waiting"))
+                -- Không còn vịt trên map hiện tại -> Nghỉ ngơi hoặc Auto Hop
+                if DuckPickupSettings.autoHop then
+                    if DuckPickupStatus then DuckPickupStatus:Set(Utils.t("duck_pickup_status_done_hop")) end
+                    pcall(function() Utils.HopServer("Hoàn thành 1 vòng nhặt vịt trên map") end)
+                    task.wait(5)
+                else
+                    DuckPickupState.isResting = true
+                    DuckPickupState.restEndTime = os.time() + (DuckPickupSettings.restTimeMinutes * 60)
+                    local timeStr = string.format("%02d:00", DuckPickupSettings.restTimeMinutes)
+                    if DuckPickupStatus then
+                        DuckPickupStatus:Set(string.format(Utils.t("duck_pickup_status_resting"), timeStr))
+                    end
+                    if DuckPickupLoopLabel then
+                        DuckPickupLoopLabel:Set(Utils.t("duck_pickup_cycle_label") .. timeStr)
+                    end
                 end
-                task.wait(1.0)
             end
         end
     end)
 
-end
+end
+
