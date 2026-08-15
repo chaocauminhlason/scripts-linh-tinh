@@ -96,7 +96,7 @@ return function(Window, Utils)
     })
 
     -- ==========================================
-    -- SECTION: AUTO REDEEM GIFT CODE
+    -- SECTION: AUTO REDEEM GIFT CODE SYSTEM
     -- ==========================================
     local defaultGiftCodes = {
         "CAM",
@@ -108,6 +108,50 @@ return function(Window, Utils)
         "DUNGEONFIXED",
         "RIFDUNCH"
     }
+
+    local GIFT_CODES_FILE = "R_GiftCodesList.json"
+
+    -- 1. Hàm nạp danh sách code từ file JSON
+    local function LoadCodesFromFile()
+        local loaded = {}
+        pcall(function()
+            if Utils and Utils.LoadJSON then
+                local data = Utils.LoadJSON(GIFT_CODES_FILE)
+                if type(data) == "table" and #data > 0 then
+                    for _, c in ipairs(data) do
+                        local clean = tostring(c):gsub("%s+", ""):upper()
+                        if #clean > 0 and not table.find(loaded, clean) then
+                            table.insert(loaded, clean)
+                        end
+                    end
+                end
+            end
+        end)
+        if #loaded == 0 then
+            for _, c in ipairs(defaultGiftCodes) do
+                table.insert(loaded, c)
+            end
+            pcall(function()
+                if Utils and Utils.SaveJSON then
+                    Utils.SaveJSON(GIFT_CODES_FILE, loaded)
+                end
+            end)
+        end
+        return loaded
+    end
+
+    local activeCodeList = LoadCodesFromFile()
+    local selectedCodesToRedeem = {}
+    for _, c in ipairs(activeCodeList) do table.insert(selectedCodesToRedeem, c) end
+
+    -- 2. Hàm lưu danh sách code vào file JSON
+    local function SaveCodesToFile()
+        pcall(function()
+            if Utils and Utils.SaveJSON then
+                Utils.SaveJSON(GIFT_CODES_FILE, activeCodeList)
+            end
+        end)
+    end
 
     local giftCodeSettings = {
         autoOnJoin = false,
@@ -221,20 +265,120 @@ return function(Window, Utils)
         end)
     end
 
+    local function FetchOnlineAndScrapedCodes()
+        local foundCodes = {}
+
+        -- 1. Quét mô tả game (Game Description)
+        pcall(function()
+            local MPS = game:GetService("MarketplaceService")
+            local info = MPS:GetProductInfo(game.PlaceId)
+            if info and info.Description then
+                for word in string.gmatch(info.Description, "[A-Za-z0-9_]+") do
+                    local upper = string.upper(word)
+                    if #upper >= 3 and #upper <= 16 and not tonumber(upper) then
+                        table.insert(foundCodes, upper)
+                    end
+                end
+            end
+        end)
+
+        -- 2. Tải từ online URL (GitHub raw list nếu có)
+        pcall(function()
+            if game.HttpGet then
+                local rawUrl = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/refs/heads/test/pre-config-manager/gift_codes.json"
+                local ok, resp = pcall(function() return game:HttpGet(rawUrl) end)
+                if ok and type(resp) == "string" and #resp > 0 then
+                    local HttpService = game:GetService("HttpService")
+                    local list = HttpService:JSONDecode(resp)
+                    if type(list) == "table" then
+                        for _, c in ipairs(list) do
+                            table.insert(foundCodes, tostring(c):upper())
+                        end
+                    end
+                end
+            end
+        end)
+
+        local newAdded = 0
+        for _, c in ipairs(foundCodes) do
+            local clean = tostring(c):gsub("%s+", ""):upper()
+            if #clean >= 3 and not table.find(activeCodeList, clean) then
+                table.insert(activeCodeList, clean)
+                newAdded = newAdded + 1
+            end
+        end
+
+        if newAdded > 0 then
+            SaveCodesToFile()
+        end
+        return newAdded
+    end
+
     EventTab:CreateSection(" " .. Utils.t("sec_gift_code") .. " ")
 
-    local GiftCodeStatus = EventTab:CreateLabel(Utils.t("gift_code_status_idle"))
+    local GiftCodeStatus = EventTab:CreateLabel(string.format(Utils.t("gift_code_status_idle"), #activeCodeList))
 
+    -- 1. Nút Nhập Tất Cả Code Trong Danh Sách
     EventTab:CreateButton({
         Name = Utils.t("btn_redeem_all_codes"),
         Info = Utils.t("btn_redeem_all_codes_info"),
         Callback = function()
             task.spawn(function()
-                RedeemCodeBatch(defaultGiftCodes, GiftCodeStatus)
+                RedeemCodeBatch(activeCodeList, GiftCodeStatus)
             end)
         end
     })
 
+    -- 2. Nút Nhập Các Code Đã Chọn (Multi-Select)
+    EventTab:CreateButton({
+        Name = Utils.t("btn_redeem_selected"),
+        Callback = function()
+            local list = selectedCodesToRedeem
+            if not list or #list == 0 then
+                list = activeCodeList
+            end
+            task.spawn(function()
+                RedeemCodeBatch(list, GiftCodeStatus)
+            end)
+        end
+    })
+
+    -- 3. Dropdown Multi-Select Quản Lý Danh Sách Code
+    local CodeDropdown = nil
+    CodeDropdown = EventTab:CreateDropdown({
+        Name = Utils.t("gift_code_multiselect"),
+        Options = activeCodeList,
+        CurrentOption = selectedCodesToRedeem,
+        MultipleOptions = true,
+        Flag = "GiftCodeMultiSelectDropdown",
+        Callback = function(Options)
+            selectedCodesToRedeem = Options or {}
+        end
+    })
+
+    -- 4. Nút Tự Động Quét & Lấy Code Mới (Online + Description)
+    EventTab:CreateButton({
+        Name = Utils.t("btn_fetch_online_codes"),
+        Info = Utils.t("btn_fetch_online_codes_info"),
+        Callback = function()
+            task.spawn(function()
+                GiftCodeStatus:Set("Đang quét và lấy code mới...")
+                local added = FetchOnlineAndScrapedCodes()
+                if CodeDropdown and type(CodeDropdown.Set) == "function" then
+                    pcall(function() CodeDropdown:Set(activeCodeList) end)
+                end
+                GiftCodeStatus:Set(string.format(Utils.t("gift_code_status_idle"), #activeCodeList))
+                pcall(function()
+                    if Utils and type(Utils.SendNotify) == "function" then
+                        local msg = string.format(Utils.t("gift_code_fetch_done_notify"), added)
+                        Utils.SendNotify(Utils.t("gift_code_notify_title"), msg)
+                    end
+                end)
+            end)
+        end
+    })
+
+    -- 5. Ô Nhập Code Tùy Chỉnh
     EventTab:CreateInput({
         Name = Utils.t("input_custom_code"),
         PlaceholderText = Utils.t("input_custom_code_placeholder"),
@@ -245,6 +389,41 @@ return function(Window, Utils)
         end
     })
 
+    -- 6. Nút Thêm Vào Danh Sách & Lưu File
+    EventTab:CreateButton({
+        Name = Utils.t("btn_add_to_list"),
+        Callback = function()
+            local rawText = giftCodeSettings.customCodeInput or ""
+            local newCodes = {}
+            for token in string.gmatch(rawText, "[^,%s]+") do
+                local upper = string.upper(token)
+                if #upper > 0 and not table.find(activeCodeList, upper) then
+                    table.insert(activeCodeList, upper)
+                    table.insert(newCodes, upper)
+                end
+            end
+            if #newCodes > 0 then
+                SaveCodesToFile()
+                if CodeDropdown and type(CodeDropdown.Set) == "function" then
+                    pcall(function() CodeDropdown:Set(activeCodeList) end)
+                end
+                GiftCodeStatus:Set(string.format(Utils.t("gift_code_status_idle"), #activeCodeList))
+                pcall(function()
+                    if Utils and type(Utils.SendNotify) == "function" then
+                        Utils.SendNotify(Utils.t("gift_code_notify_title"), string.format(Utils.t("gift_code_added_notify"), #newCodes))
+                    end
+                end)
+            else
+                pcall(function()
+                    if Utils and type(Utils.SendNotify) == "function" then
+                        Utils.SendNotify(Utils.t("gift_code_notify_title"), "Không có mã mới hợp lệ để thêm.")
+                    end
+                end)
+            end
+        end
+    })
+
+    -- 7. Nút Nhập Trực Tiếp Code Vừa Điền
     EventTab:CreateButton({
         Name = Utils.t("btn_redeem_custom"),
         Callback = function()
@@ -267,6 +446,69 @@ return function(Window, Utils)
         end
     })
 
+    -- 8. Nút Xóa Các Code Đã Chọn
+    EventTab:CreateButton({
+        Name = Utils.t("btn_delete_selected"),
+        Callback = function()
+            local toDelete = selectedCodesToRedeem or {}
+            if #toDelete == 0 then
+                pcall(function()
+                    if Utils and type(Utils.SendNotify) == "function" then
+                        Utils.SendNotify(Utils.t("gift_code_notify_title"), "Chưa chọn code nào để xóa.")
+                    end
+                end)
+                return
+            end
+
+            local filtered = {}
+            local deletedCount = 0
+            for _, c in ipairs(activeCodeList) do
+                if table.find(toDelete, c) then
+                    deletedCount = deletedCount + 1
+                else
+                    table.insert(filtered, c)
+                end
+            end
+
+            activeCodeList = filtered
+            selectedCodesToRedeem = {}
+            SaveCodesToFile()
+
+            if CodeDropdown and type(CodeDropdown.Set) == "function" then
+                pcall(function() CodeDropdown:Set(activeCodeList) end)
+            end
+            GiftCodeStatus:Set(string.format(Utils.t("gift_code_status_idle"), #activeCodeList))
+            pcall(function()
+                if Utils and type(Utils.SendNotify) == "function" then
+                    Utils.SendNotify(Utils.t("gift_code_notify_title"), string.format(Utils.t("gift_code_deleted_notify"), deletedCount))
+                end
+            end)
+        end
+    })
+
+    -- 9. Nút Khôi Phục Danh Sách Mặc Định
+    EventTab:CreateButton({
+        Name = Utils.t("btn_reset_default_codes"),
+        Callback = function()
+            activeCodeList = {}
+            for _, c in ipairs(defaultGiftCodes) do table.insert(activeCodeList, c) end
+            selectedCodesToRedeem = {}
+            for _, c in ipairs(activeCodeList) do table.insert(selectedCodesToRedeem, c) end
+            SaveCodesToFile()
+
+            if CodeDropdown and type(CodeDropdown.Set) == "function" then
+                pcall(function() CodeDropdown:Set(activeCodeList) end)
+            end
+            GiftCodeStatus:Set(string.format(Utils.t("gift_code_status_idle"), #activeCodeList))
+            pcall(function()
+                if Utils and type(Utils.SendNotify) == "function" then
+                    Utils.SendNotify(Utils.t("gift_code_notify_title"), Utils.t("gift_code_reset_notify"))
+                end
+            end)
+        end
+    })
+
+    -- 10. Toggle Tự Động Nhập Code Khi Vào Game
     EventTab:CreateToggle({
         Name = Utils.t("gift_code_auto_on_join"),
         Info = Utils.t("gift_code_auto_on_join_info"),
@@ -281,7 +523,7 @@ return function(Window, Utils)
     task.spawn(function()
         task.wait(3)
         if giftCodeSettings.autoOnJoin then
-            RedeemCodeBatch(defaultGiftCodes, GiftCodeStatus)
+            RedeemCodeBatch(activeCodeList, GiftCodeStatus)
         end
     end)
 

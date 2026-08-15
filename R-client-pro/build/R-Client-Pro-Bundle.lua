@@ -1085,6 +1085,28 @@ local AreaData = {
     {id=13, name= "Splash Isle", category = "Săn Boss"}
 }
 -- ==========================================
+-- ==========================================
+-- HÀM CHUẨN HÓA LỰA CHỌN DROPDOWN (ARRAY / DICTIONARY / STRING)
+-- ==========================================
+function Utils.NormalizeDropdownSelection(rawOptions)
+    local selectedList = {}
+    if type(rawOptions) == "table" then
+        for k, v in pairs(rawOptions) do
+            if type(v) == "string" then
+                table.insert(selectedList, v)
+            elseif type(k) == "string" and v == true then
+                table.insert(selectedList, k)
+            elseif type(k) == "number" and type(v) == "string" then
+                table.insert(selectedList, v)
+            end
+        end
+    elseif type(rawOptions) == "string" and rawOptions ~= "" then
+        table.insert(selectedList, rawOptions)
+    end
+    return selectedList
+end
+
+-- ==========================================
 -- 1.5 TẠO DROPDOWN ĐA CHỌN (BẢN LỌC - VERSION 2)
 -- ==========================================
 function Utils.CreateFilteredAreaMultiSelect(tab, config)
@@ -1122,20 +1144,22 @@ function Utils.CreateFilteredAreaMultiSelect(tab, config)
         Flag = config.flag or "AreaMultiSelectFiltered",
         Callback = function(selectedOptions)
             if config.callback then
+                local selectedList = Utils.NormalizeDropdownSelection(selectedOptions)
                 local selectedIds = {}
                 -- Trả về trực tiếp mảng ID cho script xử lý
-                for _, areaName in ipairs(selectedOptions) do
+                for _, areaName in ipairs(selectedList) do
                     if nameToIdMap[areaName] then
                         table.insert(selectedIds, nameToIdMap[areaName])
                     end
                 end
-                config.callback(selectedIds, selectedOptions)
+                config.callback(selectedIds, selectedList)
             end
         end
     })
     
     return dropdown
 end
+
 -- ==========================================
 -- 1. TẠO DROPDOWN ĐA CHỌN KHU VỰC
 -- ==========================================
@@ -1172,9 +1196,10 @@ function Utils.CreateAreaMultiSelect(tab, config)
         Flag = config.flag or "AreaMultiSelect",
         Callback = function(selectedOptions)
             if config.callback then
+                local selectedList = Utils.NormalizeDropdownSelection(selectedOptions)
                 -- Chuyển đổi tên → ID
                 local selectedIds = {}
-                for _, areaName in ipairs(selectedOptions) do
+                for _, areaName in ipairs(selectedList) do
                     for _, area in ipairs(AreaData) do
                         if area.name == areaName then
                             table.insert(selectedIds, area.id)
@@ -1182,7 +1207,7 @@ function Utils.CreateAreaMultiSelect(tab, config)
                         end
                     end
                 end
-                config.callback(selectedIds, selectedOptions)
+                config.callback(selectedIds, selectedList)
             end
         end
     })
@@ -1402,16 +1427,21 @@ end
 -- ==========================================
 function Utils.LoadSelectedAreas(fileName)
     fileName = fileName or "R_SelectedAreas.json"
+    local HttpService = game:GetService("HttpService")
+    local result = {}
     
     pcall(function()
         if isfile and isfile(fileName) then
-            local data = HttpService:JSONDecode(readfile(fileName))
-            if type(data) == "table" then
-                return data
+            local raw = readfile(fileName)
+            if raw and #raw > 0 then
+                local data = HttpService:JSONDecode(raw)
+                if type(data) == "table" then
+                    result = data
+                end
             end
         end
     end)
-    return {}
+    return result
 end
 
 -- ==========================================
@@ -2670,6 +2700,7 @@ return function(Window, Utils)
     local EggPickupState = {
         currentIndex = 1,
         currentLoadedWorld = nil,
+        islandAnchorPos = nil,
         isResting = false,
         restEndTime = 0,
         collectedCount = 0,
@@ -2827,9 +2858,13 @@ return function(Window, Utils)
         return true
     end
 
-    -- [Logic] Quét tất cả các quả trứng AreaPickUp trên đảo hiện tại
-    local function ScanIslandEggs(hrp, maxRadius)
+    -- [Logic] Quét tất cả các quả trứng AreaPickUp trên đảo hiện tại (Giới hạn bán kính đảo)
+    local function ScanIslandEggs(hrp, maxRadius, anchorPos)
+        maxRadius = maxRadius or 450 -- Giới hạn bán kính 450 studs tính từ tâm đảo để không quét nhầm trứng đảo khác
         local eggs = {}
+        if not hrp then return eggs end
+        local centerPos = anchorPos or (EggPickupState and EggPickupState.islandAnchorPos) or hrp.Position
+
         local now = os.time()
         for k, exp in pairs(EggPickupState.blacklist) do
             if now > exp then EggPickupState.blacklist[k] = nil end
@@ -2843,15 +2878,16 @@ return function(Window, Utils)
                     if not EggPickupState.blacklist[key] and IsEggPickupItem(item, group.Name) then
                         local root = item:FindFirstChild("Root") or item:FindFirstChild("RootPart") or (item:IsA("BasePart") and item) or item:FindFirstChildWhichIsA("BasePart")
                         if root then
-                            local dist = (root.Position - hrp.Position).Magnitude
-                            if not maxRadius or dist <= maxRadius then
+                            local distFromCenter = (root.Position - centerPos).Magnitude
+                            if distFromCenter <= maxRadius then
+                                local distFromHrp = (root.Position - hrp.Position).Magnitude
                                 table.insert(eggs, {
                                     key = key,
                                     group = group.Name,
                                     model = item,
                                     root = root,
                                     position = root.Position,
-                                    dist = dist
+                                    dist = distFromHrp
                                 })
                             end
                         end
@@ -3767,8 +3803,12 @@ return function(Window, Utils)
         flag = "EggPickupWorldSelect",
         defaultAreas = Utils.GetAreaNamesByIds(EggPickupSettings.selectedWorlds),
         callback = function(selectedIds)
-            if type(selectedIds) == "table" then
+            if type(selectedIds) == "table" and #selectedIds > 0 then
                 EggPickupSettings.selectedWorlds = selectedIds
+                EggPickupState.currentIndex = 1
+                EggPickupState.currentLoadedWorld = nil
+                EggPickupState.islandAnchorPos = nil
+                EggPickupState.isResting = false
                 if Utils and Utils.SaveSelectedAreas then
                     Utils.SaveSelectedAreas(selectedIds, "R_SelectedEggPickupWorlds.json")
                 end
@@ -4378,8 +4418,9 @@ return function(Window, Utils)
             -- Lấy World ID mục tiêu theo chu kỳ
             local targetWorldId = EggPickupSettings.selectedWorlds[EggPickupState.currentIndex]
             if targetWorldId then
-                -- Nếu chưa nạp đảo này, tiến hành dịch chuyển sang đảo
-                if EggPickupState.currentLoadedWorld ~= targetWorldId then
+                -- Nếu chưa nạp đảo này hoặc bị văng sang đảo khác, tiến hành dịch chuyển sang đảo mục tiêu
+                local curArea = Utils and type(Utils.GetCurrentAreaId) == "function" and Utils.GetCurrentAreaId()
+                if EggPickupState.currentLoadedWorld ~= targetWorldId or (type(curArea) == "number" and curArea ~= targetWorldId) then
                     local worldName = GetAreaNameById(targetWorldId)
                     if EggPickupStatus then
                         EggPickupStatus:Set(string.format(Utils.t("egg_pickup_status_scanning"), tostring(worldName)))
@@ -4387,16 +4428,24 @@ return function(Window, Utils)
                     pcall(function() Utils.TeleportToArea(targetWorldId) end)
                     EggPickupState.currentLoadedWorld = targetWorldId
 
-                    -- Đợi 5 giây để map tải AreaPickUp
-                    task.wait(5)
+                    -- Đợi 4 giây để map tải AreaPickUp và nhân vật cập nhật vị trí
+                    task.wait(4)
+                    charData = GetValidCharacterData()
+                    if charData and charData.RootPart then
+                        EggPickupState.islandAnchorPos = charData.RootPart.Position
+                    end
                     continue
                 end
 
                 charData = GetValidCharacterData()
                 if not charData then continue end
 
-                -- Quét trứng trên đảo hiện tại
-                local islandEggs = ScanIslandEggs(charData.RootPart)
+                if not EggPickupState.islandAnchorPos and charData.RootPart then
+                    EggPickupState.islandAnchorPos = charData.RootPart.Position
+                end
+
+                -- Quét trứng trên đảo hiện tại (Giới hạn bán kính 450 studs tính từ tâm đảo)
+                local islandEggs = ScanIslandEggs(charData.RootPart, 450, EggPickupState.islandAnchorPos)
                 if #islandEggs > 0 then
                     local egg = islandEggs[1]
                     local worldName = GetAreaNameById(targetWorldId)
@@ -4414,6 +4463,7 @@ return function(Window, Utils)
                     -- Đã nhặt hết trứng trên đảo này -> Chuyển sang đảo kế tiếp
                     EggPickupState.currentIndex = EggPickupState.currentIndex + 1
                     EggPickupState.currentLoadedWorld = nil
+                    EggPickupState.islandAnchorPos = nil
                     task.wait(0.5)
                 end
             else
@@ -4424,6 +4474,7 @@ return function(Window, Utils)
                 EggPickupState.isResting = true
                 EggPickupState.restEndTime = os.time() + (EggPickupSettings.restTimeMinutes * 60)
                 EggPickupState.currentLoadedWorld = nil
+                EggPickupState.islandAnchorPos = nil
 
                 if EggPickupSettings.autoHop then
                     pcall(function() Utils.HopServer("Hoàn thành 1 vòng nhặt trứng AreaPickUp") end)
@@ -8907,7 +8958,7 @@ return function(Window, Utils)
     })
 
     -- ==========================================
-    -- SECTION: AUTO REDEEM GIFT CODE
+    -- SECTION: AUTO REDEEM GIFT CODE SYSTEM
     -- ==========================================
     local defaultGiftCodes = {
         "CAM",
@@ -8919,6 +8970,50 @@ return function(Window, Utils)
         "DUNGEONFIXED",
         "RIFDUNCH"
     }
+
+    local GIFT_CODES_FILE = "R_GiftCodesList.json"
+
+    -- 1. Hàm nạp danh sách code từ file JSON
+    local function LoadCodesFromFile()
+        local loaded = {}
+        pcall(function()
+            if Utils and Utils.LoadJSON then
+                local data = Utils.LoadJSON(GIFT_CODES_FILE)
+                if type(data) == "table" and #data > 0 then
+                    for _, c in ipairs(data) do
+                        local clean = tostring(c):gsub("%s+", ""):upper()
+                        if #clean > 0 and not table.find(loaded, clean) then
+                            table.insert(loaded, clean)
+                        end
+                    end
+                end
+            end
+        end)
+        if #loaded == 0 then
+            for _, c in ipairs(defaultGiftCodes) do
+                table.insert(loaded, c)
+            end
+            pcall(function()
+                if Utils and Utils.SaveJSON then
+                    Utils.SaveJSON(GIFT_CODES_FILE, loaded)
+                end
+            end)
+        end
+        return loaded
+    end
+
+    local activeCodeList = LoadCodesFromFile()
+    local selectedCodesToRedeem = {}
+    for _, c in ipairs(activeCodeList) do table.insert(selectedCodesToRedeem, c) end
+
+    -- 2. Hàm lưu danh sách code vào file JSON
+    local function SaveCodesToFile()
+        pcall(function()
+            if Utils and Utils.SaveJSON then
+                Utils.SaveJSON(GIFT_CODES_FILE, activeCodeList)
+            end
+        end)
+    end
 
     local giftCodeSettings = {
         autoOnJoin = false,
@@ -9032,20 +9127,120 @@ return function(Window, Utils)
         end)
     end
 
+    local function FetchOnlineAndScrapedCodes()
+        local foundCodes = {}
+
+        -- 1. Quét mô tả game (Game Description)
+        pcall(function()
+            local MPS = game:GetService("MarketplaceService")
+            local info = MPS:GetProductInfo(game.PlaceId)
+            if info and info.Description then
+                for word in string.gmatch(info.Description, "[A-Za-z0-9_]+") do
+                    local upper = string.upper(word)
+                    if #upper >= 3 and #upper <= 16 and not tonumber(upper) then
+                        table.insert(foundCodes, upper)
+                    end
+                end
+            end
+        end)
+
+        -- 2. Tải từ online URL (GitHub raw list nếu có)
+        pcall(function()
+            if game.HttpGet then
+                local rawUrl = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/refs/heads/test/pre-config-manager/gift_codes.json"
+                local ok, resp = pcall(function() return game:HttpGet(rawUrl) end)
+                if ok and type(resp) == "string" and #resp > 0 then
+                    local HttpService = game:GetService("HttpService")
+                    local list = HttpService:JSONDecode(resp)
+                    if type(list) == "table" then
+                        for _, c in ipairs(list) do
+                            table.insert(foundCodes, tostring(c):upper())
+                        end
+                    end
+                end
+            end
+        end)
+
+        local newAdded = 0
+        for _, c in ipairs(foundCodes) do
+            local clean = tostring(c):gsub("%s+", ""):upper()
+            if #clean >= 3 and not table.find(activeCodeList, clean) then
+                table.insert(activeCodeList, clean)
+                newAdded = newAdded + 1
+            end
+        end
+
+        if newAdded > 0 then
+            SaveCodesToFile()
+        end
+        return newAdded
+    end
+
     EventTab:CreateSection(" " .. Utils.t("sec_gift_code") .. " ")
 
-    local GiftCodeStatus = EventTab:CreateLabel(Utils.t("gift_code_status_idle"))
+    local GiftCodeStatus = EventTab:CreateLabel(string.format(Utils.t("gift_code_status_idle"), #activeCodeList))
 
+    -- 1. Nút Nhập Tất Cả Code Trong Danh Sách
     EventTab:CreateButton({
         Name = Utils.t("btn_redeem_all_codes"),
         Info = Utils.t("btn_redeem_all_codes_info"),
         Callback = function()
             task.spawn(function()
-                RedeemCodeBatch(defaultGiftCodes, GiftCodeStatus)
+                RedeemCodeBatch(activeCodeList, GiftCodeStatus)
             end)
         end
     })
 
+    -- 2. Nút Nhập Các Code Đã Chọn (Multi-Select)
+    EventTab:CreateButton({
+        Name = Utils.t("btn_redeem_selected"),
+        Callback = function()
+            local list = selectedCodesToRedeem
+            if not list or #list == 0 then
+                list = activeCodeList
+            end
+            task.spawn(function()
+                RedeemCodeBatch(list, GiftCodeStatus)
+            end)
+        end
+    })
+
+    -- 3. Dropdown Multi-Select Quản Lý Danh Sách Code
+    local CodeDropdown = nil
+    CodeDropdown = EventTab:CreateDropdown({
+        Name = Utils.t("gift_code_multiselect"),
+        Options = activeCodeList,
+        CurrentOption = selectedCodesToRedeem,
+        MultipleOptions = true,
+        Flag = "GiftCodeMultiSelectDropdown",
+        Callback = function(Options)
+            selectedCodesToRedeem = Options or {}
+        end
+    })
+
+    -- 4. Nút Tự Động Quét & Lấy Code Mới (Online + Description)
+    EventTab:CreateButton({
+        Name = Utils.t("btn_fetch_online_codes"),
+        Info = Utils.t("btn_fetch_online_codes_info"),
+        Callback = function()
+            task.spawn(function()
+                GiftCodeStatus:Set("Đang quét và lấy code mới...")
+                local added = FetchOnlineAndScrapedCodes()
+                if CodeDropdown and type(CodeDropdown.Set) == "function" then
+                    pcall(function() CodeDropdown:Set(activeCodeList) end)
+                end
+                GiftCodeStatus:Set(string.format(Utils.t("gift_code_status_idle"), #activeCodeList))
+                pcall(function()
+                    if Utils and type(Utils.SendNotify) == "function" then
+                        local msg = string.format(Utils.t("gift_code_fetch_done_notify"), added)
+                        Utils.SendNotify(Utils.t("gift_code_notify_title"), msg)
+                    end
+                end)
+            end)
+        end
+    })
+
+    -- 5. Ô Nhập Code Tùy Chỉnh
     EventTab:CreateInput({
         Name = Utils.t("input_custom_code"),
         PlaceholderText = Utils.t("input_custom_code_placeholder"),
@@ -9056,6 +9251,41 @@ return function(Window, Utils)
         end
     })
 
+    -- 6. Nút Thêm Vào Danh Sách & Lưu File
+    EventTab:CreateButton({
+        Name = Utils.t("btn_add_to_list"),
+        Callback = function()
+            local rawText = giftCodeSettings.customCodeInput or ""
+            local newCodes = {}
+            for token in string.gmatch(rawText, "[^,%s]+") do
+                local upper = string.upper(token)
+                if #upper > 0 and not table.find(activeCodeList, upper) then
+                    table.insert(activeCodeList, upper)
+                    table.insert(newCodes, upper)
+                end
+            end
+            if #newCodes > 0 then
+                SaveCodesToFile()
+                if CodeDropdown and type(CodeDropdown.Set) == "function" then
+                    pcall(function() CodeDropdown:Set(activeCodeList) end)
+                end
+                GiftCodeStatus:Set(string.format(Utils.t("gift_code_status_idle"), #activeCodeList))
+                pcall(function()
+                    if Utils and type(Utils.SendNotify) == "function" then
+                        Utils.SendNotify(Utils.t("gift_code_notify_title"), string.format(Utils.t("gift_code_added_notify"), #newCodes))
+                    end
+                end)
+            else
+                pcall(function()
+                    if Utils and type(Utils.SendNotify) == "function" then
+                        Utils.SendNotify(Utils.t("gift_code_notify_title"), "Không có mã mới hợp lệ để thêm.")
+                    end
+                end)
+            end
+        end
+    })
+
+    -- 7. Nút Nhập Trực Tiếp Code Vừa Điền
     EventTab:CreateButton({
         Name = Utils.t("btn_redeem_custom"),
         Callback = function()
@@ -9078,6 +9308,69 @@ return function(Window, Utils)
         end
     })
 
+    -- 8. Nút Xóa Các Code Đã Chọn
+    EventTab:CreateButton({
+        Name = Utils.t("btn_delete_selected"),
+        Callback = function()
+            local toDelete = selectedCodesToRedeem or {}
+            if #toDelete == 0 then
+                pcall(function()
+                    if Utils and type(Utils.SendNotify) == "function" then
+                        Utils.SendNotify(Utils.t("gift_code_notify_title"), "Chưa chọn code nào để xóa.")
+                    end
+                end)
+                return
+            end
+
+            local filtered = {}
+            local deletedCount = 0
+            for _, c in ipairs(activeCodeList) do
+                if table.find(toDelete, c) then
+                    deletedCount = deletedCount + 1
+                else
+                    table.insert(filtered, c)
+                end
+            end
+
+            activeCodeList = filtered
+            selectedCodesToRedeem = {}
+            SaveCodesToFile()
+
+            if CodeDropdown and type(CodeDropdown.Set) == "function" then
+                pcall(function() CodeDropdown:Set(activeCodeList) end)
+            end
+            GiftCodeStatus:Set(string.format(Utils.t("gift_code_status_idle"), #activeCodeList))
+            pcall(function()
+                if Utils and type(Utils.SendNotify) == "function" then
+                    Utils.SendNotify(Utils.t("gift_code_notify_title"), string.format(Utils.t("gift_code_deleted_notify"), deletedCount))
+                end
+            end)
+        end
+    })
+
+    -- 9. Nút Khôi Phục Danh Sách Mặc Định
+    EventTab:CreateButton({
+        Name = Utils.t("btn_reset_default_codes"),
+        Callback = function()
+            activeCodeList = {}
+            for _, c in ipairs(defaultGiftCodes) do table.insert(activeCodeList, c) end
+            selectedCodesToRedeem = {}
+            for _, c in ipairs(activeCodeList) do table.insert(selectedCodesToRedeem, c) end
+            SaveCodesToFile()
+
+            if CodeDropdown and type(CodeDropdown.Set) == "function" then
+                pcall(function() CodeDropdown:Set(activeCodeList) end)
+            end
+            GiftCodeStatus:Set(string.format(Utils.t("gift_code_status_idle"), #activeCodeList))
+            pcall(function()
+                if Utils and type(Utils.SendNotify) == "function" then
+                    Utils.SendNotify(Utils.t("gift_code_notify_title"), Utils.t("gift_code_reset_notify"))
+                end
+            end)
+        end
+    })
+
+    -- 10. Toggle Tự Động Nhập Code Khi Vào Game
     EventTab:CreateToggle({
         Name = Utils.t("gift_code_auto_on_join"),
         Info = Utils.t("gift_code_auto_on_join_info"),
@@ -9092,7 +9385,7 @@ return function(Window, Utils)
     task.spawn(function()
         task.wait(3)
         if giftCodeSettings.autoOnJoin then
-            RedeemCodeBatch(defaultGiftCodes, GiftCodeStatus)
+            RedeemCodeBatch(activeCodeList, GiftCodeStatus)
         end
     end)
 
