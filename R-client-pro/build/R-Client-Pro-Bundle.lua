@@ -2500,7 +2500,16 @@ local Translations = {
     ["egg_pickup_cycle_label"] = { en = "🔄 Loop: ", vi = "🔄 Vòng lặp: " },
     ["egg_pickup_select_worlds"] = { en = "Select Egg Pickup Worlds", vi = "Chọn Đảo Nhặt Trứng" },
     ["egg_pickup_selected_worlds_label"] = { en = "🎯 Selected %d worlds for Egg Pickup", vi = "🎯 Đã chọn %d đảo để nhặt trứng" },
-    ["egg_pickup_delay"] = { en = "Pickup    -- Auto Redeem Gift Code keys
+        ["egg_pickup_delay"] = { en = "Pickup Delay (Seconds)", vi = "Tốc độ nhặt (Giây)" },
+    ["egg_pickup_delay_info"] = { en = "Delay between collecting eggs to avoid lag or kick.", vi = "Thời gian nghỉ giữa mỗi lần nhặt trứng để tránh giật lag hoặc bị ngắt kết nối." },
+    ["egg_pickup_rest_time"] = { en = "Rest Time (Minutes)", vi = "Thời gian nghỉ sau mỗi vòng (Phút)" },
+    ["egg_pickup_rest_time_info"] = { en = "Time to rest before starting the next egg pickup cycle.", vi = "Thời gian nghỉ trước khi bắt đầu vòng nhặt trứng tiếp theo." },
+    ["egg_pickup_height_offset"] = { en = "Height Offset (Studs)", vi = "Độ Cao Dịch Chuyển (Studs)" },
+    ["egg_pickup_height_offset_info"] = { en = "Vertical height offset above the egg when teleporting.", vi = "Khoảng cách độ cao bên trên quả trứng khi bay đến nhặt." },
+    ["egg_pickup_auto_hop"] = { en = "Auto Hop After Cycle", vi = "Auto Hop Khi Hết Vòng" },
+    ["egg_pickup_auto_hop_info"] = { en = "Automatically hops to a new server after finishing an egg pickup cycle.", vi = "Tự động đổi server mới sau khi kết thúc một vòng nhặt trứng." },
+
+    -- Auto Redeem Gift Code keys
     ["sec_gift_code"] = { en = "🎁 AUTO REDEEM GIFT CODE", vi = "🎁 TỰ ĐỘNG NHẬP GIFT CODE" },
     ["btn_redeem_all_codes"] = { en = "⚡ Redeem All Codes in List", vi = "⚡ Nhập Tất Cả Code Trong Danh Sách" },
     ["btn_redeem_all_codes_info"] = { en = "Automatically checks and redeems all codes in your saved list, skipping already used ones.", vi = "Tự động kiểm tra và nhập tất cả gift code trong danh sách đã lưu, bỏ qua các code đã nhận trước đó." },
