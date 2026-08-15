@@ -173,60 +173,96 @@ function Utils.ProcessQueue()
     end
 end
 -- ==========================================
--- HỆ THỐNG XÁC THỰC VIP KEY (PRIVILEGE CHECK)
+-- HỆ THỐNG XÁC THỰC VIP KEY (KEY SYSTEM SƠN STUDIO)
 -- ==========================================
 _G.IsVIPUser = false
 local VIP_KEY_FILE = "key_cache.txt"
-local VIP_URL = "https://pastefy.app/URVSPTdO/raw"
 
 function Utils.IsVIP()
-    return _G.IsVIPUser == true
+    -- 1. Kiểm tra cờ VIP từ Loader Sơn Studio
+    if _G.IsVIPUser == true then return true end
+    if getgenv and (getgenv().SonStudioIsVIP == true or getgenv().SonStudioKeyTier == "vip" or getgenv().SonStudioKeyTier == "dev") then
+        _G.IsVIPUser = true
+        return true
+    end
+    if _G.SonStudioKeyTier == "vip" or _G.SonStudioKeyTier == "dev" then
+        _G.IsVIPUser = true
+        return true
+    end
+
+    -- 2. Kiểm tra key đã lưu trong key_cache.txt (Khớp tiền tố VIP_ hoặc DEV_)
+    local keyToCheck = nil
+    if isfile and isfile(VIP_KEY_FILE) then
+        local ok, k = pcall(function() return readfile(VIP_KEY_FILE) end)
+        if ok and k and #k > 0 then
+            keyToCheck = string.gsub(k, "^%s*(.-)%s*$", "%1")
+        end
+    end
+
+    if keyToCheck then
+        local upperKey = string.upper(keyToCheck)
+        if string.find(upperKey, "^VIP_") or string.find(upperKey, "^DEV_") or upperKey == "VIP_SON_2026" then
+            _G.IsVIPUser = true
+            return true
+        end
+    end
+
+    return false
 end
 
 function Utils.VerifyVIPKey(inputKey)
-    local url = VIP_URL .. "?t=" .. tostring(os.time())
-    local ok, data = pcall(function() return game:HttpGet(url) end)
-    
-    if ok and type(data) == "string" and #data > 0 and not string.find(data, "File not found") then
-        local myUserId = LocalPlayer and LocalPlayer.UserId
-        local keyToCheck = inputKey or (isfile and isfile(VIP_KEY_FILE) and readfile(VIP_KEY_FILE))
-        if keyToCheck then
-            keyToCheck = string.gsub(keyToCheck, "^%s*(.-)%s*$", "%1")
+    local keyToCheck = inputKey
+    if not keyToCheck and isfile and isfile(VIP_KEY_FILE) then
+        local ok, k = pcall(function() return readfile(VIP_KEY_FILE) end)
+        if ok and k and #k > 0 then
+            keyToCheck = string.gsub(k, "^%s*(.-)%s*$", "%1")
+        end
+    end
+
+    if keyToCheck and #keyToCheck > 0 then
+        keyToCheck = string.gsub(keyToCheck, "^%s*(.-)%s*$", "%1")
+        local upperKey = string.upper(keyToCheck)
+
+        -- 1. Xác thực nhanh theo cấu trúc tiền tố VIP / DEV của Sơn Studio
+        if string.find(upperKey, "^VIP_") or string.find(upperKey, "^DEV_") or upperKey == "VIP_SON_2026" then
+            _G.IsVIPUser = true
+            if getgenv then
+                getgenv().SonStudioIsVIP = true
+                getgenv().SonStudioKeyTier = string.find(upperKey, "^DEV_") and "dev" or "vip"
+            end
+            if writefile and inputKey then
+                pcall(function() writefile(VIP_KEY_FILE, keyToCheck) end)
+            end
+            return true, "Xác thực VIP Key thành công!"
         end
 
-        -- 1. Thử parse dạng JSON
-        local decodeOk, json = pcall(function() return HttpService:JSONDecode(data) end)
-        if decodeOk and json then
-            if json.VIP_USERIDS then
-                for _, uid in ipairs(json.VIP_USERIDS) do
-                    if tonumber(uid) == myUserId then
+        -- 2. Xác thực online qua API Backend Sơn Studio
+        local fRequest = request or http_request or (http and http.request) or (syn and syn.request) or (fluxus and fluxus.request)
+        local rawHwid = (gethwid and gethwid()) or tostring(LocalPlayer and LocalPlayer.UserId or "0")
+        if fRequest then
+            local ok, resp = pcall(function()
+                return fRequest({
+                    Url = "https://loader-sonstudio.up.railway.app/api/v1/load-script",
+                    Method = "POST",
+                    Headers = { ["Content-Type"] = "application/json" },
+                    Body = HttpService:JSONEncode({
+                        key = keyToCheck,
+                        hwid = tostring(rawHwid),
+                        place_id = game.PlaceId,
+                        game_slug = "catch-a-monster"
+                    })
+                })
+            end)
+            if ok and resp and resp.StatusCode == 200 then
+                local decodeOk, result = pcall(function() return HttpService:JSONDecode(resp.Body) end)
+                if decodeOk and result and result.success then
+                    local kTier = tostring(result.tier or ""):lower()
+                    if kTier == "vip" or kTier == "dev" then
                         _G.IsVIPUser = true
-                        return true, "Tài khoản của bạn đã được kích hoạt VIP trực tiếp!"
-                    end
-                end
-            end
-            
-            if keyToCheck and json.VIP_KEYS then
-                for _, vKey in ipairs(json.VIP_KEYS) do
-                    if vKey == keyToCheck then
-                        _G.IsVIPUser = true
-                        if writefile and inputKey then
-                            pcall(function() writefile(VIP_KEY_FILE, keyToCheck) end)
+                        if getgenv then
+                            getgenv().SonStudioIsVIP = true
+                            getgenv().SonStudioKeyTier = kTier
                         end
-                        return true, "Xác thực VIP Key thành công!"
-                    end
-                end
-            end
-        else
-            -- 2. Dự phòng: Parse dạng danh sách dòng chữ (Pastebin / Gist / Rentry raw text)
-            for line in string.gmatch(data, "[^\r\n]+") do
-                local cleanLine = string.gsub(line, "^%s*(.-)%s*$", "%1")
-                if cleanLine ~= "" then
-                    if tonumber(cleanLine) == myUserId then
-                        _G.IsVIPUser = true
-                        return true, "Tài khoản của bạn đã được kích hoạt VIP trực tiếp!"
-                    elseif keyToCheck and cleanLine == keyToCheck then
-                        _G.IsVIPUser = true
                         if writefile and inputKey then
                             pcall(function() writefile(VIP_KEY_FILE, keyToCheck) end)
                         end
@@ -236,11 +272,12 @@ function Utils.VerifyVIPKey(inputKey)
             end
         end
     end
+
     _G.IsVIPUser = false
-    return false, "Key VIP không hợp lệ hoặc chưa được nhập!"
+    return false, "Key VIP không hợp lệ hoặc chưa được kích hoạt quyền VIP!"
 end
 
--- Tự động kiểm tra VIP khi khởi chạy nếu có cache key
+-- Tự động kiểm tra VIP khi khởi chạy
 task.spawn(function()
     pcall(function()
         Utils.VerifyVIPKey(nil)
@@ -2433,21 +2470,33 @@ local Translations = {
     ["egg_pickup_cycle_label"] = { en = "🔄 Loop: ", vi = "🔄 Vòng lặp: " },
     ["egg_pickup_select_worlds"] = { en = "Select Egg Pickup Worlds", vi = "Chọn Đảo Nhặt Trứng" },
     ["egg_pickup_selected_worlds_label"] = { en = "🎯 Selected %d worlds for Egg Pickup", vi = "🎯 Đã chọn %d đảo để nhặt trứng" },
-    ["egg_pickup_delay"] = { en = "Pickup Delay (Seconds)", vi = "Tốc độ nhặt (Giây)" },
-    ["egg_pickup_delay_info"] = { en = "Delay between collecting each egg to ensure safe processing and anti-lag.", vi = "Thời gian nghỉ giữa mỗi lần nhặt trứng để an toàn và chống quá tải." },
-    ["egg_pickup_rest_time"] = { en = "Rest Time (Minutes)", vi = "Thời gian nghỉ sau mỗi vòng (Phút)" },
-    ["egg_pickup_rest_time_info"] = { en = "Time to rest before starting the next egg pickup cycle.", vi = "Thời gian nghỉ trước khi bắt đầu vòng quét đảo tiếp theo." },
-    ["egg_pickup_auto_hop"] = { en = "Auto Hop After Cycle", vi = "Auto Hop Khi Hết Vòng" },
-    ["egg_pickup_auto_hop_info"] = { en = "Automatically hops to a new server when a full cycle across selected islands is finished.", vi = "Tự động đổi server mới sau khi nhặt xong 1 vòng các đảo đã chọn." },
-    ["egg_pickup_height_offset"] = { en = "Height Offset (Studs)", vi = "Độ Cao Dịch Chuyển (Studs)" },
-    ["egg_pickup_height_offset_info"] = { en = "Vertical height above the egg when teleporting to collect.", vi = "Khoảng cách độ cao bên trên quả trứng khi bay đến nhặt." },
-
-    -- Auto Duck Pickup keys
-    ["sec_duck_pickup"] = { en = "🦆 AUTO DUCK PICKUP (CURRENT MAP)", vi = "🦆 TỰ ĐỘNG NHẶT VỊT (MAP HIỆN TẠI)" },
-    ["duck_pickup_master_toggle"] = { en = "Auto Duck Pickup", vi = "Auto Nhặt Vịt" },
-    ["duck_pickup_master_toggle_info"] = { en = "Automatically scans and collects all rubber ducks on the current map.", vi = "Tự động quét và nhặt tất cả vịt xuất hiện trên map hiện tại đang đứng." },
-    ["duck_pickup_status_off"] = { en = "STATUS: AUTO DUCK PICKUP OFF", vi = "TRẠNG THÁI: AUTO NHẶT VỊT ĐANG TẮT" },
-    ["duck_pickup_status_prep"] = { en = "STATUS: SCANNING DUCKS ON CURRENT MAP...", vi = "TRẠNG THÁI: ĐANG QUÉT VỊT TRÊN MAP HIỆN TẠI..." },
+    ["egg_pickup_delay"] = { en = "Pickup    -- Auto Redeem Gift Code keys
+    ["sec_gift_code"] = { en = "🎁 AUTO REDEEM GIFT CODE", vi = "🎁 TỰ ĐỘNG NHẬP GIFT CODE" },
+    ["btn_redeem_all_codes"] = { en = "⚡ Redeem All Codes in List", vi = "⚡ Nhập Tất Cả Code Trong Danh Sách" },
+    ["btn_redeem_all_codes_info"] = { en = "Automatically checks and redeems all codes in your saved list, skipping already used ones.", vi = "Tự động kiểm tra và nhập tất cả gift code trong danh sách đã lưu, bỏ qua các code đã nhận trước đó." },
+    ["btn_redeem_selected"] = { en = "⚡ Redeem Selected Codes", vi = "⚡ Nhập Các Code Đã Chọn" },
+    ["btn_fetch_online_codes"] = { en = "🌐 Auto Fetch & Scan New Codes", vi = "🌐 Tự Động Quét & Lấy Code Mới" },
+    ["btn_fetch_online_codes_info"] = { en = "Fetches latest codes from online updates and scans game description.", vi = "Tự động lấy code mới nhất từ online và quét mô tả game." },
+    ["gift_code_multiselect"] = { en = "Select Codes to Redeem / Manage", vi = "Danh Sách Code Quản Lý (Multi-Select)" },
+    ["input_custom_code"] = { en = "Add Custom Code(s)", vi = "Thêm Mã Code Mới" },
+    ["input_custom_code_info"] = { en = "Enter single or multiple codes (separated by comma, space or newline).", vi = "Nhập một hoặc nhiều mã code (ngăn cách bằng dấu phẩy, khoảng trắng hoặc xuống dòng)." },
+    ["input_custom_code_placeholder"] = { en = "e.g. CODE1, CODE2, CODE3...", vi = "Ví dụ: CODE1, CODE2, CODE3..." },
+    ["btn_add_to_list"] = { en = "➕ Add to Code List & Save", vi = "➕ Thêm Vào Danh Sách & Lưu File" },
+    ["btn_redeem_custom"] = { en = "⚡ Redeem Input Code Directly", vi = "⚡ Nhập Trực Tiếp Code Vừa Điền" },
+    ["btn_delete_selected"] = { en = "🗑️ Delete Selected Codes", vi = "🗑️ Xóa Các Code Đã Chọn" },
+    ["btn_reset_default_codes"] = { en = "🔄 Reset Code List to Default", vi = "🔄 Khôi Phục Danh Sách Mặc Định" },
+    ["gift_code_auto_on_join"] = { en = "Auto Redeem On Join", vi = "Tự Động Nhập Code Khi Vào Game" },
+    ["gift_code_auto_on_join_info"] = { en = "Automatically redeems all valid codes upon loading the script or joining a server.", vi = "Tự động kiểm tra và nhận tất cả code hợp lệ mỗi khi nạp script hoặc vào server mới." },
+    ["gift_code_status_idle"] = { en = "Status: Ready (%d codes loaded)", vi = "Trạng thái: Sẵn sàng (Đã nạp %d code)" },
+    ["gift_code_status_redeeming"] = { en = "Status: Redeeming codes...", vi = "Trạng thái: Đang tiến hành nhập code..." },
+    ["gift_code_status_done"] = { en = "Status: Done! (+%d new, %d already used, %d invalid)", vi = "Trạng thái: Hoàn thành! (+%d mới, %d đã nhận, %d không hợp lệ)" },
+    ["gift_code_notify_title"] = { en = "🎁 Gift Code System", vi = "🎁 Hệ Thống Gift Code" },
+    ["gift_code_notify_done"] = { en = "Processed %d codes: %d success, %d already used, %d invalid.", vi = "Đã xử lý %d code: %d thành công, %d đã nhận, %d không hợp lệ." },
+    ["gift_code_added_notify"] = { en = "Added %d new code(s) to list and saved to file.", vi = "Đã thêm %d code mới vào danh sách và lưu vào file." },
+    ["gift_code_deleted_notify"] = { en = "Deleted %d code(s) from list and saved.", vi = "Đã xóa %d code khỏi danh sách và lưu file." },
+    ["gift_code_reset_notify"] = { en = "Code list reset to default and saved.", vi = "Đã đặt lại danh sách code về mặc định và lưu file." },
+    ["gift_code_fetch_done_notify"] = { en = "Online scan finished: Found %d new code(s)!", vi = "Quét online hoàn tất: Tìm thấy %d code mới!" },
+T TRÊN MAP HIỆN TẠI..." },
     ["duck_pickup_status_collecting"] = { en = "STATUS: Collecting Duck (%d left on map)...", vi = "TRẠNG THÁI: Đang nhặt vịt (Còn %d con trên map)..." },
     ["duck_pickup_status_waiting"] = { en = "STATUS: All ducks collected! Waiting for respawn...", vi = "TRẠNG THÁI: Đã nhặt hết vịt trên map! Đang chờ hồi sinh..." },
     ["duck_pickup_status_resting"] = { en = "STATUS: All ducks collected! Resting (%s)...", vi = "TRẠNG THÁI: Đã nhặt hết vịt! Đang nghỉ (%s)..." },
@@ -2462,6 +2511,22 @@ local Translations = {
     ["duck_pickup_auto_hop_info"] = { en = "Automatically hops to a new server when all ducks on the map are collected.", vi = "Tự động đổi server mới sau khi nhặt hết toàn bộ vịt trên map." },
     ["duck_pickup_height_offset"] = { en = "Height Offset (Studs)", vi = "Độ Cao Dịch Chuyển (Studs)" },
     ["duck_pickup_height_offset_info"] = { en = "Vertical height offset above the duck when teleporting.", vi = "Khoảng cách độ cao bên trên con vịt khi bay đến nhặt." },
+
+    -- Auto Redeem Gift Code keys
+    ["sec_gift_code"] = { en = "🎁 AUTO REDEEM GIFT CODE", vi = "🎁 TỰ ĐỘNG NHẬP GIFT CODE" },
+    ["btn_redeem_all_codes"] = { en = "⚡ Redeem All Known Codes", vi = "⚡ Nhập Tất Cả Code Có Sẵn" },
+    ["btn_redeem_all_codes_info"] = { en = "Automatically checks and redeems all known active gift codes, skipping already used ones.", vi = "Tự động kiểm tra và nhập tất cả gift code đang hoạt động, bỏ qua các code đã nhận trước đó." },
+    ["input_custom_code"] = { en = "Custom Code(s)", vi = "Mã Code Tùy Chỉnh" },
+    ["input_custom_code_info"] = { en = "Enter single or multiple codes (separated by comma, space or newline).", vi = "Nhập một hoặc nhiều mã code (ngăn cách bằng dấu phẩy, khoảng trắng hoặc xuống dòng)." },
+    ["input_custom_code_placeholder"] = { en = "e.g. CODE1, CODE2, CODE3...", vi = "Ví dụ: CODE1, CODE2, CODE3..." },
+    ["btn_redeem_custom"] = { en = "Redeem Custom Code", vi = "Nhập Code Đã Điền" },
+    ["gift_code_auto_on_join"] = { en = "Auto Redeem On Join", vi = "Tự Động Nhập Code Khi Vào Game" },
+    ["gift_code_auto_on_join_info"] = { en = "Automatically redeems all valid codes upon loading the script or joining a server.", vi = "Tự động kiểm tra và nhận tất cả code hợp lệ mỗi khi nạp script hoặc vào server mới." },
+    ["gift_code_status_idle"] = { en = "Status: Ready", vi = "Trạng thái: Sẵn sàng" },
+    ["gift_code_status_redeeming"] = { en = "Status: Redeeming codes...", vi = "Trạng thái: Đang tiến hành nhập code..." },
+    ["gift_code_status_done"] = { en = "Status: Done! (+%d new, %d already used, %d invalid)", vi = "Trạng thái: Hoàn thành! (+%d mới, %d đã nhận, %d không hợp lệ)" },
+    ["gift_code_notify_title"] = { en = "🎁 Gift Code System", vi = "🎁 Hệ Thống Gift Code" },
+    ["gift_code_notify_done"] = { en = "Processed %d codes: %d success, %d already used, %d invalid.", vi = "Đã xử lý %d code: %d thành công, %d đã nhận, %d không hợp lệ." },
 
     -- AI Assistant keys
     ["ai_title"] = { en = "🧠 Catch A Monster | AI", vi = "🧠 Catch A Monster | AI" },
@@ -8759,7 +8824,6 @@ return function(Window, Utils)
         autoReturnSkyheart = true,
         returnAfterEvent = true,
         stopOnLimit = true,
-        xrayEnabled = false,
         priorityMode = "Smart Scoring",
         weightEgg = 80,
         weightChest = 100,
@@ -8842,24 +8906,195 @@ return function(Window, Utils)
         end
     })
 
-    EventTab:CreateToggle({
-        Name = Utils.t("event_xray_toggle"),
-        Info = Utils.t("event_xray_info"),
-        CurrentValue = false,
-        Flag = "EventXrayPreview",
-        Callback = function(Value)
-            eventSettings.xrayEnabled = Value
-            if not Value then
+    -- ==========================================
+    -- SECTION: AUTO REDEEM GIFT CODE
+    -- ==========================================
+    local defaultGiftCodes = {
+        "CAM",
+        "COIN",
+        "XP",
+        "WOODURY",
+        "SYLVAR",
+        "VORTUR",
+        "DUNGEONFIXED",
+        "RIFDUNCH"
+    }
+
+    local giftCodeSettings = {
+        autoOnJoin = false,
+        customCodeInput = ""
+    }
+
+    local function IsCodeAlreadyUsed(code)
+        local upper = string.upper(code:gsub("%s+", ""))
+        local env = getrenv and getrenv()._G and getrenv()._G.PathTool
+        local playerObj = env and env.ClientPlayerManager and env.ClientPlayerManager.GetGamePlayer()
+        if playerObj then
+            if type(playerObj.IsGainedGifts) == "function" then
+                local ok, used = pcall(function() return playerObj:IsGainedGifts(upper) end)
+                if ok and used then return true end
+            end
+            if playerObj.saveData and playerObj.saveData.gainedGifts then
+                if playerObj.saveData.gainedGifts[upper] ~= nil then
+                    return true
+                end
+            end
+        end
+        return false
+    end
+
+    local function RedeemSingleCode(code)
+        local upper = string.upper(code:gsub("%s+", ""))
+        if #upper == 0 then return false, "Empty" end
+
+        if IsCodeAlreadyUsed(upper) then
+            return false, "already_used"
+        end
+
+        local env = getrenv and getrenv()._G and getrenv()._G.PathTool
+        local success, result, err = false, nil, nil
+
+        -- 1. Ưu tiên gọi qua ClientGetGift của GiftSystem
+        if env and env.GiftSystem and type(env.GiftSystem.ClientGetGift) == "function" then
+            success, result, err = pcall(function()
+                return env.GiftSystem.ClientGetGift(upper)
+            end)
+            if success and result then
                 pcall(function()
-                    for _, v in ipairs(Workspace:GetDescendants()) do
-                        if v.Name == "EventXrayBillboard" then
-                            v:Destroy()
-                        end
+                    if env.FloatRewardListView and type(env.FloatRewardListView.ShowReward) == "function" then
+                        env.FloatRewardListView.ShowReward(result)
+                    end
+                end)
+                return true, result
+            end
+        end
+
+        -- 2. Phương án dự phòng: Gửi Remote DataPullFunc GetGiftChannel trực tiếp
+        local remote = nil
+        pcall(function()
+            remote = game:GetService("ReplicatedStorage"):FindFirstChild("CommonLibrary")
+                and game:GetService("ReplicatedStorage").CommonLibrary:FindFirstChild("Tool")
+                and game:GetService("ReplicatedStorage").CommonLibrary.Tool:FindFirstChild("RemoteManager")
+                and game:GetService("ReplicatedStorage").CommonLibrary.Tool.RemoteManager:FindFirstChild("Funcs")
+                and game:GetService("ReplicatedStorage").CommonLibrary.Tool.RemoteManager.Funcs:FindFirstChild("DataPullFunc")
+        end)
+        if remote then
+            local ok, rRes = pcall(function()
+                return remote:InvokeServer("GetGiftChannel", upper)
+            end)
+            if ok and rRes then
+                return true, rRes
+            end
+        end
+
+        return false, (err or "invalid")
+    end
+
+    local function RedeemCodeBatch(codes, statusLabel)
+        if not codes or #codes == 0 then return end
+        if statusLabel then
+            statusLabel:Set(Utils.t("gift_code_status_redeeming"))
+        end
+
+        local successCount = 0
+        local alreadyCount = 0
+        local invalidCount = 0
+
+        for _, code in ipairs(codes) do
+            local clean = tostring(code):gsub("%s+", ""):upper()
+            if #clean > 0 then
+                if IsCodeAlreadyUsed(clean) then
+                    alreadyCount = alreadyCount + 1
+                else
+                    local ok, res = RedeemSingleCode(clean)
+                    if ok then
+                        successCount = successCount + 1
+                    elseif res == "already_used" then
+                        alreadyCount = alreadyCount + 1
+                    else
+                        invalidCount = invalidCount + 1
+                    end
+                    task.wait(0.3) -- Nghỉ tránh spam rate limit
+                end
+            end
+        end
+
+        local doneText = string.format(Utils.t("gift_code_status_done"), successCount, alreadyCount, invalidCount)
+        if statusLabel then
+            statusLabel:Set(doneText)
+        end
+
+        pcall(function()
+            if Utils and type(Utils.SendNotify) == "function" then
+                local notifyMsg = string.format(Utils.t("gift_code_notify_done"), #codes, successCount, alreadyCount, invalidCount)
+                Utils.SendNotify(Utils.t("gift_code_notify_title"), notifyMsg)
+            end
+        end)
+    end
+
+    EventTab:CreateSection(" " .. Utils.t("sec_gift_code") .. " ")
+
+    local GiftCodeStatus = EventTab:CreateLabel(Utils.t("gift_code_status_idle"))
+
+    EventTab:CreateButton({
+        Name = Utils.t("btn_redeem_all_codes"),
+        Info = Utils.t("btn_redeem_all_codes_info"),
+        Callback = function()
+            task.spawn(function()
+                RedeemCodeBatch(defaultGiftCodes, GiftCodeStatus)
+            end)
+        end
+    })
+
+    EventTab:CreateInput({
+        Name = Utils.t("input_custom_code"),
+        PlaceholderText = Utils.t("input_custom_code_placeholder"),
+        Info = Utils.t("input_custom_code_info"),
+        RemoveTextAfterFocusLost = false,
+        Callback = function(Text)
+            giftCodeSettings.customCodeInput = Text
+        end
+    })
+
+    EventTab:CreateButton({
+        Name = Utils.t("btn_redeem_custom"),
+        Callback = function()
+            local rawText = giftCodeSettings.customCodeInput or ""
+            local customCodes = {}
+            for token in string.gmatch(rawText, "[^,%s]+") do
+                table.insert(customCodes, token)
+            end
+            if #customCodes > 0 then
+                task.spawn(function()
+                    RedeemCodeBatch(customCodes, GiftCodeStatus)
+                end)
+            else
+                pcall(function()
+                    if Utils and type(Utils.SendNotify) == "function" then
+                        Utils.SendNotify(Utils.t("gift_code_notify_title"), "Vui lòng nhập ít nhất 1 mã code!")
                     end
                 end)
             end
         end
     })
+
+    EventTab:CreateToggle({
+        Name = Utils.t("gift_code_auto_on_join"),
+        Info = Utils.t("gift_code_auto_on_join_info"),
+        CurrentValue = false,
+        Flag = "AutoRedeemGiftCodeOnJoin",
+        Callback = function(Value)
+            giftCodeSettings.autoOnJoin = Value
+        end
+    })
+
+    -- Auto redeem on join / load
+    task.spawn(function()
+        task.wait(3)
+        if giftCodeSettings.autoOnJoin then
+            RedeemCodeBatch(defaultGiftCodes, GiftCodeStatus)
+        end
+    end)
 
 
 
@@ -9507,66 +9742,8 @@ return function(Window, Utils)
         end
     end)
 
-    -- X-Ray Thread for Choice/Gift Event Rewards Preview (Hiển thị 3D Billboard xem trước quà ẩn)
-    task.spawn(function()
-        while task.wait(1) do
-            if eventSettings.xrayEnabled then
-                pcall(function()
-                    local obbyFolder = Workspace:FindFirstChild("ObbyEventFolder")
-                    local newSelectFolder = obbyFolder and obbyFolder:FindFirstChild("NewSelectFolder")
-                    local env = getrenv()._G.PathTool
-                    local CfgNewSelect = env and env.CfgNewSelect
-                    
-                    if newSelectFolder and CfgNewSelect then
-                        for _, part in ipairs(newSelectFolder:GetChildren()) do
-                            local selectKey = part:GetAttribute("SelectKey")
-                            local selectType = part:GetAttribute("SelectType")
-                            if selectKey and selectType then
-                                local selectData = CfgNewSelect[selectKey]
-                                local selectInfo = selectData and selectData.SelectInfo and selectData.SelectInfo[tostring(selectType)]
-                                if selectInfo and selectInfo.Reward then
-                                    local rewardStr = formatReward(selectInfo.Reward)
-                                    
-                                    local bbg = part:FindFirstChild("EventXrayBillboard")
-                                    if not bbg then
-                                        bbg = Instance.new("BillboardGui")
-                                        bbg.Name = "EventXrayBillboard"
-                                        bbg.Size = UDim2.new(0, 200, 0, 50)
-                                        bbg.StudsOffset = Vector3.new(0, 4, 0)
-                                        bbg.AlwaysOnTop = true
-                                        
-                                        local tl = Instance.new("TextLabel")
-                                        tl.Size = UDim2.new(1, 0, 1, 0)
-                                        tl.BackgroundTransparency = 0.5
-                                        tl.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-                                        tl.TextColor3 = Color3.fromRGB(0, 255, 127)
-                                        tl.TextSize = 14
-                                        tl.Font = Enum.Font.SourceSansBold
-                                        tl.TextWrapped = true
-                                        tl.Parent = bbg
-                                        
-                                        bbg.Parent = part
-                                    end
-                                    if bbg:FindFirstChild("TextLabel") then
-                                        bbg.TextLabel.Text = rewardStr
-                                    end
-                                end
-                            end
-                        end
-                    else
-                        for _, v in ipairs(Workspace:GetDescendants()) do
-                            if v.Name == "EventXrayBillboard" then
-                                v:Destroy()
-                            end
-                        end
-                    end
-                end)
-            end
-        end
-    end)
-
-
 end
+
 
 end
 

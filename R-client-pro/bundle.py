@@ -45,7 +45,7 @@ def bundle():
     auto_exec_path = os.path.join(base_dir, 'auto_execute.txt')
     if os.path.exists(auto_exec_path):
         print("-> Loading: auto_execute.txt (Auto Execute Header)")
-        with open(auto_exec_path, 'r', encoding='utf-8') as f:
+        with open(auto_exec_path, 'r', encoding='utf-8', errors='ignore') as f:
             auto_exec_content = f.read()
         
         # Cắt bỏ phần task.spawn chạy main.txt cũ vì Bundle sẽ tự nạp main.txt ở bên dưới
@@ -72,7 +72,7 @@ def bundle():
             continue
             
         print(f"-> Loading: {file_rel_path}")
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             content = f.read()
             
         # Bọc toàn bộ code của file vào một function
@@ -87,7 +87,7 @@ def bundle():
         return
         
     print("-> Loading: main.txt (Main Loader)")
-    with open(main_path, 'r', encoding='utf-8') as f:
+    with open(main_path, 'r', encoding='utf-8', errors='ignore') as f:
         main_content = f.read()
 
     # 4. Định nghĩa lại hàm SafeLoad và nhúng nội dung main.txt
@@ -130,7 +130,7 @@ end
     bundle_content.append(main_content)
 
     # 5. Ghi ra file bundle hoàn chỉnh
-    with open(output_path, 'w', encoding='utf-8') as f:
+    with open(output_path, 'w', encoding='utf-8', errors='ignore') as f:
         f.write('\n'.join(bundle_content))
         
     print(f"=== Bundled successfully! Output saved to: {output_path} ===")

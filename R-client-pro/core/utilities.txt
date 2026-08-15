@@ -50,60 +50,96 @@ function Utils.ProcessQueue()
     end
 end
 -- ==========================================
--- HỆ THỐNG XÁC THỰC VIP KEY (PRIVILEGE CHECK)
+-- HỆ THỐNG XÁC THỰC VIP KEY (KEY SYSTEM SƠN STUDIO)
 -- ==========================================
 _G.IsVIPUser = false
 local VIP_KEY_FILE = "key_cache.txt"
-local VIP_URL = "https://pastefy.app/URVSPTdO/raw"
 
 function Utils.IsVIP()
-    return _G.IsVIPUser == true
+    -- 1. Kiểm tra cờ VIP từ Loader Sơn Studio
+    if _G.IsVIPUser == true then return true end
+    if getgenv and (getgenv().SonStudioIsVIP == true or getgenv().SonStudioKeyTier == "vip" or getgenv().SonStudioKeyTier == "dev") then
+        _G.IsVIPUser = true
+        return true
+    end
+    if _G.SonStudioKeyTier == "vip" or _G.SonStudioKeyTier == "dev" then
+        _G.IsVIPUser = true
+        return true
+    end
+
+    -- 2. Kiểm tra key đã lưu trong key_cache.txt (Khớp tiền tố VIP_ hoặc DEV_)
+    local keyToCheck = nil
+    if isfile and isfile(VIP_KEY_FILE) then
+        local ok, k = pcall(function() return readfile(VIP_KEY_FILE) end)
+        if ok and k and #k > 0 then
+            keyToCheck = string.gsub(k, "^%s*(.-)%s*$", "%1")
+        end
+    end
+
+    if keyToCheck then
+        local upperKey = string.upper(keyToCheck)
+        if string.find(upperKey, "^VIP_") or string.find(upperKey, "^DEV_") or upperKey == "VIP_SON_2026" then
+            _G.IsVIPUser = true
+            return true
+        end
+    end
+
+    return false
 end
 
 function Utils.VerifyVIPKey(inputKey)
-    local url = VIP_URL .. "?t=" .. tostring(os.time())
-    local ok, data = pcall(function() return game:HttpGet(url) end)
-    
-    if ok and type(data) == "string" and #data > 0 and not string.find(data, "File not found") then
-        local myUserId = LocalPlayer and LocalPlayer.UserId
-        local keyToCheck = inputKey or (isfile and isfile(VIP_KEY_FILE) and readfile(VIP_KEY_FILE))
-        if keyToCheck then
-            keyToCheck = string.gsub(keyToCheck, "^%s*(.-)%s*$", "%1")
+    local keyToCheck = inputKey
+    if not keyToCheck and isfile and isfile(VIP_KEY_FILE) then
+        local ok, k = pcall(function() return readfile(VIP_KEY_FILE) end)
+        if ok and k and #k > 0 then
+            keyToCheck = string.gsub(k, "^%s*(.-)%s*$", "%1")
+        end
+    end
+
+    if keyToCheck and #keyToCheck > 0 then
+        keyToCheck = string.gsub(keyToCheck, "^%s*(.-)%s*$", "%1")
+        local upperKey = string.upper(keyToCheck)
+
+        -- 1. Xác thực nhanh theo cấu trúc tiền tố VIP / DEV của Sơn Studio
+        if string.find(upperKey, "^VIP_") or string.find(upperKey, "^DEV_") or upperKey == "VIP_SON_2026" then
+            _G.IsVIPUser = true
+            if getgenv then
+                getgenv().SonStudioIsVIP = true
+                getgenv().SonStudioKeyTier = string.find(upperKey, "^DEV_") and "dev" or "vip"
+            end
+            if writefile and inputKey then
+                pcall(function() writefile(VIP_KEY_FILE, keyToCheck) end)
+            end
+            return true, "Xác thực VIP Key thành công!"
         end
 
-        -- 1. Thử parse dạng JSON
-        local decodeOk, json = pcall(function() return HttpService:JSONDecode(data) end)
-        if decodeOk and json then
-            if json.VIP_USERIDS then
-                for _, uid in ipairs(json.VIP_USERIDS) do
-                    if tonumber(uid) == myUserId then
+        -- 2. Xác thực online qua API Backend Sơn Studio
+        local fRequest = request or http_request or (http and http.request) or (syn and syn.request) or (fluxus and fluxus.request)
+        local rawHwid = (gethwid and gethwid()) or tostring(LocalPlayer and LocalPlayer.UserId or "0")
+        if fRequest then
+            local ok, resp = pcall(function()
+                return fRequest({
+                    Url = "https://loader-sonstudio.up.railway.app/api/v1/load-script",
+                    Method = "POST",
+                    Headers = { ["Content-Type"] = "application/json" },
+                    Body = HttpService:JSONEncode({
+                        key = keyToCheck,
+                        hwid = tostring(rawHwid),
+                        place_id = game.PlaceId,
+                        game_slug = "catch-a-monster"
+                    })
+                })
+            end)
+            if ok and resp and resp.StatusCode == 200 then
+                local decodeOk, result = pcall(function() return HttpService:JSONDecode(resp.Body) end)
+                if decodeOk and result and result.success then
+                    local kTier = tostring(result.tier or ""):lower()
+                    if kTier == "vip" or kTier == "dev" then
                         _G.IsVIPUser = true
-                        return true, "Tài khoản của bạn đã được kích hoạt VIP trực tiếp!"
-                    end
-                end
-            end
-            
-            if keyToCheck and json.VIP_KEYS then
-                for _, vKey in ipairs(json.VIP_KEYS) do
-                    if vKey == keyToCheck then
-                        _G.IsVIPUser = true
-                        if writefile and inputKey then
-                            pcall(function() writefile(VIP_KEY_FILE, keyToCheck) end)
+                        if getgenv then
+                            getgenv().SonStudioIsVIP = true
+                            getgenv().SonStudioKeyTier = kTier
                         end
-                        return true, "Xác thực VIP Key thành công!"
-                    end
-                end
-            end
-        else
-            -- 2. Dự phòng: Parse dạng danh sách dòng chữ (Pastebin / Gist / Rentry raw text)
-            for line in string.gmatch(data, "[^\r\n]+") do
-                local cleanLine = string.gsub(line, "^%s*(.-)%s*$", "%1")
-                if cleanLine ~= "" then
-                    if tonumber(cleanLine) == myUserId then
-                        _G.IsVIPUser = true
-                        return true, "Tài khoản của bạn đã được kích hoạt VIP trực tiếp!"
-                    elseif keyToCheck and cleanLine == keyToCheck then
-                        _G.IsVIPUser = true
                         if writefile and inputKey then
                             pcall(function() writefile(VIP_KEY_FILE, keyToCheck) end)
                         end
@@ -113,11 +149,12 @@ function Utils.VerifyVIPKey(inputKey)
             end
         end
     end
+
     _G.IsVIPUser = false
-    return false, "Key VIP không hợp lệ hoặc chưa được nhập!"
+    return false, "Key VIP không hợp lệ hoặc chưa được kích hoạt quyền VIP!"
 end
 
--- Tự động kiểm tra VIP khi khởi chạy nếu có cache key
+-- Tự động kiểm tra VIP khi khởi chạy
 task.spawn(function()
     pcall(function()
         Utils.VerifyVIPKey(nil)

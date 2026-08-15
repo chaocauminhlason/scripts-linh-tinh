@@ -13,7 +13,6 @@ return function(Window, Utils)
         autoReturnSkyheart = true,
         returnAfterEvent = true,
         stopOnLimit = true,
-        xrayEnabled = false,
         priorityMode = "Smart Scoring",
         weightEgg = 80,
         weightChest = 100,
@@ -96,24 +95,195 @@ return function(Window, Utils)
         end
     })
 
-    EventTab:CreateToggle({
-        Name = Utils.t("event_xray_toggle"),
-        Info = Utils.t("event_xray_info"),
-        CurrentValue = false,
-        Flag = "EventXrayPreview",
-        Callback = function(Value)
-            eventSettings.xrayEnabled = Value
-            if not Value then
+    -- ==========================================
+    -- SECTION: AUTO REDEEM GIFT CODE
+    -- ==========================================
+    local defaultGiftCodes = {
+        "CAM",
+        "COIN",
+        "XP",
+        "WOODURY",
+        "SYLVAR",
+        "VORTUR",
+        "DUNGEONFIXED",
+        "RIFDUNCH"
+    }
+
+    local giftCodeSettings = {
+        autoOnJoin = false,
+        customCodeInput = ""
+    }
+
+    local function IsCodeAlreadyUsed(code)
+        local upper = string.upper(code:gsub("%s+", ""))
+        local env = getrenv and getrenv()._G and getrenv()._G.PathTool
+        local playerObj = env and env.ClientPlayerManager and env.ClientPlayerManager.GetGamePlayer()
+        if playerObj then
+            if type(playerObj.IsGainedGifts) == "function" then
+                local ok, used = pcall(function() return playerObj:IsGainedGifts(upper) end)
+                if ok and used then return true end
+            end
+            if playerObj.saveData and playerObj.saveData.gainedGifts then
+                if playerObj.saveData.gainedGifts[upper] ~= nil then
+                    return true
+                end
+            end
+        end
+        return false
+    end
+
+    local function RedeemSingleCode(code)
+        local upper = string.upper(code:gsub("%s+", ""))
+        if #upper == 0 then return false, "Empty" end
+
+        if IsCodeAlreadyUsed(upper) then
+            return false, "already_used"
+        end
+
+        local env = getrenv and getrenv()._G and getrenv()._G.PathTool
+        local success, result, err = false, nil, nil
+
+        -- 1. Ưu tiên gọi qua ClientGetGift của GiftSystem
+        if env and env.GiftSystem and type(env.GiftSystem.ClientGetGift) == "function" then
+            success, result, err = pcall(function()
+                return env.GiftSystem.ClientGetGift(upper)
+            end)
+            if success and result then
                 pcall(function()
-                    for _, v in ipairs(Workspace:GetDescendants()) do
-                        if v.Name == "EventXrayBillboard" then
-                            v:Destroy()
-                        end
+                    if env.FloatRewardListView and type(env.FloatRewardListView.ShowReward) == "function" then
+                        env.FloatRewardListView.ShowReward(result)
+                    end
+                end)
+                return true, result
+            end
+        end
+
+        -- 2. Phương án dự phòng: Gửi Remote DataPullFunc GetGiftChannel trực tiếp
+        local remote = nil
+        pcall(function()
+            remote = game:GetService("ReplicatedStorage"):FindFirstChild("CommonLibrary")
+                and game:GetService("ReplicatedStorage").CommonLibrary:FindFirstChild("Tool")
+                and game:GetService("ReplicatedStorage").CommonLibrary.Tool:FindFirstChild("RemoteManager")
+                and game:GetService("ReplicatedStorage").CommonLibrary.Tool.RemoteManager:FindFirstChild("Funcs")
+                and game:GetService("ReplicatedStorage").CommonLibrary.Tool.RemoteManager.Funcs:FindFirstChild("DataPullFunc")
+        end)
+        if remote then
+            local ok, rRes = pcall(function()
+                return remote:InvokeServer("GetGiftChannel", upper)
+            end)
+            if ok and rRes then
+                return true, rRes
+            end
+        end
+
+        return false, (err or "invalid")
+    end
+
+    local function RedeemCodeBatch(codes, statusLabel)
+        if not codes or #codes == 0 then return end
+        if statusLabel then
+            statusLabel:Set(Utils.t("gift_code_status_redeeming"))
+        end
+
+        local successCount = 0
+        local alreadyCount = 0
+        local invalidCount = 0
+
+        for _, code in ipairs(codes) do
+            local clean = tostring(code):gsub("%s+", ""):upper()
+            if #clean > 0 then
+                if IsCodeAlreadyUsed(clean) then
+                    alreadyCount = alreadyCount + 1
+                else
+                    local ok, res = RedeemSingleCode(clean)
+                    if ok then
+                        successCount = successCount + 1
+                    elseif res == "already_used" then
+                        alreadyCount = alreadyCount + 1
+                    else
+                        invalidCount = invalidCount + 1
+                    end
+                    task.wait(0.3) -- Nghỉ tránh spam rate limit
+                end
+            end
+        end
+
+        local doneText = string.format(Utils.t("gift_code_status_done"), successCount, alreadyCount, invalidCount)
+        if statusLabel then
+            statusLabel:Set(doneText)
+        end
+
+        pcall(function()
+            if Utils and type(Utils.SendNotify) == "function" then
+                local notifyMsg = string.format(Utils.t("gift_code_notify_done"), #codes, successCount, alreadyCount, invalidCount)
+                Utils.SendNotify(Utils.t("gift_code_notify_title"), notifyMsg)
+            end
+        end)
+    end
+
+    EventTab:CreateSection(" " .. Utils.t("sec_gift_code") .. " ")
+
+    local GiftCodeStatus = EventTab:CreateLabel(Utils.t("gift_code_status_idle"))
+
+    EventTab:CreateButton({
+        Name = Utils.t("btn_redeem_all_codes"),
+        Info = Utils.t("btn_redeem_all_codes_info"),
+        Callback = function()
+            task.spawn(function()
+                RedeemCodeBatch(defaultGiftCodes, GiftCodeStatus)
+            end)
+        end
+    })
+
+    EventTab:CreateInput({
+        Name = Utils.t("input_custom_code"),
+        PlaceholderText = Utils.t("input_custom_code_placeholder"),
+        Info = Utils.t("input_custom_code_info"),
+        RemoveTextAfterFocusLost = false,
+        Callback = function(Text)
+            giftCodeSettings.customCodeInput = Text
+        end
+    })
+
+    EventTab:CreateButton({
+        Name = Utils.t("btn_redeem_custom"),
+        Callback = function()
+            local rawText = giftCodeSettings.customCodeInput or ""
+            local customCodes = {}
+            for token in string.gmatch(rawText, "[^,%s]+") do
+                table.insert(customCodes, token)
+            end
+            if #customCodes > 0 then
+                task.spawn(function()
+                    RedeemCodeBatch(customCodes, GiftCodeStatus)
+                end)
+            else
+                pcall(function()
+                    if Utils and type(Utils.SendNotify) == "function" then
+                        Utils.SendNotify(Utils.t("gift_code_notify_title"), "Vui lòng nhập ít nhất 1 mã code!")
                     end
                 end)
             end
         end
     })
+
+    EventTab:CreateToggle({
+        Name = Utils.t("gift_code_auto_on_join"),
+        Info = Utils.t("gift_code_auto_on_join_info"),
+        CurrentValue = false,
+        Flag = "AutoRedeemGiftCodeOnJoin",
+        Callback = function(Value)
+            giftCodeSettings.autoOnJoin = Value
+        end
+    })
+
+    -- Auto redeem on join / load
+    task.spawn(function()
+        task.wait(3)
+        if giftCodeSettings.autoOnJoin then
+            RedeemCodeBatch(defaultGiftCodes, GiftCodeStatus)
+        end
+    end)
 
 
 
@@ -761,63 +931,5 @@ return function(Window, Utils)
         end
     end)
 
-    -- X-Ray Thread for Choice/Gift Event Rewards Preview (Hiển thị 3D Billboard xem trước quà ẩn)
-    task.spawn(function()
-        while task.wait(1) do
-            if eventSettings.xrayEnabled then
-                pcall(function()
-                    local obbyFolder = Workspace:FindFirstChild("ObbyEventFolder")
-                    local newSelectFolder = obbyFolder and obbyFolder:FindFirstChild("NewSelectFolder")
-                    local env = getrenv()._G.PathTool
-                    local CfgNewSelect = env and env.CfgNewSelect
-                    
-                    if newSelectFolder and CfgNewSelect then
-                        for _, part in ipairs(newSelectFolder:GetChildren()) do
-                            local selectKey = part:GetAttribute("SelectKey")
-                            local selectType = part:GetAttribute("SelectType")
-                            if selectKey and selectType then
-                                local selectData = CfgNewSelect[selectKey]
-                                local selectInfo = selectData and selectData.SelectInfo and selectData.SelectInfo[tostring(selectType)]
-                                if selectInfo and selectInfo.Reward then
-                                    local rewardStr = formatReward(selectInfo.Reward)
-                                    
-                                    local bbg = part:FindFirstChild("EventXrayBillboard")
-                                    if not bbg then
-                                        bbg = Instance.new("BillboardGui")
-                                        bbg.Name = "EventXrayBillboard"
-                                        bbg.Size = UDim2.new(0, 200, 0, 50)
-                                        bbg.StudsOffset = Vector3.new(0, 4, 0)
-                                        bbg.AlwaysOnTop = true
-                                        
-                                        local tl = Instance.new("TextLabel")
-                                        tl.Size = UDim2.new(1, 0, 1, 0)
-                                        tl.BackgroundTransparency = 0.5
-                                        tl.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-                                        tl.TextColor3 = Color3.fromRGB(0, 255, 127)
-                                        tl.TextSize = 14
-                                        tl.Font = Enum.Font.SourceSansBold
-                                        tl.TextWrapped = true
-                                        tl.Parent = bbg
-                                        
-                                        bbg.Parent = part
-                                    end
-                                    if bbg:FindFirstChild("TextLabel") then
-                                        bbg.TextLabel.Text = rewardStr
-                                    end
-                                end
-                            end
-                        end
-                    else
-                        for _, v in ipairs(Workspace:GetDescendants()) do
-                            if v.Name == "EventXrayBillboard" then
-                                v:Destroy()
-                            end
-                        end
-                    end
-                end)
-            end
-        end
-    end)
-
-
 end
+
