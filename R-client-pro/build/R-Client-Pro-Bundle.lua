@@ -592,29 +592,45 @@ function Utils.FindUIElementByName(parent, name)
 end
 
 -- ==========================================
--- HÀM CLICK CHUỘT ẢO
+-- HÀM CLICK CHUỘT ẢO & CẢM ỨNG (PC & MOBILE)
 -- ==========================================
 function Utils.ClickButtonExact(button, debugName)
     if not button then return end
     
-    local absPos = button.AbsolutePosition
-    local absSize = button.AbsoluteSize
-    
-    local centerX = absPos.X + (absSize.X / 2)
-    local finalY = absPos.Y + (absSize.Y / 2)
-    
-    local screenGui = button:FindFirstAncestorOfClass("ScreenGui")
-    if screenGui and not screenGui.IgnoreGuiInset then 
-        finalY = finalY + GuiService:GetGuiInset().Y 
+    -- 1. Kích hoạt trực tiếp sự kiện Activated / Click / TouchTap (Tối ưu cho cả Mobile & PC)
+    if firesignal then
+        pcall(function() firesignal(button.Activated) end)
+        pcall(function() firesignal(button.MouseButton1Click) end)
+        pcall(function() firesignal(button.MouseButton1Down) end)
+        pcall(function() firesignal(button.TouchTap) end)
     end
     
-    VirtualInputManager:SendMouseButtonEvent(centerX, finalY, 0, true, game, 1)
-    task.wait(0.1)
-    VirtualInputManager:SendMouseButtonEvent(centerX, finalY, 0, false, game, 1)
+    -- 2. Kích hoạt danh sách kết nối sự kiện (getconnections)
+    pcall(function()
+        if getconnections then
+            for _, conn in ipairs(getconnections(button.Activated)) do pcall(conn.Function) end
+            for _, conn in ipairs(getconnections(button.MouseButton1Click)) do pcall(conn.Function) end
+            for _, conn in ipairs(getconnections(button.MouseButton1Down)) do pcall(conn.Function) end
+        end
+    end)
     
-    -- if debugName then
-    --     print("🖱️ [Utils] Đã click ảo vào: " .. debugName)
-    -- end
+    -- 3. Click chuột ảo bằng VirtualInputManager (Dành riêng cho PC)
+    pcall(function()
+        local absPos = button.AbsolutePosition
+        local absSize = button.AbsoluteSize
+        
+        local centerX = absPos.X + (absSize.X / 2)
+        local finalY = absPos.Y + (absSize.Y / 2)
+        
+        local screenGui = button:FindFirstAncestorOfClass("ScreenGui")
+        if screenGui and not screenGui.IgnoreGuiInset then 
+            finalY = finalY + GuiService:GetGuiInset().Y 
+        end
+        
+        VirtualInputManager:SendMouseButtonEvent(centerX, finalY, 0, true, game, 1)
+        task.wait(0.05)
+        VirtualInputManager:SendMouseButtonEvent(centerX, finalY, 0, false, game, 1)
+    end)
 end
 
 -- ==========================================
@@ -6294,10 +6310,27 @@ return function(Window, Utils, WebhookModule)
                                         task.wait(2.5)
                                         DungeonStatus:Set(Utils.t("dg_label_lobby_force_start"))
                                         
+                                        -- 1. Gọi trực tiếp API nội bộ game nếu có
                                         pcall(function()
                                             local CG = getrenv()._G
                                             if CG and CG.PathTool and CG.PathTool.ViewUtil and CG.PathTool.AbyssSystem then
                                                 CG.PathTool.ViewUtil.DoRequest(CG.PathTool.AbyssSystem.ClientStartAbyss)
+                                            end
+                                        end)
+
+                                        -- 2. Gửi Remote Network DataPullFunc trực tiếp
+                                        pcall(function()
+                                            local remote = GetDataPullFunc and GetDataPullFunc()
+                                            if not remote then
+                                                remote = ReplicatedStorage:FindFirstChild("CommonLibrary")
+                                                    and ReplicatedStorage.CommonLibrary:FindFirstChild("Tool")
+                                                    and ReplicatedStorage.CommonLibrary.Tool:FindFirstChild("RemoteManager")
+                                                    and ReplicatedStorage.CommonLibrary.Tool.RemoteManager:FindFirstChild("Funcs")
+                                                    and ReplicatedStorage.CommonLibrary.Tool.RemoteManager.Funcs:FindFirstChild("DataPullFunc")
+                                            end
+                                            if remote then
+                                                remote:InvokeServer("AbyssStartTeamChannel")
+                                                remote:InvokeServer("AbyssStartChannel")
                                             end
                                         end)
                                         
@@ -6330,9 +6363,14 @@ return function(Window, Utils, WebhookModule)
                                         
                                         if btnStart then
                                             pcall(function()
+                                                if firesignal then
+                                                    firesignal(btnStart.Activated)
+                                                    firesignal(btnStart.MouseButton1Click)
+                                                    firesignal(btnStart.TouchTap)
+                                                end
                                                 if getconnections then
-                                                    for _, conn in ipairs(getconnections(btnStart.Activated)) do conn.Function() end
-                                                    for _, conn in ipairs(getconnections(btnStart.MouseButton1Click)) do conn.Function() end
+                                                    for _, conn in ipairs(getconnections(btnStart.Activated)) do pcall(conn.Function) end
+                                                    for _, conn in ipairs(getconnections(btnStart.MouseButton1Click)) do pcall(conn.Function) end
                                                 end
                                             end)
                                             Utils.ClickButtonExact(btnStart, "Nút Start")

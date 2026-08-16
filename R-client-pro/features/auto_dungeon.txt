@@ -557,10 +557,27 @@ return function(Window, Utils, WebhookModule)
                                         task.wait(2.5)
                                         DungeonStatus:Set(Utils.t("dg_label_lobby_force_start"))
                                         
+                                        -- 1. Gọi trực tiếp API nội bộ game nếu có
                                         pcall(function()
                                             local CG = getrenv()._G
                                             if CG and CG.PathTool and CG.PathTool.ViewUtil and CG.PathTool.AbyssSystem then
                                                 CG.PathTool.ViewUtil.DoRequest(CG.PathTool.AbyssSystem.ClientStartAbyss)
+                                            end
+                                        end)
+
+                                        -- 2. Gửi Remote Network DataPullFunc trực tiếp
+                                        pcall(function()
+                                            local remote = GetDataPullFunc and GetDataPullFunc()
+                                            if not remote then
+                                                remote = ReplicatedStorage:FindFirstChild("CommonLibrary")
+                                                    and ReplicatedStorage.CommonLibrary:FindFirstChild("Tool")
+                                                    and ReplicatedStorage.CommonLibrary.Tool:FindFirstChild("RemoteManager")
+                                                    and ReplicatedStorage.CommonLibrary.Tool.RemoteManager:FindFirstChild("Funcs")
+                                                    and ReplicatedStorage.CommonLibrary.Tool.RemoteManager.Funcs:FindFirstChild("DataPullFunc")
+                                            end
+                                            if remote then
+                                                remote:InvokeServer("AbyssStartTeamChannel")
+                                                remote:InvokeServer("AbyssStartChannel")
                                             end
                                         end)
                                         
@@ -593,9 +610,14 @@ return function(Window, Utils, WebhookModule)
                                         
                                         if btnStart then
                                             pcall(function()
+                                                if firesignal then
+                                                    firesignal(btnStart.Activated)
+                                                    firesignal(btnStart.MouseButton1Click)
+                                                    firesignal(btnStart.TouchTap)
+                                                end
                                                 if getconnections then
-                                                    for _, conn in ipairs(getconnections(btnStart.Activated)) do conn.Function() end
-                                                    for _, conn in ipairs(getconnections(btnStart.MouseButton1Click)) do conn.Function() end
+                                                    for _, conn in ipairs(getconnections(btnStart.Activated)) do pcall(conn.Function) end
+                                                    for _, conn in ipairs(getconnections(btnStart.MouseButton1Click)) do pcall(conn.Function) end
                                                 end
                                             end)
                                             Utils.ClickButtonExact(btnStart, "Nút Start")

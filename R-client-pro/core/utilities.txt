@@ -469,29 +469,45 @@ function Utils.FindUIElementByName(parent, name)
 end
 
 -- ==========================================
--- HÀM CLICK CHUỘT ẢO
+-- HÀM CLICK CHUỘT ẢO & CẢM ỨNG (PC & MOBILE)
 -- ==========================================
 function Utils.ClickButtonExact(button, debugName)
     if not button then return end
     
-    local absPos = button.AbsolutePosition
-    local absSize = button.AbsoluteSize
-    
-    local centerX = absPos.X + (absSize.X / 2)
-    local finalY = absPos.Y + (absSize.Y / 2)
-    
-    local screenGui = button:FindFirstAncestorOfClass("ScreenGui")
-    if screenGui and not screenGui.IgnoreGuiInset then 
-        finalY = finalY + GuiService:GetGuiInset().Y 
+    -- 1. Kích hoạt trực tiếp sự kiện Activated / Click / TouchTap (Tối ưu cho cả Mobile & PC)
+    if firesignal then
+        pcall(function() firesignal(button.Activated) end)
+        pcall(function() firesignal(button.MouseButton1Click) end)
+        pcall(function() firesignal(button.MouseButton1Down) end)
+        pcall(function() firesignal(button.TouchTap) end)
     end
     
-    VirtualInputManager:SendMouseButtonEvent(centerX, finalY, 0, true, game, 1)
-    task.wait(0.1)
-    VirtualInputManager:SendMouseButtonEvent(centerX, finalY, 0, false, game, 1)
+    -- 2. Kích hoạt danh sách kết nối sự kiện (getconnections)
+    pcall(function()
+        if getconnections then
+            for _, conn in ipairs(getconnections(button.Activated)) do pcall(conn.Function) end
+            for _, conn in ipairs(getconnections(button.MouseButton1Click)) do pcall(conn.Function) end
+            for _, conn in ipairs(getconnections(button.MouseButton1Down)) do pcall(conn.Function) end
+        end
+    end)
     
-    -- if debugName then
-    --     print("🖱️ [Utils] Đã click ảo vào: " .. debugName)
-    -- end
+    -- 3. Click chuột ảo bằng VirtualInputManager (Dành riêng cho PC)
+    pcall(function()
+        local absPos = button.AbsolutePosition
+        local absSize = button.AbsoluteSize
+        
+        local centerX = absPos.X + (absSize.X / 2)
+        local finalY = absPos.Y + (absSize.Y / 2)
+        
+        local screenGui = button:FindFirstAncestorOfClass("ScreenGui")
+        if screenGui and not screenGui.IgnoreGuiInset then 
+            finalY = finalY + GuiService:GetGuiInset().Y 
+        end
+        
+        VirtualInputManager:SendMouseButtonEvent(centerX, finalY, 0, true, game, 1)
+        task.wait(0.05)
+        VirtualInputManager:SendMouseButtonEvent(centerX, finalY, 0, false, game, 1)
+    end)
 end
 
 -- ==========================================
