@@ -9108,14 +9108,38 @@ return function(Window, Utils)
     -- SECTION: AUTO REDEEM GIFT CODE SYSTEM
     -- ==========================================
     local defaultGiftCodes = {
-        "CAM",
-        "COIN",
-        "XP",
+        "RIFCHT",
+        "SCARYHARVEST",
+        "ROLLBK",
+        "FORGEBUG",
+        "SCARED",
+        "EVOBUG",
+        "CELESTIAL",
+        "RIFDUNCH",
+        "DUNGEONFIXED",
+        "SPLUSH",
         "WOODURY",
         "SYLVAR",
         "VORTUR",
-        "DUNGEONFIXED",
-        "RIFDUNCH"
+        "PZYGLOR",
+        "PSYPEON",
+        "RALNEMP",
+        "STARDUST",
+        "BUFEXX",
+        "FROXY",
+        "BJNEMDY",
+        "DMUPNER",
+        "DORENI",
+        "EVENTBUFF",
+        "BUFFVIOLET",
+        "FIXDUNGEON",
+        "AASCHEST",
+        "DJENEMBY",
+        "LOLTEAG",
+        "FESTPUN",
+        "XP",
+        "COIN",
+        "CAM"
     }
 
     local GIFT_CODES_FILE = "R_GiftCodesList.json"
@@ -9277,32 +9301,70 @@ return function(Window, Utils)
     local function FetchOnlineAndScrapedCodes()
         local foundCodes = {}
 
-        -- 1. Quét mô tả game (Game Description)
+        -- 1. Quét trực tiếp danh sách code từ website CatchAMonsterHub (Tự động cập nhật trực tiếp)
         pcall(function()
-            local MPS = game:GetService("MarketplaceService")
-            local info = MPS:GetProductInfo(game.PlaceId)
-            if info and info.Description then
-                for word in string.gmatch(info.Description, "[A-Za-z0-9_]+") do
-                    local upper = string.upper(word)
-                    if #upper >= 3 and #upper <= 16 and not tonumber(upper) then
+            local requestFunc = (syn and syn.request) or (http and http.request) or http_request or request or (fluxus and fluxus.request)
+            local respBody = nil
+            if requestFunc then
+                local res = requestFunc({ Url = "https://catchamonsterhub.com/codes", Method = "GET" })
+                if res and (res.StatusCode == 200 or res.Status == 200) and res.Body then
+                    respBody = res.Body
+                end
+            end
+            if not respBody and game.HttpGet then
+                local ok, data = pcall(function() return game:HttpGet("https://catchamonsterhub.com/codes") end)
+                if ok and type(data) == "string" and #data > 0 and not string.find(data, "404 File not found") then
+                    respBody = data
+                end
+            end
+
+            if respBody and type(respBody) == "string" then
+                -- Quét qua thẻ <code>CODE</code>
+                for code in string.gmatch(respBody, "<code>([%w_]+)</code>") do
+                    local upper = string.upper(code)
+                    if #upper >= 2 and not table.find(foundCodes, upper) then
+                        table.insert(foundCodes, upper)
+                    end
+                end
+                -- Quét qua schema JSON-LD ItemList
+                for code in string.gmatch(respBody, '"@type"%s*:%s*"ListItem"%s*,%s*"position"%s*:%s*%d+%s*,%s*"name"%s*:%s*"([^"]+)"') do
+                    local upper = string.upper(code)
+                    if #upper >= 2 and not table.find(foundCodes, upper) then
                         table.insert(foundCodes, upper)
                     end
                 end
             end
         end)
 
-        -- 2. Tải từ online URL (GitHub raw list nếu có)
+        -- 2. Tải từ online URL (GitHub raw list dự phòng)
         pcall(function()
             if game.HttpGet then
                 local rawUrl = "https://raw.githubusercontent.com/chaocauminhlason/scripts-linh-tinh/refs/heads/test/pre-config-manager/gift_codes.json"
                 local ok, resp = pcall(function() return game:HttpGet(rawUrl) end)
-                if ok and type(resp) == "string" and #resp > 0 then
+                if ok and type(resp) == "string" and #resp > 0 and not string.find(resp, "404 File not found") then
                     local HttpService = game:GetService("HttpService")
                     local list = HttpService:JSONDecode(resp)
                     if type(list) == "table" then
                         for _, c in ipairs(list) do
-                            table.insert(foundCodes, tostring(c):upper())
+                            local upper = tostring(c):gsub("%s+", ""):upper()
+                            if #upper >= 2 and not table.find(foundCodes, upper) then
+                                table.insert(foundCodes, upper)
+                            end
                         end
+                    end
+                end
+            end
+        end)
+
+        -- 3. Quét mô tả game (Game Description)
+        pcall(function()
+            local MPS = game:GetService("MarketplaceService")
+            local info = MPS:GetProductInfo(game.PlaceId)
+            if info and info.Description then
+                for word in string.gmatch(info.Description, "[A-Za-z0-9_]+") do
+                    local upper = string.upper(word)
+                    if #upper >= 3 and #upper <= 16 and not tonumber(upper) and not table.find(foundCodes, upper) then
+                        table.insert(foundCodes, upper)
                     end
                 end
             end
@@ -9311,7 +9373,7 @@ return function(Window, Utils)
         local newAdded = 0
         for _, c in ipairs(foundCodes) do
             local clean = tostring(c):gsub("%s+", ""):upper()
-            if #clean >= 3 and not table.find(activeCodeList, clean) then
+            if #clean >= 2 and not table.find(activeCodeList, clean) then
                 table.insert(activeCodeList, clean)
                 newAdded = newAdded + 1
             end
