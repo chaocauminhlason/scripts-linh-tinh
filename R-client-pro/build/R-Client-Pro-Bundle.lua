@@ -2535,23 +2535,24 @@ local Translations = {
     ["gift_code_deleted_notify"] = { en = "Deleted %d code(s) from list and saved.", vi = "Đã xóa %d code khỏi danh sách và lưu file." },
     ["gift_code_reset_notify"] = { en = "Code list reset to default and saved.", vi = "Đã đặt lại danh sách code về mặc định và lưu file." },
     ["gift_code_fetch_done_notify"] = { en = "Online scan finished: Found %d new code(s)!", vi = "Quét online hoàn tất: Tìm thấy %d code mới!" },
-    ["sec_duck_pickup"] = { en = "🦆 AUTO DUCK PICKUP (CURRENT MAP)", vi = "🦆 TỰ ĐỘNG NHẶT VỊT (MAP HIỆN TẠI)" },
-    ["duck_pickup_master_toggle"] = { en = "Enable Duck Pickup", vi = "Bật Tự Động Nhặt Vịt" },
-    ["duck_pickup_master_toggle_info"] = { en = "Automatically teleports and collects all spawned ducks on the current map.", vi = "Tự động bay đến nhặt tất cả các con vịt đang xuất hiện trên map hiện tại." },
+    ["sec_duck_pickup"] = { en = "🦆 AUTO DUCK PICKUP (MOBIUS CIRCUS)", vi = "🦆 TỰ ĐỘNG NHẶT VỊT (MOBIUS CIRCUS)" },
+    ["duck_pickup_master_toggle"] = { en = "Enable Duck Pickup (Mobius Circus)", vi = "Bật Tự Động Nhặt Vịt (Mobius Circus)" },
+    ["duck_pickup_master_toggle_info"] = { en = "Automatically teleports to Mobius Circus (Island 10) and collects all spawned ducks.", vi = "Tự động bay đến đảo Mobius Circus (Đảo 10) và nhặt tất cả vịt đang xuất hiện." },
     ["duck_pickup_status_off"] = { en = "STATUS: Disabled", vi = "TRẠNG THÁI: Chưa bật" },
-    ["duck_pickup_status_prep"] = { en = "STATUS: Scanning for ducks on current map...", vi = "TRẠNG THÁI: ĐANG QUÉT VỊT TRÊN MAP HIỆN TẠI..." },
-    ["duck_pickup_status_collecting"] = { en = "STATUS: Collecting Duck (%d left on map)...", vi = "TRẠNG THÁI: Đang nhặt vịt (Còn %d con trên map)..." },
-    ["duck_pickup_status_waiting"] = { en = "STATUS: All ducks collected! Waiting for respawn...", vi = "TRẠNG THÁI: Đã nhặt hết vịt trên map! Đang chờ hồi sinh..." },
-    ["duck_pickup_status_resting"] = { en = "STATUS: All ducks collected! Resting (%s)...", vi = "TRẠNG THÁI: Đã nhặt hết vịt! Đang nghỉ (%s)..." },
-    ["duck_pickup_status_done_hop"] = { en = "STATUS: All ducks collected! (Auto Hopping...)", vi = "TRẠNG THÁI: Đã nhặt hết vịt! (Đang Auto Hop...)" },
+    ["duck_pickup_status_teleporting"] = { en = "STATUS: Teleporting to Mobius Circus (Island 10)...", vi = "TRẠNG THÁI: Đang bay đến Mobius Circus (Đảo 10)..." },
+    ["duck_pickup_status_prep"] = { en = "STATUS: Scanning for ducks at Mobius Circus...", vi = "TRẠNG THÁI: ĐANG QUÉT VỊT TẠI MOBIUS CIRCUS..." },
+    ["duck_pickup_status_collecting"] = { en = "STATUS: Collecting Duck at Mobius Circus (%d left)...", vi = "TRẠNG THÁI: Đang nhặt vịt tại Mobius Circus (Còn %d con)..." },
+    ["duck_pickup_status_waiting"] = { en = "STATUS: All ducks collected at Mobius Circus! Waiting for respawn...", vi = "TRẠNG THÁI: Đã nhặt hết vịt tại Mobius Circus! Đang chờ hồi sinh..." },
+    ["duck_pickup_status_resting"] = { en = "STATUS: Cleared Mobius Circus! Resting (%s)...", vi = "TRẠNG THÁI: Đã dọn sạch vịt Mobius Circus! Đang nghỉ (%s)..." },
+    ["duck_pickup_status_done_hop"] = { en = "STATUS: Cleared Mobius Circus! (Auto Hopping...)", vi = "TRẠNG THÁI: Đã dọn sạch vịt Mobius Circus! (Đang Auto Hop...)" },
     ["duck_pickup_count_label"] = { en = "Ducks Collected: ", vi = "Vịt đã nhặt: " },
     ["duck_pickup_cycle_label"] = { en = "🔄 Loop: ", vi = "🔄 Vòng lặp: " },
     ["duck_pickup_delay"] = { en = "Pickup Delay (Seconds)", vi = "Tốc độ nhặt (Giây)" },
     ["duck_pickup_delay_info"] = { en = "Delay between collecting ducks to avoid lag or kick.", vi = "Thời gian nghỉ giữa mỗi lần nhặt vịt để tránh giật lag hoặc bị ngắt kết nối." },
     ["duck_pickup_rest_time"] = { en = "Rest Time (Minutes)", vi = "Thời gian nghỉ sau mỗi vòng (Phút)" },
-    ["duck_pickup_rest_time_info"] = { en = "Time to rest before starting the next duck pickup cycle on the map.", vi = "Thời gian nghỉ trước khi bắt đầu vòng nhặt vịt tiếp theo trên map." },
+    ["duck_pickup_rest_time_info"] = { en = "Time to rest before starting the next duck pickup cycle on Mobius Circus.", vi = "Thời gian nghỉ trước khi bắt đầu vòng nhặt vịt tiếp theo tại Mobius Circus." },
     ["duck_pickup_auto_hop"] = { en = "Auto Hop After Cycle", vi = "Auto Hop Khi Hết Vòng" },
-    ["duck_pickup_auto_hop_info"] = { en = "Automatically hops to a new server when all ducks on the map are collected.", vi = "Tự động đổi server mới sau khi nhặt hết toàn bộ vịt trên map." },
+    ["duck_pickup_auto_hop_info"] = { en = "Automatically hops to a new server when all ducks on Mobius Circus are collected.", vi = "Tự động đổi server mới sau khi nhặt hết toàn bộ vịt tại Mobius Circus." },
     ["duck_pickup_height_offset"] = { en = "Height Offset (Studs)", vi = "Độ Cao Dịch Chuyển (Studs)" },
     ["duck_pickup_height_offset_info"] = { en = "Vertical height offset above the duck when teleporting.", vi = "Khoảng cách độ cao bên trên con vịt khi bay đến nhặt." },
 
@@ -2722,6 +2723,7 @@ return function(Window, Utils)
 
     local DuckPickupSettings = {
         enabled = false,
+        targetWorldId = 10, -- Cố định đảo Mobius Circus (ID 10)
         pickupDelay = 0.3,
         restTimeMinutes = 1,
         autoHop = false,
@@ -2730,6 +2732,8 @@ return function(Window, Utils)
 
     local DuckPickupState = {
         collectedCount = 0,
+        currentLoadedWorld = nil,
+        islandAnchorPos = nil,
         isResting = false,
         restEndTime = 0,
         loopCount = 1,
@@ -3091,9 +3095,13 @@ return function(Window, Utils)
     end
 
 
-    -- [Logic] Quét tất cả Vịt AreaPickUp trên Map hiện tại mà nhân vật đang đứng
-    local function ScanCurrentIslandDucks(hrp, maxRadius)
+    -- [Logic] Quét tất cả Vịt AreaPickUp trên Đảo Mobius Circus (ID 10)
+    local function ScanCurrentIslandDucks(hrp, maxRadius, anchorPos)
+        maxRadius = maxRadius or 450 -- Giới hạn bán kính 450 studs quanh tâm đảo Mobius Circus
         local ducks = {}
+        if not hrp then return ducks end
+        local centerPos = anchorPos or (DuckPickupState and DuckPickupState.islandAnchorPos) or hrp.Position
+
         local now = os.time()
         for k, exp in pairs(DuckPickupState.blacklist) do
             if now > exp then DuckPickupState.blacklist[k] = nil end
@@ -3123,15 +3131,16 @@ return function(Window, Utils)
                             local root = model and (model:FindFirstChild("Root") or model:FindFirstChild("RootPart") or (model:IsA("BasePart") and model) or model:FindFirstChildWhichIsA("BasePart"))
                             local pos = (root and root.Position) or (info.ModelGui and info.ModelGui._guiPos)
                             if pos and typeof(pos) == "Vector3" then
-                                local dist = (pos - hrp.Position).Magnitude
-                                if not maxRadius or dist <= maxRadius then
+                                local distFromCenter = (pos - centerPos).Magnitude
+                                if distFromCenter <= maxRadius then
+                                    local distFromHrp = (pos - hrp.Position).Magnitude
                                     table.insert(ducks, {
                                         key = tostring(keyId),
                                         keyId = keyId,
                                         model = model,
                                         root = root,
                                         position = pos,
-                                        dist = dist,
+                                        dist = distFromHrp,
                                         showerEntry = info
                                     })
                                     foundViaShower = true
@@ -3156,7 +3165,10 @@ return function(Window, Utils)
                         if eggF then
                             for _, sp in ipairs(eggF:GetChildren()) do
                                 if sp.Name == "Spawn_10001" then
-                                    table.insert(duckSpawnPositions, sp.Position)
+                                    local distFromCenter = (sp.Position - centerPos).Magnitude
+                                    if distFromCenter <= maxRadius then
+                                        table.insert(duckSpawnPositions, sp.Position)
+                                    end
                                 end
                             end
                         end
@@ -3171,16 +3183,17 @@ return function(Window, Utils)
                         if not DuckPickupState.blacklist[key] then
                             local root = item:FindFirstChild("Root") or item:FindFirstChild("RootPart") or (item:IsA("BasePart") and item) or item:FindFirstChildWhichIsA("BasePart")
                             if root then
-                                local isNearDuckSpawn = false
-                                for _, sPos in ipairs(duckSpawnPositions) do
-                                    if (root.Position - sPos).Magnitude < 12 then
-                                        isNearDuckSpawn = true
-                                        break
+                                local distFromCenter = (root.Position - centerPos).Magnitude
+                                if distFromCenter <= maxRadius then
+                                    local isNearDuckSpawn = false
+                                    for _, sPos in ipairs(duckSpawnPositions) do
+                                        if (root.Position - sPos).Magnitude < 12 then
+                                            isNearDuckSpawn = true
+                                            break
+                                        end
                                     end
-                                end
-                                if isNearDuckSpawn then
-                                    local dist = (root.Position - hrp.Position).Magnitude
-                                    if not maxRadius or dist <= maxRadius then
+                                    if isNearDuckSpawn then
+                                        local distFromHrp = (root.Position - hrp.Position).Magnitude
                                         table.insert(ducks, {
                                             key = key,
                                             keyId = tonumber(group.Name) or group.Name,
@@ -3188,7 +3201,7 @@ return function(Window, Utils)
                                             model = item,
                                             root = root,
                                             position = root.Position,
-                                            dist = dist
+                                            dist = distFromHrp
                                         })
                                     end
                                 end
@@ -3898,9 +3911,13 @@ return function(Window, Utils)
             if not Value then
                 DuckPickupStatus:Set(Utils.t("duck_pickup_status_off"))
                 DuckPickupState.isResting = false
+                DuckPickupState.currentLoadedWorld = nil
+                DuckPickupState.islandAnchorPos = nil
             else
                 DuckPickupStatus:Set(Utils.t("duck_pickup_status_prep"))
                 DuckPickupState.isResting = false
+                DuckPickupState.currentLoadedWorld = nil
+                DuckPickupState.islandAnchorPos = nil
                 DuckPickupState.loopCount = 1
                 DuckPickupLoopLabel:Set(Utils.t("duck_pickup_cycle_label") .. "1")
             end
@@ -4497,7 +4514,7 @@ return function(Window, Utils)
         end
     end)
 
-    -- Luồng 7: Auto Duck Pickup (Chỉ nhặt vịt trên Map hiện tại đang đứng)
+    -- Luồng 7: Auto Duck Pickup (Chỉ nhặt vịt trên Đảo 10 - Mobius Circus)
     task.spawn(function()
         while task.wait(0.5) do
             if not DuckPickupSettings.enabled then continue end
@@ -4510,7 +4527,7 @@ return function(Window, Utils)
             if DuckPickupState.isResting then
                 if DuckPickupSettings.autoHop then
                     if DuckPickupStatus then DuckPickupStatus:Set(Utils.t("duck_pickup_status_done_hop")) end
-                    pcall(function() Utils.HopServer("Hoàn thành 1 vòng nhặt vịt trên map") end)
+                    pcall(function() Utils.HopServer("Hoàn thành 1 vòng nhặt vịt tại Mobius Circus") end)
                     task.wait(5)
                     continue
                 else
@@ -4527,6 +4544,8 @@ return function(Window, Utils)
                     else
                         DuckPickupState.isResting = false
                         DuckPickupState.loopCount = DuckPickupState.loopCount + 1
+                        DuckPickupState.currentLoadedWorld = nil
+                        DuckPickupState.islandAnchorPos = nil
                         if DuckPickupLoopLabel then
                             DuckPickupLoopLabel:Set(Utils.t("duck_pickup_cycle_label") .. tostring(DuckPickupState.loopCount))
                         end
@@ -4534,8 +4553,34 @@ return function(Window, Utils)
                 end
             end
 
-            -- Quét toàn bộ vịt trên map hiện tại
-            local islandDucks = ScanCurrentIslandDucks(charData.RootPart)
+            -- 1. Kiểm tra vị trí hiện tại: BẮT BUỘC phải ở đảo Mobius Circus (ID 10)
+            local targetWorldId = DuckPickupSettings.targetWorldId or 10
+            local curArea = Utils and type(Utils.GetCurrentAreaId) == "function" and Utils.GetCurrentAreaId()
+            if DuckPickupState.currentLoadedWorld ~= targetWorldId or (type(curArea) == "number" and curArea ~= targetWorldId) then
+                if DuckPickupStatus then
+                    DuckPickupStatus:Set(Utils.t("duck_pickup_status_teleporting"))
+                end
+                pcall(function() Utils.TeleportToArea(targetWorldId) end)
+                DuckPickupState.currentLoadedWorld = targetWorldId
+
+                -- Đợi 4 giây để map tải AreaPickUp và nhân vật ổn định tọa độ
+                task.wait(4)
+                charData = GetValidCharacterData()
+                if charData and charData.RootPart then
+                    DuckPickupState.islandAnchorPos = charData.RootPart.Position
+                end
+                continue
+            end
+
+            charData = GetValidCharacterData()
+            if not charData then continue end
+
+            if not DuckPickupState.islandAnchorPos and charData.RootPart then
+                DuckPickupState.islandAnchorPos = charData.RootPart.Position
+            end
+
+            -- 2. Quét toàn bộ vịt trên đảo Mobius Circus (Giới hạn bán kính 450 studs quanh đảo 10)
+            local islandDucks = ScanCurrentIslandDucks(charData.RootPart, 450, DuckPickupState.islandAnchorPos)
             if #islandDucks > 0 then
                 local duck = islandDucks[1]
                 if DuckPickupStatus then
@@ -4549,14 +4594,16 @@ return function(Window, Utils)
 
                 task.wait(math.max(DuckPickupSettings.pickupDelay or 0.3, 0.1))
             else
-                -- Không còn vịt trên map hiện tại -> Nghỉ ngơi hoặc Auto Hop
+                -- Không còn vịt trên đảo Mobius Circus -> Nghỉ ngơi hoặc Auto Hop
                 if DuckPickupSettings.autoHop then
                     if DuckPickupStatus then DuckPickupStatus:Set(Utils.t("duck_pickup_status_done_hop")) end
-                    pcall(function() Utils.HopServer("Hoàn thành 1 vòng nhặt vịt trên map") end)
+                    pcall(function() Utils.HopServer("Hoàn thành 1 vòng nhặt vịt tại Mobius Circus") end)
                     task.wait(5)
                 else
                     DuckPickupState.isResting = true
                     DuckPickupState.restEndTime = os.time() + (DuckPickupSettings.restTimeMinutes * 60)
+                    DuckPickupState.currentLoadedWorld = nil
+                    DuckPickupState.islandAnchorPos = nil
                     local timeStr = string.format("%02d:00", DuckPickupSettings.restTimeMinutes)
                     if DuckPickupStatus then
                         DuckPickupStatus:Set(string.format(Utils.t("duck_pickup_status_resting"), timeStr))
