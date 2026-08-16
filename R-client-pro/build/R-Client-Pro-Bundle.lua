@@ -173,24 +173,23 @@ function Utils.ProcessQueue()
     end
 end
 -- ==========================================
--- HỆ THỐNG XÁC THỰC VIP KEY (KEY SYSTEM SƠN STUDIO)
+-- HỆ THỐNG XÁC THỰC VIP / DEV KEY (KEY SYSTEM SƠN STUDIO)
 -- ==========================================
 _G.IsVIPUser = false
+_G.IsDevUser = false
 local VIP_KEY_FILE = "key_cache.txt"
 
-function Utils.IsVIP()
-    -- 1. Kiểm tra cờ VIP từ Loader Sơn Studio
-    if _G.IsVIPUser == true then return true end
-    if getgenv and (getgenv().SonStudioIsVIP == true or getgenv().SonStudioKeyTier == "vip" or getgenv().SonStudioKeyTier == "dev") then
-        _G.IsVIPUser = true
+function Utils.IsDev()
+    if _G.IsDevUser == true then return true end
+    if getgenv and (getgenv().SonStudioIsDev == true or getgenv().SonStudioKeyTier == "dev" or getgenv().SonStudioKeyTier == "admin" or getgenv().IsDev == true) then
+        _G.IsDevUser = true
         return true
     end
-    if _G.SonStudioKeyTier == "vip" or _G.SonStudioKeyTier == "dev" then
-        _G.IsVIPUser = true
+    if _G.SonStudioKeyTier == "dev" or _G.SonStudioKeyTier == "admin" or _G.IsDev == true then
+        _G.IsDevUser = true
         return true
     end
 
-    -- 2. Kiểm tra key đã lưu trong key_cache.txt (Khớp tiền tố VIP_ hoặc DEV_)
     local keyToCheck = nil
     if isfile and isfile(VIP_KEY_FILE) then
         local ok, k = pcall(function() return readfile(VIP_KEY_FILE) end)
@@ -201,7 +200,45 @@ function Utils.IsVIP()
 
     if keyToCheck then
         local upperKey = string.upper(keyToCheck)
-        if string.find(upperKey, "^VIP_") or string.find(upperKey, "^DEV_") or upperKey == "VIP_SON_2026" then
+        if string.find(upperKey, "^DEV_") or upperKey == "DEV_SON_2026" or string.find(upperKey, "DEV") then
+            _G.IsDevUser = true
+            return true
+        end
+    end
+
+    return false
+end
+
+function Utils.IsVIP()
+    -- 1. DEV có toàn quyền truy cập của VIP
+    if Utils.IsDev() then
+        _G.IsVIPUser = true
+        return true
+    end
+
+    -- 2. Kiểm tra cờ VIP từ Loader Sơn Studio
+    if _G.IsVIPUser == true then return true end
+    if getgenv and (getgenv().SonStudioIsVIP == true or getgenv().SonStudioKeyTier == "vip" or getgenv().SonStudioKeyTier == "dev" or getgenv().IsVIP == true or getgenv().IsDev == true) then
+        _G.IsVIPUser = true
+        return true
+    end
+    if _G.SonStudioKeyTier == "vip" or _G.SonStudioKeyTier == "dev" or _G.IsVIP == true or _G.IsDev == true then
+        _G.IsVIPUser = true
+        return true
+    end
+
+    -- 3. Kiểm tra key đã lưu trong key_cache.txt (Khớp tiền tố VIP_ hoặc DEV_)
+    local keyToCheck = nil
+    if isfile and isfile(VIP_KEY_FILE) then
+        local ok, k = pcall(function() return readfile(VIP_KEY_FILE) end)
+        if ok and k and #k > 0 then
+            keyToCheck = string.gsub(k, "^%s*(.-)%s*$", "%1")
+        end
+    end
+
+    if keyToCheck then
+        local upperKey = string.upper(keyToCheck)
+        if string.find(upperKey, "^VIP_") or string.find(upperKey, "^DEV_") or upperKey == "VIP_SON_2026" or upperKey == "DEV_SON_2026" or string.find(upperKey, "DEV") then
             _G.IsVIPUser = true
             return true
         end
@@ -224,16 +261,19 @@ function Utils.VerifyVIPKey(inputKey)
         local upperKey = string.upper(keyToCheck)
 
         -- 1. Xác thực nhanh theo cấu trúc tiền tố VIP / DEV của Sơn Studio
-        if string.find(upperKey, "^VIP_") or string.find(upperKey, "^DEV_") or upperKey == "VIP_SON_2026" then
+        if string.find(upperKey, "^VIP_") or string.find(upperKey, "^DEV_") or upperKey == "VIP_SON_2026" or upperKey == "DEV_SON_2026" or string.find(upperKey, "DEV") then
+            local isDev = (string.find(upperKey, "^DEV_") ~= nil) or (upperKey == "DEV_SON_2026") or (string.find(upperKey, "DEV") ~= nil)
             _G.IsVIPUser = true
+            _G.IsDevUser = isDev
             if getgenv then
                 getgenv().SonStudioIsVIP = true
-                getgenv().SonStudioKeyTier = string.find(upperKey, "^DEV_") and "dev" or "vip"
+                getgenv().SonStudioIsDev = isDev
+                getgenv().SonStudioKeyTier = isDev and "dev" or "vip"
             end
             if writefile and inputKey then
                 pcall(function() writefile(VIP_KEY_FILE, keyToCheck) end)
             end
-            return true, "Xác thực VIP Key thành công!"
+            return true, isDev and "Xác thực DEV Key thành công!" or "Xác thực VIP Key thành công!"
         end
 
         -- 2. Xác thực online qua API Backend Sơn Studio
@@ -257,16 +297,19 @@ function Utils.VerifyVIPKey(inputKey)
                 local decodeOk, result = pcall(function() return HttpService:JSONDecode(resp.Body) end)
                 if decodeOk and result and result.success then
                     local kTier = tostring(result.tier or ""):lower()
-                    if kTier == "vip" or kTier == "dev" then
+                    if kTier == "vip" or kTier == "dev" or kTier == "admin" then
+                        local isDev = (kTier == "dev" or kTier == "admin")
                         _G.IsVIPUser = true
+                        _G.IsDevUser = isDev
                         if getgenv then
                             getgenv().SonStudioIsVIP = true
+                            getgenv().SonStudioIsDev = isDev
                             getgenv().SonStudioKeyTier = kTier
                         end
                         if writefile and inputKey then
                             pcall(function() writefile(VIP_KEY_FILE, keyToCheck) end)
                         end
-                        return true, "Xác thực VIP Key thành công!"
+                        return true, isDev and "Xác thực DEV Key thành công!" or "Xác thực VIP Key thành công!"
                     end
                 end
             end
@@ -274,7 +317,8 @@ function Utils.VerifyVIPKey(inputKey)
     end
 
     _G.IsVIPUser = false
-    return false, "Key VIP không hợp lệ hoặc chưa được kích hoạt quyền VIP!"
+    _G.IsDevUser = false
+    return false, "Key VIP / DEV không hợp lệ hoặc chưa được kích hoạt quyền!"
 end
 
 -- Tự động kiểm tra VIP khi khởi chạy
@@ -2243,8 +2287,8 @@ local Translations = {
     ["auto_fuse_pets_info"] = { en = "Continuously scans and merges duplicate pets according to your safety rules.", vi = "Tự động quét và ghép các Pet trùng loại liên tục theo cấu hình an toàn." },
     ["btn_fuse_now"] = { en = "⚡ Fuse All Duplicates Now", vi = "⚡ Dung Hợp Tất Cả Pet Trùng Ngay" },
     ["btn_fuse_now_info"] = { en = "Immediately merges all eligible duplicate pets in inventory once.", vi = "Thực hiện ghép tất cả các Pet trùng loại trong túi 1 lần lập tức." },
-    ["vip_key_required_title"] = { en = "🔒 VIP Key Required", vi = "🔒 Yêu Cầu Key VIP" },
-    ["vip_key_required_msg"] = { en = "Pet Manager features are exclusive to VIP Key users!", vi = "Chức năng Pet Manager chỉ dành cho tài khoản có Key VIP do Admin cấp riêng!" },
+    ["vip_key_required_title"] = { en = "🔒 VIP / DEV Key Required", vi = "🔒 Yêu Cầu Key VIP / DEV" },
+    ["vip_key_required_msg"] = { en = "Pet Manager features are exclusive to VIP & DEV Key users!", vi = "Chức năng Pet Manager chỉ dành cho tài khoản có Key VIP hoặc DEV do Admin cấp riêng!" },
     ["warning_processing_lock"] = { en = "Processing lock/unlock, please wait!", vi = "Đang xử lý khóa/mở khóa Pet, vui lòng đợi!" },
     ["warning_cooldown_wait"] = { en = "Please wait %.1f seconds before clicking again!", vi = "Vui lòng đợi %.1f giây trước khi bấm lại!" },
     ["warning_processing_fuse"] = { en = "Processing pet fusion, please wait!", vi = "Đang xử lý Dung Hợp Pet, vui lòng đợi!" },

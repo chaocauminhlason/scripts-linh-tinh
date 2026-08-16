@@ -136,10 +136,17 @@ return function(Window, Utils)
     end
 
     -- ==========================================
-    -- HÀM KIỂM TRA QUYỀN HẠN VIP KEY
+    -- HÀM KIỂM TRA QUYỀN HẠN VIP / DEV KEY
     -- ==========================================
     local function CheckVIPAccess()
+        if _G.IsDevUser == true or _G.IsVIPUser == true then return true end
+        if Utils and type(Utils.IsDev) == "function" and Utils.IsDev() then
+            return true
+        end
         if Utils and type(Utils.IsVIP) == "function" and Utils.IsVIP() then
+            return true
+        end
+        if getgenv and (getgenv().SonStudioKeyTier == "dev" or getgenv().SonStudioKeyTier == "admin" or getgenv().SonStudioKeyTier == "vip" or getgenv().SonStudioIsVIP == true or getgenv().SonStudioIsDev == true or getgenv().IsDev == true or getgenv().IsVIP == true) then
             return true
         end
         ShowNotify(Utils.t("vip_key_required_title"), Utils.t("vip_key_required_msg"), 5)
