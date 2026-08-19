@@ -4474,12 +4474,28 @@ return function(Window, Utils)
                         end
                         
                         platform:Destroy()
-                        if AppState.savedFarmPosition then
-                            charData.RootPart.CFrame = AppState.savedFarmPosition
+                        if AppState.autoReturnToFarm and AppState.savedFarmPosition then
+                            local currentAreaId = Utils.GetCurrentAreaId()
+                            if AppState.savedFarmAreaId and currentAreaId ~= AppState.savedFarmAreaId and type(AppState.savedFarmAreaId) == "number" then
+                                pcall(function() Utils.TeleportToArea(AppState.savedFarmAreaId) end)
+                                task.wait(4)
+                            end
+                            charData = GetValidCharacterData()
+                            if charData then
+                                charData.RootPart.CFrame = AppState.savedFarmPosition
+                            end
+                            SendNotify("✅ Hoàn Tất", "Đã khôi phục sinh lực Pet và về bãi farm!")
                         else
-                            Utils.SafeTeleport(safeReturnPos, 5)
+                            charData = GetValidCharacterData()
+                            if charData then
+                                if typeof(safeReturnPos) == "CFrame" then
+                                    charData.RootPart.CFrame = safeReturnPos
+                                else
+                                    Utils.SafeTeleport(safeReturnPos, 5)
+                                end
+                            end
+                            SendNotify("✅ Hoàn Tất", "Đã khôi phục sinh lực Pet và quay lại vị trí cũ!")
                         end
-                        SendNotify("✅ Hoàn Tất", "Đã khôi phục sinh lực Pet và về bãi farm!")
                     end
                 end
                 
