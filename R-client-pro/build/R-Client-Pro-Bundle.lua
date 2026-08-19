@@ -2273,6 +2273,8 @@ local Translations = {
     ["fuse_option_rank_c"] = { en = "Rank C (Grade 2 & Below)", vi = "Rank C (Grade 2 trở xuống)" },
     ["fuse_option_rank_d"] = { en = "Rank D (Grade 1 Only)", vi = "Rank D (Grade 1)" },
     ["fuse_option_rank_a"] = { en = "Rank A (Grade 4)", vi = "Rank A (Grade 4)" },
+    ["only_fuse_mutated"] = { en = "⭐ Only Fuse Mutated Pets (Save Food)", vi = "⭐ Chỉ Dung Hợp Pet Dị Biến (Để Dành Phôi)" },
+    ["only_fuse_mutated_info"] = { en = "Only fuses when the main pet is Mutated (Shiny, Huge...). Preserves normal pets to serve as food for future mutations.", vi = "Chỉ ghép khi Pet chính là Pet Dị biến (Shiny, Huge...). Giữ lại toàn bộ pet thường làm phôi để dành." },
     ["skip_mutated_pets"] = { en = "🛡️ Skip Mutated Pets (No Food)", vi = "🛡️ Bỏ Qua Pet Dị Biến Làm Phôi (Skip Mutated)" },
     ["skip_mutated_pets_info"] = { en = "Never consumes mutated pets (Shiny, Huge, Bloodlit, Fairy...) as fusion ingredients.", vi = "Tuyệt đối KHÔNG dùng Pet Dị biến (Shiny, Huge, Bloodlit, Fairy...) làm phôi dung hợp." },
     ["skip_trait_pets"] = { en = "🛡️ Skip Trait / Talent Pets (No Food)", vi = "🛡️ Bỏ Qua Pet Có Trait / Thiên Phú Làm Phôi" },
@@ -10338,6 +10340,7 @@ return function(Window, Utils)
 
     -- Biến cấu hình & trạng thái
     local autoFuseEnabled = false
+    local onlyFuseMutated = false -- FILTER MỚI: Chỉ dung hợp khi Pet chính là Dị Biến (để dành phôi thường)
     local skipLockedPets = true
     local skipEquippedPets = true
     local skipMutatedPets = true -- FILTER 1: Mặc định BẬT - Không dùng Pet Dị biến làm phôi
@@ -10668,19 +10671,21 @@ return function(Window, Utils)
                         if a.IsEquipped ~= b.IsEquipped then
                             return a.IsEquipped -- 1. Pet đang trang bị đứng đầu
                         end
-                        if a.TraitQuality ~= b.TraitQuality then
-                            return a.TraitQuality > b.TraitQuality -- 2. Pet có Trait PHẨM CHẤT CAO NHẤT đứng đầu (Q: 6 > 5 > 4...)
-                        end
-                        if a.HasTrait ~= b.HasTrait then
-                            return a.HasTrait -- 3. Pet có Trait đứng đầu làm Pet chính
-                        end
                         if a.HasMutation ~= b.HasMutation then
-                            return a.HasMutation -- 4. Pet có Dị biến đứng đầu làm Pet chính
+                            return a.HasMutation -- 2. ƯU TIÊN SỐ 1: Pet Dị biến (Shiny, Huge...) luôn làm Pet chính!
+                        end
+                        if a.TraitQuality ~= b.TraitQuality then
+                            return a.TraitQuality > b.TraitQuality -- 3. Pet có Trait phẩm chất cao (nếu có)
                         end
                         return a.Guid < b.Guid
                     end)
 
                     while #validGroupList >= totalNeeded do
+                        -- Nếu bật "Chỉ Dung Hợp Pet Dị Biến" mà con đứng đầu không phải Dị biến -> Bỏ qua cả nhóm, không ghép con thường!
+                        if onlyFuseMutated and not validGroupList[1].HasMutation then
+                            break
+                        end
+
                         local mainPet = table.remove(validGroupList, 1) -- Chọn pet chính ưu tiên cao nhất
                         local foodGuids = {}
 
@@ -10795,6 +10800,16 @@ return function(Window, Utils)
             elseif string.find(sel, "Grade 2") or string.find(sel, "Rank C") then maxFuseGrade = 2
             elseif string.find(sel, "Grade 4") or string.find(sel, "Rank A") then maxFuseGrade = 4
             else maxFuseGrade = 3 end
+        end
+    })
+
+    PetTab:CreateToggle({
+        Name = Utils.t("only_fuse_mutated"),
+        Info = Utils.t("only_fuse_mutated_info"),
+        CurrentValue = false,
+        Flag = "OnlyFuseMutatedPetsFlag",
+        Callback = function(Value)
+            onlyFuseMutated = Value
         end
     })
 
