@@ -10965,7 +10965,7 @@ local Window = Rayfield:CreateWindow({
     DisableBuildWarnings = true 
 })
 
--- Tùy biến phong cách UI: Độ trong suốt 5% & Giảm độ bo góc Slider
+-- Tùy biến phong cách UI: Độ trong suốt 5% & Giảm độ bo góc Slider (Duy trì vĩnh viễn cả khi ẩn/mở lại menu)
 task.spawn(function()
     local CoreGui = game:GetService("CoreGui")
     local Players = game:GetService("Players")
@@ -10980,7 +10980,64 @@ task.spawn(function()
         return CoreGui
     end
 
-    local function applyCustomStyles()
+    local cachedRayfieldGui = nil
+    local hookedElements = {}
+
+    local function applyElementStyle(desc)
+        if not desc or not desc.Parent then return end
+        
+        -- 1. Độ trong suốt 5% cho các khung giao diện chính
+        if desc:IsA("Frame") or desc:IsA("ScrollingFrame") then
+            local nl = string.lower(desc.Name)
+            if nl == "main" or nl == "background" or nl == "holder" or nl == "container" or nl == "topbar" or nl == "sidebar" or nl == "tabcontainer" then
+                if desc.BackgroundTransparency ~= 0.05 then
+                    desc.BackgroundTransparency = 0.05
+                end
+            end
+        end
+        
+        -- 2. Đồng bộ giảm độ bo góc 6px cho CẢ 2 phần của Slider: Khung viền ngoài (Main/Shadow) và Thanh tiến trình (Progress)
+        if desc:IsA("UICorner") and desc.Parent then
+            local p = desc.Parent
+            local pName = string.lower(p.Name)
+            local grandParent = p.Parent and string.lower(p.Parent.Name) or ""
+            if pName == "progress" or pName == "slider" or p:FindFirstChild("Progress") or (p.Parent and p.Parent:FindFirstChild("Progress")) or string.find(pName, "slider") or string.find(grandParent, "slider") then
+                if desc.CornerRadius ~= UDim.new(0, 6) then
+                    desc.CornerRadius = UDim.new(0, 6)
+                end
+            end
+        end
+    end
+
+    local function hookElement(desc)
+        if not desc or hookedElements[desc] then return end
+        hookedElements[desc] = true
+
+        applyElementStyle(desc)
+
+        -- Lắng nghe khi Visible hoặc BackgroundTransparency bị Rayfield reset (do đóng/mở menu)
+        if desc:IsA("Frame") or desc:IsA("ScrollingFrame") then
+            local nl = string.lower(desc.Name)
+            if nl == "main" or nl == "background" or nl == "holder" or nl == "container" or nl == "topbar" or nl == "sidebar" or nl == "tabcontainer" then
+                pcall(function()
+                    desc:GetPropertyChangedSignal("Visible"):Connect(function()
+                        if desc.Visible then
+                            task.wait(0.05)
+                            desc.BackgroundTransparency = 0.05
+                        end
+                    end)
+                    desc:GetPropertyChangedSignal("BackgroundTransparency"):Connect(function()
+                        if desc.Visible and desc.BackgroundTransparency == 0 then
+                            desc.BackgroundTransparency = 0.05
+                        end
+                    end)
+                end)
+            end
+        end
+    end
+
+    local function findRayfieldGui()
+        if cachedRayfieldGui and cachedRayfieldGui.Parent then return cachedRayfieldGui end
         local root = getGuiRoot()
         local rayfieldGui = root:FindFirstChild("Rayfield") or (pgui and pgui:FindFirstChild("Rayfield"))
         if not rayfieldGui then
@@ -10991,33 +11048,28 @@ task.spawn(function()
                 end
             end
         end
-
-        if rayfieldGui then
-            for _, desc in ipairs(rayfieldGui:GetDescendants()) do
-                -- 1. Độ trong suốt 5% cho các khung giao diện chính
-                if desc:IsA("Frame") or desc:IsA("ScrollingFrame") then
-                    local nl = string.lower(desc.Name)
-                    if nl == "main" or nl == "background" or nl == "holder" or nl == "container" or nl == "topbar" or nl == "sidebar" or nl == "tabcontainer" then
-                        desc.BackgroundTransparency = 0.05
-                    end
-                end
-                
-                -- 2. Đồng bộ giảm độ bo góc 6px cho CẢ 2 phần của Slider: Khung viền ngoài (Main/Shadow) và Thanh tiến trình (Progress)
-                if desc:IsA("UICorner") and desc.Parent then
-                    local p = desc.Parent
-                    local pName = string.lower(p.Name)
-                    local grandParent = p.Parent and string.lower(p.Parent.Name) or ""
-                    if pName == "progress" or pName == "slider" or p:FindFirstChild("Progress") or (p.Parent and p.Parent:FindFirstChild("Progress")) or string.find(pName, "slider") or string.find(grandParent, "slider") then
-                        desc.CornerRadius = UDim.new(0, 6)
-                    end
-                end
-            end
+        if rayfieldGui and rayfieldGui ~= cachedRayfieldGui then
+            cachedRayfieldGui = rayfieldGui
+            pcall(function()
+                rayfieldGui.DescendantAdded:Connect(function(newDesc)
+                    task.wait(0.05)
+                    hookElement(newDesc)
+                end)
+            end)
         end
+        return rayfieldGui
     end
 
-    for _ = 1, 20 do
-        applyCustomStyles()
-        task.wait(0.5)
+    -- Vòng lặp duy trì liên tục (chạy nhẹ nhàng mỗi 1 giây) để đảm bảo không bao giờ mất độ trong suốt
+    while true do
+        local rGui = findRayfieldGui()
+        if rGui then
+            for _, desc in ipairs(rGui:GetDescendants()) do
+                hookElement(desc)
+                applyElementStyle(desc)
+            end
+        end
+        task.wait(1)
     end
 end)
 
