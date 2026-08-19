@@ -2935,28 +2935,93 @@ return function(Window, Utils)
         return true
     end
 
-    -- [Logic] Quét tất cả các quả trứng AreaPickUp trên đảo hiện tại (Giới hạn bán kính đảo)
-    local function ScanIslandEggs(hrp, maxRadius, anchorPos)
-        maxRadius = maxRadius or 450 -- Giới hạn bán kính 450 studs tính từ tâm đảo để không quét nhầm trứng đảo khác
+    -- [Helper] Xác định Model Đảo hiện tại trong Workspace.Area dựa trên vị trí nhân vật
+    local function GetCurrentIslandModel(hrp)
+        local areaFolder = Workspace:FindFirstChild("Area")
+        if not areaFolder or not hrp then return nil end
+        
+        local currentIsland = nil
+        local closestDist = math.huge
+        
+        for _, island in ipairs(areaFolder:GetChildren()) do
+            if island:IsA("Model") or island:IsA("Folder") then
+                local pivot = (island:IsA("Model") and island:GetPivot().Position) 
+                    or (island:FindFirstChildWhichIsA("BasePart") and island:FindFirstChildWhichIsA("BasePart").Position)
+                if pivot then
+                    local d = (hrp.Position - pivot).Magnitude
+                    if d < closestDist then
+                        closestDist = d
+                        currentIsland = island
+                    end
+                end
+            end
+        end
+        return currentIsland
+    end
+
+    -- [Logic] Quét tất cả các quả trứng THỰC SỰ ĐÃ SPAWN trên Đảo hiện tại (Khớp nối trực tiếp qua ServerZone.Egg)
+    local function ScanIslandEggs(hrp)
         local eggs = {}
         if not hrp then return eggs end
-        local centerPos = anchorPos or (EggPickupState and EggPickupState.islandAnchorPos) or hrp.Position
 
         local now = os.time()
         for k, exp in pairs(EggPickupState.blacklist) do
             if now > exp then EggPickupState.blacklist[k] = nil end
         end
 
+        -- 1. Lấy danh sách toàn bộ điểm Spawn Trứng của Đảo hiện tại (từ ServerZone.Egg)
+        local currentIsland = GetCurrentIslandModel(hrp)
+        local eggFolder = currentIsland and currentIsland:FindFirstChild("ServerZone") and currentIsland.ServerZone:FindFirstChild("Egg")
+        local islandEggSpawns = {}
+        
+        if eggFolder then
+            for _, sp in ipairs(eggFolder:GetChildren()) do
+                -- Loại bỏ các điểm sinh Vịt (Spawn_10001)
+                if sp.Name ~= "Spawn_10001" and not string.find(sp.Name, "10001") then
+                    table.insert(islandEggSpawns, sp.Position)
+                end
+            end
+        end
+
+        -- Fallback an toàn nếu đảo không có cấu trúc ServerZone chuẩn
+        if #islandEggSpawns == 0 then
+            local areaFolder = Workspace:FindFirstChild("Area")
+            if areaFolder then
+                for _, island in ipairs(areaFolder:GetChildren()) do
+                    local sz = island:FindFirstChild("ServerZone")
+                    local szEgg = sz and sz:FindFirstChild("Egg")
+                    if szEgg then
+                        for _, sp in ipairs(szEgg:GetChildren()) do
+                            if sp.Name ~= "Spawn_10001" and not string.find(sp.Name, "10001") then
+                                if (sp.Position - hrp.Position).Magnitude < 450 then
+                                    table.insert(islandEggSpawns, sp.Position)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        -- 2. Quét các vật phẩm THỰC TẾ ĐANG TỒN TẠI trong Workspace.AreaPickUp
         local areaPickUpFolder = Workspace:FindFirstChild("AreaPickUp")
-        if areaPickUpFolder then
+        if areaPickUpFolder and #islandEggSpawns > 0 then
             for _, group in ipairs(areaPickUpFolder:GetChildren()) do
                 for _, item in ipairs(group:GetChildren()) do
                     local key = group.Name .. "_" .. item.Name
                     if not EggPickupState.blacklist[key] and IsEggPickupItem(item, group.Name) then
                         local root = item:FindFirstChild("Root") or item:FindFirstChild("RootPart") or (item:IsA("BasePart") and item) or item:FindFirstChildWhichIsA("BasePart")
                         if root then
-                            local distFromCenter = (root.Position - centerPos).Magnitude
-                            if distFromCenter <= maxRadius then
+                            -- Khớp nối: Vật phẩm thật phải nằm trùng trên một trong các điểm Spawn của Đảo hiện tại
+                            local isMatchIsland = false
+                            for _, sPos in ipairs(islandEggSpawns) do
+                                if (root.Position - sPos).Magnitude <= 12 then
+                                    isMatchIsland = true
+                                    break
+                                end
+                            end
+
+                            if isMatchIsland then
                                 local distFromHrp = (root.Position - hrp.Position).Magnitude
                                 table.insert(eggs, {
                                     key = key,
@@ -3155,12 +3220,10 @@ return function(Window, Utils)
     end
 
 
-    -- [Logic] Quét tất cả Vịt AreaPickUp trên Đảo Mobius Circus (ID 10)
-    local function ScanCurrentIslandDucks(hrp, maxRadius, anchorPos)
-        maxRadius = maxRadius or 450 -- Giới hạn bán kính 450 studs quanh tâm đảo Mobius Circus
+    -- [Logic] Quét tất cả Vịt THỰC SỰ ĐÃ SPAWN trên Đảo Mobius Circus (ID 10)
+    local function ScanCurrentIslandDucks(hrp)
         local ducks = {}
         if not hrp then return ducks end
-        local centerPos = anchorPos or (DuckPickupState and DuckPickupState.islandAnchorPos) or hrp.Position
 
         local now = os.time()
         for k, exp in pairs(DuckPickupState.blacklist) do
@@ -3191,20 +3254,17 @@ return function(Window, Utils)
                             local root = model and (model:FindFirstChild("Root") or model:FindFirstChild("RootPart") or (model:IsA("BasePart") and model) or model:FindFirstChildWhichIsA("BasePart"))
                             local pos = (root and root.Position) or (info.ModelGui and info.ModelGui._guiPos)
                             if pos and typeof(pos) == "Vector3" then
-                                local distFromCenter = (pos - centerPos).Magnitude
-                                if distFromCenter <= maxRadius then
-                                    local distFromHrp = (pos - hrp.Position).Magnitude
-                                    table.insert(ducks, {
-                                        key = tostring(keyId),
-                                        keyId = keyId,
-                                        model = model,
-                                        root = root,
-                                        position = pos,
-                                        dist = distFromHrp,
-                                        showerEntry = info
-                                    })
-                                    foundViaShower = true
-                                end
+                                local distFromHrp = (pos - hrp.Position).Magnitude
+                                table.insert(ducks, {
+                                    key = tostring(keyId),
+                                    keyId = keyId,
+                                    model = model,
+                                    root = root,
+                                    position = pos,
+                                    dist = distFromHrp,
+                                    showerEntry = info
+                                })
+                                foundViaShower = true
                             end
                         end
                     end
@@ -3212,9 +3272,8 @@ return function(Window, Utils)
             end
         end)
 
-        -- 2. Phương án dự phòng qua Workspace.AreaPickUp và tọa độ Spawn_10001
+        -- 2. Phương án dự phòng qua Workspace.AreaPickUp và khớp nối trực tiếp điểm Spawn_10001
         if not foundViaShower or #ducks == 0 then
-            local areaPickUpFolder = Workspace:FindFirstChild("AreaPickUp")
             local duckSpawnPositions = {}
             pcall(function()
                 local areaFolder = Workspace:FindFirstChild("Area")
@@ -3225,10 +3284,7 @@ return function(Window, Utils)
                         if eggF then
                             for _, sp in ipairs(eggF:GetChildren()) do
                                 if sp.Name == "Spawn_10001" then
-                                    local distFromCenter = (sp.Position - centerPos).Magnitude
-                                    if distFromCenter <= maxRadius then
-                                        table.insert(duckSpawnPositions, sp.Position)
-                                    end
+                                    table.insert(duckSpawnPositions, sp.Position)
                                 end
                             end
                         end
@@ -3236,6 +3292,7 @@ return function(Window, Utils)
                 end
             end)
 
+            local areaPickUpFolder = Workspace:FindFirstChild("AreaPickUp")
             if areaPickUpFolder and #duckSpawnPositions > 0 then
                 for _, group in ipairs(areaPickUpFolder:GetChildren()) do
                     for _, item in ipairs(group:GetChildren()) do
@@ -3243,27 +3300,24 @@ return function(Window, Utils)
                         if not DuckPickupState.blacklist[key] then
                             local root = item:FindFirstChild("Root") or item:FindFirstChild("RootPart") or (item:IsA("BasePart") and item) or item:FindFirstChildWhichIsA("BasePart")
                             if root then
-                                local distFromCenter = (root.Position - centerPos).Magnitude
-                                if distFromCenter <= maxRadius then
-                                    local isNearDuckSpawn = false
-                                    for _, sPos in ipairs(duckSpawnPositions) do
-                                        if (root.Position - sPos).Magnitude < 12 then
-                                            isNearDuckSpawn = true
-                                            break
-                                        end
+                                local isNearDuckSpawn = false
+                                for _, sPos in ipairs(duckSpawnPositions) do
+                                    if (root.Position - sPos).Magnitude <= 12 then
+                                        isNearDuckSpawn = true
+                                        break
                                     end
-                                    if isNearDuckSpawn then
-                                        local distFromHrp = (root.Position - hrp.Position).Magnitude
-                                        table.insert(ducks, {
-                                            key = key,
-                                            keyId = tonumber(group.Name) or group.Name,
-                                            group = group.Name,
-                                            model = item,
-                                            root = root,
-                                            position = root.Position,
-                                            dist = distFromHrp
-                                        })
-                                    end
+                                end
+                                if isNearDuckSpawn then
+                                    local distFromHrp = (root.Position - hrp.Position).Magnitude
+                                    table.insert(ducks, {
+                                        key = key,
+                                        keyId = tonumber(group.Name) or group.Name,
+                                        group = group.Name,
+                                        model = item,
+                                        root = root,
+                                        position = root.Position,
+                                        dist = distFromHrp
+                                    })
                                 end
                             end
                         end
@@ -4534,8 +4588,8 @@ return function(Window, Utils)
                     EggPickupState.islandAnchorPos = charData.RootPart.Position
                 end
 
-                -- Quét trứng trên đảo hiện tại (Giới hạn bán kính 450 studs tính từ tâm đảo)
-                local islandEggs = ScanIslandEggs(charData.RootPart, 450, EggPickupState.islandAnchorPos)
+                -- Quét trứng trên đảo hiện tại (Khớp nối trực tiếp ServerZone.Egg của Đảo)
+                local islandEggs = ScanIslandEggs(charData.RootPart)
                 if #islandEggs > 0 then
                     local egg = islandEggs[1]
                     local worldName = GetAreaNameById(targetWorldId)
@@ -4639,8 +4693,8 @@ return function(Window, Utils)
                 DuckPickupState.islandAnchorPos = charData.RootPart.Position
             end
 
-            -- 2. Quét toàn bộ vịt trên đảo Mobius Circus (Giới hạn bán kính 450 studs quanh đảo 10)
-            local islandDucks = ScanCurrentIslandDucks(charData.RootPart, 450, DuckPickupState.islandAnchorPos)
+            -- 2. Quét toàn bộ vịt trên đảo Mobius Circus (Khớp nối trực tiếp điểm Spawn_10001 & TmplId 2016)
+            local islandDucks = ScanCurrentIslandDucks(charData.RootPart)
             if #islandDucks > 0 then
                 local duck = islandDucks[1]
                 if DuckPickupStatus then
@@ -5820,6 +5874,14 @@ return function(Window, Utils, WebhookModule)
     local targetPlayerCount = 1
     local targetDifficulty = 1 
     
+    local DIFFICULTY_MAP = {
+        [1] = 1001, -- 1 - Normal (Easy)
+        [2] = 1002, -- 2 - Hard (Normal)
+        [3] = 1003, -- 3 - Nightmare (Hard)
+        [4] = 1004, -- 4 - Inferno (Expert)
+        [5] = 1009, -- 5 - Cataclysm (Master / New update)
+    }
+    
     local dungeonStuckTimer = 0
     local dungeonLastPosition = nil
     local isStartingDungeon = false
@@ -6429,7 +6491,7 @@ return function(Window, Utils, WebhookModule)
                                 elseif isPreparingRoom and preparingRoomNode then
                                     DungeonStatus:Set(Utils.t("dg_label_lobby_creating"))
                                     local abyssIndex = tonumber(string.match(preparingRoomNode.Name, "Abyss_(%d+)")) or 1
-                                    local difficultyCode = 1000 + targetDifficulty 
+                                    local difficultyCode = DIFFICULTY_MAP[targetDifficulty] or (1000 + targetDifficulty)
                                     
                                     pcall(function()
                                         local args = { "AbyssCreateTeamChannel", abyssIndex, difficultyCode, targetPlayerCount }

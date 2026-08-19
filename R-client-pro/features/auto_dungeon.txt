@@ -23,6 +23,14 @@ return function(Window, Utils, WebhookModule)
     local targetPlayerCount = 1
     local targetDifficulty = 1 
     
+    local DIFFICULTY_MAP = {
+        [1] = 1001, -- 1 - Normal (Easy)
+        [2] = 1002, -- 2 - Hard (Normal)
+        [3] = 1003, -- 3 - Nightmare (Hard)
+        [4] = 1004, -- 4 - Inferno (Expert)
+        [5] = 1009, -- 5 - Cataclysm (Master / New update)
+    }
+    
     local dungeonStuckTimer = 0
     local dungeonLastPosition = nil
     local isStartingDungeon = false
@@ -632,7 +640,7 @@ return function(Window, Utils, WebhookModule)
                                 elseif isPreparingRoom and preparingRoomNode then
                                     DungeonStatus:Set(Utils.t("dg_label_lobby_creating"))
                                     local abyssIndex = tonumber(string.match(preparingRoomNode.Name, "Abyss_(%d+)")) or 1
-                                    local difficultyCode = 1000 + targetDifficulty 
+                                    local difficultyCode = DIFFICULTY_MAP[targetDifficulty] or (1000 + targetDifficulty)
                                     
                                     pcall(function()
                                         local args = { "AbyssCreateTeamChannel", abyssIndex, difficultyCode, targetPlayerCount }
