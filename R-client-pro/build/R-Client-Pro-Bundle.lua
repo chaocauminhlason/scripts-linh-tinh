@@ -10615,6 +10615,7 @@ return function(Window, Utils)
         for guid, pet in pairs(itemMap) do
             local isLocked = pet:IsLock()
             local isEquipped = (pet:GetEquipedIndex() ~= nil and pet:GetEquipedIndex() > 0) or pet:IsInTeam()
+            local isInVault = pet.IsInVault and pet:IsInVault()
             local grade = pet:GetGrade() or 1
             local tmplId = pet:GetTmplId()
             local hasMutation = HasSpecialProperty(pet)
@@ -10622,6 +10623,7 @@ return function(Window, Utils)
             local traitQuality = GetPetMaxTraitQuality(pet, env)
 
             local shouldInclude = true
+            if isInVault then shouldInclude = false end -- Game chỉ cho phép evolve pet đang ở trong Túi (Bag)
             if skipLockedPets and isLocked then shouldInclude = false end
             if skipEquippedPets and isEquipped then shouldInclude = false end
             if grade < minFuseGrade or grade > maxFuseGrade then shouldInclude = false end
@@ -10709,11 +10711,7 @@ return function(Window, Utils)
 
                         if #foodGuids == reqFoodCount then
                             local ok = pcall(function()
-                                if env.ViewUtil and type(env.ViewUtil.DoRequest) == "function" then
-                                    return env.ViewUtil.DoRequest(PetSystem.ClientEvolve, mainPet.Guid, foodGuids)
-                                else
-                                    return PetSystem.ClientEvolve(mainPet.Guid, foodGuids)
-                                end
+                                return PetSystem.ClientEvolve(tostring(mainPet.Guid), foodGuids)
                             end)
                             if ok then
                                 totalFused = totalFused + reqFoodCount
