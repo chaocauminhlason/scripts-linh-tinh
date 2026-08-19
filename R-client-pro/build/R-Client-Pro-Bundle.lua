@@ -10311,6 +10311,564 @@ end
 
 end
 
+
+modules['features/pet_manager.txt'] = function(...)
+-- ====================================================================
+-- MODULE: PET MANAGER V4.0 (QUẢN LÝ KHÓA/MỞ KHÓA & DUNG HỢP PET AN TOÀN)
+-- BẢN HOÀN THIỆN: HỖ TRỢ ĐA NGÔN NGỮ ANH - VIỆT (FULL BILINGUAL LOCALIZATION)
+-- ====================================================================
+return function(Window, Utils)
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+
+    -- Biến cấu hình & trạng thái
+    local autoFuseEnabled = false
+    local skipLockedPets = true
+    local skipEquippedPets = true
+    local skipMutatedPets = true -- FILTER 1: Mặc định BẬT - Không dùng Pet Dị biến làm phôi
+    local skipTraitPets = true -- FILTER 6: Mặc định BẬT - Không dùng Pet có Trait/Thiên phú làm phôi
+    local autoFuseOnBagFull = false -- FILTER 5: Mặc định TẮT - Chỉ auto fuse khi túi còn ít slot
+    local bagFreeSlotThreshold = 5
+    local minFuseGrade = 1
+    local maxFuseGrade = 3 -- FILTER 3: Mặc định Grade 3 (Rank B trở xuống)
+    
+    -- Danh sách tiêu chí chọn Khóa/Mở Khóa đa năng (Multi-Select)
+    local selectedLockCriteria = {
+        Utils.t("criteria_rank_a"),
+        Utils.t("criteria_mutation"),
+        Utils.t("criteria_high_trait")
+    }
+
+    -- Biến chống click đúp & chống spam anti-cheat
+    local isProcessingLock = false
+    local isProcessingFuse = false
+    local lastLockTime = 0
+    local lastFuseTime = 0
+    local COOLDOWN_DELAY = 3 -- Cooldown 3 giây giữa các lần bấm
+
+    -- ==========================================
+    -- HÀM TRUY XUẤT NATIVE PET SYSTEM TỪ GAME
+    -- ==========================================
+    local function GetPathToolEnv()
+        local success, env = pcall(function() return getrenv()._G.PathTool end)
+        if success and env then return env end
+        return nil
+    end
+
+    local function GetGamePlayer()
+        local env = GetPathToolEnv()
+        if env and env.ClientPlayerManager then
+            return env.ClientPlayerManager.GetGamePlayer()
+        end
+        return nil
+    end
+
+    local function GetPetSystem()
+        local env = GetPathToolEnv()
+        if env then
+            if env.PetSystem then return env.PetSystem end
+            if type(env.Require) == "function" then
+                local ok, sys = pcall(function() return env.Require("PetSystem") end)
+                if ok and sys then return sys end
+            end
+        end
+        return nil
+    end
+
+    local function GetPetMap()
+        local player = GetGamePlayer()
+        if player and player.pet and player.pet._itemMap then
+            return player.pet._itemMap
+        end
+        return {}
+    end
+
+    -- Kiêm tra Dị biến (Mutation: Shiny, Huge, Bloodlit, Fairy...)
+    local function HasSpecialProperty(pet)
+        if not pet then return false end
+        local spProp = pet:GetSpecialProp()
+        if not spProp then return false end
+        
+        if type(spProp) == "table" then
+            for propId, _ in pairs(spProp) do
+                return true
+            end
+        elseif type(spProp) == "number" and spProp > 0 then
+            return true
+        end
+        return false
+    end
+
+    -- Kiểm tra Trait / Thiên phú (Breed Talent: Impair, Fortify, Hasten, Rebirth...)
+    local function HasBreedTalent(pet)
+        if not pet then return false end
+        local ok, hasTalent = pcall(function() return pet:IsHasBreedTalent() end)
+        return ok and hasTalent == true
+    end
+
+    -- Phân loại Phẩm Chất Trait Cao Nhất của Pet (Quality: 6=Mythic/Gold, 5=Epic, 4=Rare, 3=Common, 0=None)
+    local function GetPetMaxTraitQuality(pet, env)
+        if not (pet and HasBreedTalent(pet)) then return 0 end
+        local maxQ = 0
+        local cfgTalent = env and env.CfgPetBreedTalent and env.CfgPetBreedTalent.Tmpls
+        
+        local allT = type(pet.GetAllBreedTalent) == "function" and pet:GetAllBreedTalent()
+        if type(allT) == "table" then
+            for slot, tVal in pairs(allT) do
+                local tId = tonumber(tVal) or (type(tVal) == "table" and (tVal.TmplId or tVal.id))
+                local tInfo = tId and cfgTalent and cfgTalent[tId]
+                if tInfo and tInfo.Quality then
+                    local q = tonumber(tInfo.Quality) or 0
+                    if q > maxQ then maxQ = q end
+                end
+            end
+        end
+
+        if maxQ == 0 and type(pet.IterBreedTalent) == "function" then
+            pcall(function()
+                pet:IterBreedTalent(function(tData)
+                    if type(tData) == "table" and tData.Quality then
+                        local q = tonumber(tData.Quality) or 0
+                        if q > maxQ then maxQ = q end
+                    elseif tonumber(tData) and cfgTalent and cfgTalent[tonumber(tData)] then
+                        local q = tonumber(cfgTalent[tonumber(tData)].Quality) or 0
+                        if q > maxQ then maxQ = q end
+                    end
+                end)
+            end)
+        end
+        return maxQ
+    end
+
+    local function ShowNotify(title, text, duration)
+        pcall(function()
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title = title or "Pet Manager",
+                Text = text or "",
+                Duration = duration or 3
+            })
+        end)
+    end
+
+    -- ==========================================
+    -- HÀM KIỂM TRA QUYỀN HẠN VIP / DEV KEY
+    -- ==========================================
+    local function CheckVIPAccess()
+        if _G.IsDevUser == true or _G.IsVIPUser == true then return true end
+        if Utils and type(Utils.IsDev) == "function" and Utils.IsDev() then
+            return true
+        end
+        if Utils and type(Utils.IsVIP) == "function" and Utils.IsVIP() then
+            return true
+        end
+        if getgenv and (getgenv().SonStudioKeyTier == "dev" or getgenv().SonStudioKeyTier == "admin" or getgenv().SonStudioKeyTier == "vip" or getgenv().SonStudioIsVIP == true or getgenv().SonStudioIsDev == true or getgenv().IsDev == true or getgenv().IsVIP == true) then
+            return true
+        end
+        ShowNotify(Utils.t("vip_key_required_title"), Utils.t("vip_key_required_msg"), 5)
+        return false
+    end
+
+    -- ==========================================
+    -- 1. TÍNH NĂNG KHÓA / MỞ KHÓA BATCH PET (TINH GỌN VỚI MULTI-SELECT)
+    -- ==========================================
+    local function ProcessBatchPetLock(targetLockState, criteriaList)
+        if not CheckVIPAccess() then return end
+
+        local now = tick()
+        if isProcessingLock then
+            ShowNotify(Utils.t("warning_title"), Utils.t("warning_processing_lock"), 2)
+            return
+        end
+        if now - lastLockTime < COOLDOWN_DELAY then
+            ShowNotify(Utils.t("warning_title"), string.format(Utils.t("warning_cooldown_wait"), COOLDOWN_DELAY - (now - lastLockTime)), 2)
+            return
+        end
+
+        isProcessingLock = true
+        lastLockTime = now
+
+        local env = GetPathToolEnv()
+        local PetSystem = GetPetSystem()
+        if not PetSystem then
+            warn("❌ [PetManager] Not found PetSystem!")
+            isProcessingLock = false
+            return
+        end
+
+        -- Phân tích tiêu chí được chọn từ Multi-Select Dropdown (So sánh bối cảnh đa ngôn ngữ)
+        local filterRankA = false
+        local filterMutation = false
+        local filterHighTrait = false
+        local filterAllTrait = false
+        local filterAllPets = false
+
+        for _, opt in ipairs(criteriaList or {}) do
+            if string.find(opt, "Grade 4+") or string.find(opt, "Rank A") then filterRankA = true end
+            if string.find(opt, "Shiny") or string.find(opt, "Dị Biến") or string.find(opt, "Mutated") then filterMutation = true end
+            if string.find(opt, "5-6") or string.find(opt, "Q:") then filterHighTrait = true end
+            if string.find(opt, "All Trait") or string.find(opt, "Tất Cả Trait") then filterAllTrait = true end
+            if string.find(opt, "Inventory") or string.find(opt, "Trong Túi") then filterAllPets = true end
+        end
+
+        local itemMap = GetPetMap()
+        local count = 0
+
+        for guid, pet in pairs(itemMap) do
+            local isLocked = pet:IsLock()
+            local grade = pet:GetGrade() or 1
+            local isMutated = HasSpecialProperty(pet)
+            local hasTrait = HasBreedTalent(pet)
+            local traitQuality = GetPetMaxTraitQuality(pet, env)
+
+            local matchesCriteria = false
+
+            if filterAllPets then
+                matchesCriteria = true
+            else
+                if filterRankA and grade >= 4 then matchesCriteria = true end
+                if filterMutation and isMutated then matchesCriteria = true end
+                if filterHighTrait and traitQuality >= 5 then matchesCriteria = true end
+                if filterAllTrait and hasTrait then matchesCriteria = true end
+            end
+
+            if matchesCriteria and (isLocked ~= targetLockState) then
+                local ok = pcall(function()
+                    return PetSystem.ClientLockPet(tostring(guid), targetLockState)
+                end)
+                if ok then
+                    count = count + 1
+                end
+                -- Delay 0.05s an toàn chống spam anti-cheat rate limit
+                task.wait(0.05)
+            end
+        end
+
+        local actionName = targetLockState and (Utils.getLang() == "vi" and "Khóa" or "Locked") or (Utils.getLang() == "vi" and "Mở Khóa" or "Unlocked")
+        ShowNotify("Pet Manager", string.format(Utils.t("notify_lock_success"), actionName, count), 3)
+        isProcessingLock = false
+    end
+
+    -- ==========================================
+    -- 2. TÍNH NĂNG DUNG HỢP / TIẾN HÓA PET (BỘ LỌC THÔNG MINH)
+    -- ==========================================
+    local function ProcessPetFuseOnce(isManualTrigger)
+        if not CheckVIPAccess() then return 0 end
+
+        -- LỌC TÚI ĐẦY (FILTER 5): Nếu bật chế độ chỉ Fuse khi túi sắp đầy, kiểm tra dung lượng túi
+        if autoFuseOnBagFull and not isManualTrigger then
+            local player = GetGamePlayer()
+            if player and player.pet then
+                local currentBag = player.pet:GetBagAmount() or 0
+                local maxBag = player.pet:GetBagCapacity() or 0
+                local freeSlots = maxBag - currentBag
+                if freeSlots > bagFreeSlotThreshold then
+                    return 0 -- Túi vẫn còn rộng rãi, chưa cần auto fuse
+                end
+            end
+        end
+
+        local now = tick()
+        if isProcessingFuse then
+            if isManualTrigger then
+                ShowNotify(Utils.t("warning_title"), Utils.t("warning_processing_fuse"), 2)
+            end
+            return 0
+        end
+
+        if isManualTrigger and (now - lastFuseTime < COOLDOWN_DELAY) then
+            ShowNotify(Utils.t("warning_title"), string.format(Utils.t("warning_cooldown_wait"), COOLDOWN_DELAY - (now - lastFuseTime)), 2)
+            return 0
+        end
+
+        isProcessingFuse = true
+        if isManualTrigger then lastFuseTime = now end
+
+        local env = GetPathToolEnv()
+        local PetSystem = GetPetSystem()
+        if not (env and PetSystem) then
+            isProcessingFuse = false
+            return 0
+        end
+
+        local itemMap = GetPetMap()
+        -- Nhóm các pet theo TmplId (loại pet) và Grade (cùng phẩm cấp)
+        local petGroups = {}
+
+        for guid, pet in pairs(itemMap) do
+            local isLocked = pet:IsLock()
+            local isEquipped = (pet:GetEquipedIndex() ~= nil and pet:GetEquipedIndex() > 0) or pet:IsInTeam()
+            local grade = pet:GetGrade() or 1
+            local tmplId = pet:GetTmplId()
+            local hasMutation = HasSpecialProperty(pet)
+            local hasTrait = HasBreedTalent(pet)
+            local traitQuality = GetPetMaxTraitQuality(pet, env)
+
+            local shouldInclude = true
+            if skipLockedPets and isLocked then shouldInclude = false end
+            if skipEquippedPets and isEquipped then shouldInclude = false end
+            if grade < minFuseGrade or grade > maxFuseGrade then shouldInclude = false end
+
+            if shouldInclude and tmplId then
+                local groupKey = tostring(tmplId) .. "_" .. tostring(grade)
+                if not petGroups[groupKey] then
+                    petGroups[groupKey] = {}
+                end
+                table.insert(petGroups[groupKey], {
+                    Guid = tostring(guid),
+                    PetObj = pet,
+                    IsEquipped = isEquipped,
+                    IsLocked = isLocked,
+                    HasMutation = hasMutation,
+                    HasTrait = hasTrait,
+                    TraitQuality = traitQuality,
+                    Grade = grade,
+                    Tmpl = pet:GetTmpl()
+                })
+            end
+        end
+
+        local totalFused = 0
+        -- Tiến hành dung hợp theo số lượng phôi yêu cầu (CostTmplAmount) của từng loại pet
+        for groupKey, list in pairs(petGroups) do
+            if #list >= 2 then
+                local tmpl = list[1].Tmpl
+                local grade = list[1].Grade
+                local evolveInfo = (tmpl and tmpl.Evolve) and tmpl.Evolve[grade]
+
+                if evolveInfo and evolveInfo.CostTmplAmount then
+                    local reqFoodCount = evolveInfo.CostTmplAmount
+                    local totalNeeded = reqFoodCount + 1
+
+                    -- FILTER PHÂN LOẠI MAIN PET THÔNG MINH:
+                    -- Pet chính: Ưu tiên (1) Pet đang trang bị, (2) Pet có Trait Phẩm Chất Cao Nhất (Quality: 6 > 5 > 4...), (3) Pet có Dị biến.
+                    -- Pet phôi: Loại bỏ Pet Dị biến (nếu skipMutatedPets) & Loại bỏ Pet Trait (nếu skipTraitPets)!
+                    
+                    local validGroupList = {}
+                    for _, p in ipairs(list) do
+                        table.insert(validGroupList, p)
+                    end
+
+                    -- Sắp xếp danh sách: Pet ưu tiên làm Pet chính đứng ĐẦU mảng
+                    table.sort(validGroupList, function(a, b)
+                        if a.IsEquipped ~= b.IsEquipped then
+                            return a.IsEquipped -- 1. Pet đang trang bị đứng đầu
+                        end
+                        if a.TraitQuality ~= b.TraitQuality then
+                            return a.TraitQuality > b.TraitQuality -- 2. Pet có Trait PHẨM CHẤT CAO NHẤT đứng đầu (Q: 6 > 5 > 4...)
+                        end
+                        if a.HasTrait ~= b.HasTrait then
+                            return a.HasTrait -- 3. Pet có Trait đứng đầu làm Pet chính
+                        end
+                        if a.HasMutation ~= b.HasMutation then
+                            return a.HasMutation -- 4. Pet có Dị biến đứng đầu làm Pet chính
+                        end
+                        return a.Guid < b.Guid
+                    end)
+
+                    while #validGroupList >= totalNeeded do
+                        local mainPet = table.remove(validGroupList, 1) -- Chọn pet chính ưu tiên cao nhất
+                        local foodGuids = {}
+
+                        -- Tìm phôi phù hợp trong danh sách còn lại
+                        local i = 1
+                        while i <= #validGroupList and #foodGuids < reqFoodCount do
+                            local candidateFood = validGroupList[i]
+                            
+                            -- FILTER 1 & 6: Bỏ qua nếu pet phôi có Dị biến hoặc Trait/Thiên phú
+                            local isInvalidFood = false
+                            if skipMutatedPets and candidateFood.HasMutation then isInvalidFood = true end
+                            if skipTraitPets and candidateFood.HasTrait then isInvalidFood = true end
+
+                            if isInvalidFood then
+                                i = i + 1
+                            else
+                                local foodPet = table.remove(validGroupList, i)
+                                table.insert(foodGuids, foodPet.Guid)
+                            end
+                        end
+
+                        if #foodGuids == reqFoodCount then
+                            local ok = pcall(function()
+                                if env.ViewUtil and type(env.ViewUtil.DoRequest) == "function" then
+                                    return env.ViewUtil.DoRequest(PetSystem.ClientEvolve, mainPet.Guid, foodGuids)
+                                else
+                                    return PetSystem.ClientEvolve(mainPet.Guid, foodGuids)
+                                end
+                            end)
+                            if ok then
+                                totalFused = totalFused + reqFoodCount
+                            end
+                            -- Delay 0.2s an toàn giữa các lần ghép
+                            task.wait(0.2)
+                        else
+                            -- Không đủ phôi hợp lệ (do vướng filter dị biến/trait), hoàn trả mainPet
+                            table.insert(validGroupList, 1, mainPet)
+                            break
+                        end
+                    end
+                end
+            end
+        end
+
+        isProcessingFuse = false
+        return totalFused
+    end
+
+    -- ==========================================
+    -- GIAO DIỆN UI (RAYFIELD TAB)
+    -- ==========================================
+    local PetTab = Window:CreateTab(Utils.t("pet_manager"), "dog")
+
+    -- SECTION: LOCK & UNLOCK PET (GIAO DIỆN MULTI-SELECT GỌN GÀNG)
+    PetTab:CreateSection(" " .. Utils.t("sec_pet_lock") .. " ")
+
+    PetTab:CreateDropdown({
+        Name = Utils.t("batch_lock_filter"),
+        Info = Utils.t("batch_lock_filter_info"),
+        Options = {
+            Utils.t("criteria_rank_a"),
+            Utils.t("criteria_mutation"),
+            Utils.t("criteria_high_trait"),
+            Utils.t("criteria_all_trait"),
+            Utils.t("criteria_all_pets")
+        },
+        CurrentOption = selectedLockCriteria,
+        MultipleOptions = true,
+        Flag = "PetLockCriteriaDropdown",
+        Callback = function(Options)
+            selectedLockCriteria = Options
+        end
+    })
+
+    PetTab:CreateButton({
+        Name = Utils.t("btn_batch_lock"),
+        Info = Utils.t("btn_batch_lock_info"),
+        Callback = function()
+            task.spawn(function()
+                ProcessBatchPetLock(true, selectedLockCriteria)
+            end)
+        end
+    })
+
+    PetTab:CreateButton({
+        Name = Utils.t("btn_batch_unlock"),
+        Info = Utils.t("btn_batch_unlock_info"),
+        Callback = function()
+            task.spawn(function()
+                ProcessBatchPetLock(false, selectedLockCriteria)
+            end)
+        end
+    })
+
+    -- SECTION: FUSE & EVOLVE
+    PetTab:CreateSection(" " .. Utils.t("sec_pet_fuse") .. " ")
+
+    PetTab:CreateDropdown({
+        Name = Utils.t("max_fuse_rank"),
+        Info = Utils.t("max_fuse_rank_info"),
+        Options = {
+            Utils.t("fuse_option_rank_b"),
+            Utils.t("fuse_option_rank_c"),
+            Utils.t("fuse_option_rank_d"),
+            Utils.t("fuse_option_rank_a")
+        },
+        CurrentOption = {Utils.t("fuse_option_rank_b")},
+        Flag = "MaxFuseRankDropdown",
+        Callback = function(Options)
+            local sel = Options[1] or ""
+            if string.find(sel, "Grade 1") or string.find(sel, "Rank D") then maxFuseGrade = 1
+            elseif string.find(sel, "Grade 2") or string.find(sel, "Rank C") then maxFuseGrade = 2
+            elseif string.find(sel, "Grade 4") or string.find(sel, "Rank A") then maxFuseGrade = 4
+            else maxFuseGrade = 3 end
+        end
+    })
+
+    PetTab:CreateToggle({
+        Name = Utils.t("skip_mutated_pets"),
+        Info = Utils.t("skip_mutated_pets_info"),
+        CurrentValue = true,
+        Flag = "SkipMutatedPetsFlag",
+        Callback = function(Value)
+            skipMutatedPets = Value
+        end
+    })
+
+    PetTab:CreateToggle({
+        Name = Utils.t("skip_trait_pets"),
+        Info = Utils.t("skip_trait_pets_info"),
+        CurrentValue = true,
+        Flag = "SkipTraitPetsFlag",
+        Callback = function(Value)
+            skipTraitPets = Value
+        end
+    })
+
+    PetTab:CreateToggle({
+        Name = Utils.t("skip_locked_pets"),
+        Info = Utils.t("skip_locked_pets_info"),
+        CurrentValue = true,
+        Flag = "SkipLockedPetsFlag",
+        Callback = function(Value)
+            skipLockedPets = Value
+        end
+    })
+
+    PetTab:CreateToggle({
+        Name = Utils.t("skip_equipped_pets"),
+        Info = Utils.t("skip_equipped_pets_info"),
+        CurrentValue = true,
+        Flag = "SkipEquippedPetsFlag",
+        Callback = function(Value)
+            skipEquippedPets = Value
+        end
+    })
+
+    PetTab:CreateToggle({
+        Name = Utils.t("auto_fuse_bag_full"),
+        Info = Utils.t("auto_fuse_bag_full_info"),
+        CurrentValue = false,
+        Flag = "AutoFuseOnBagFullFlag",
+        Callback = function(Value)
+            autoFuseOnBagFull = Value
+        end
+    })
+
+    PetTab:CreateToggle({
+        Name = Utils.t("auto_fuse_pets"),
+        Info = Utils.t("auto_fuse_pets_info"),
+        CurrentValue = false,
+        Flag = "AutoPetFuseToggle",
+        Callback = function(Value)
+            autoFuseEnabled = Value
+        end
+    })
+
+    PetTab:CreateButton({
+        Name = Utils.t("btn_fuse_now"),
+        Info = Utils.t("btn_fuse_now_info"),
+        Callback = function()
+            task.spawn(function()
+                local fusedCount = ProcessPetFuseOnce(true)
+                if fusedCount and fusedCount > 0 then
+                    ShowNotify("Pet Fuse", string.format(Utils.t("notify_fuse_success"), fusedCount), 3)
+                end
+            end)
+        end
+    })
+
+    -- VÒNG LẶP AUTO FUSE
+    task.spawn(function()
+        while task.wait(4) do
+            if autoFuseEnabled then
+                pcall(function()
+                    ProcessPetFuseOnce(false)
+                end)
+            end
+        end
+    end)
+end
+end
+
 -- ========================================== --
 -- MAIN LOADER START                          --
 -- ========================================== --
