@@ -10311,7 +10311,6 @@ end
 
 end
 
-
 modules['features/pet_manager.txt'] = function(...)
 -- ====================================================================
 -- MODULE: PET MANAGER V4.0 (QUẢN LÝ KHÓA/MỞ KHÓA & DUNG HỢP PET AN TOÀN)
@@ -10867,6 +10866,7 @@ return function(Window, Utils)
         end
     end)
 end
+
 end
 
 -- ========================================== --

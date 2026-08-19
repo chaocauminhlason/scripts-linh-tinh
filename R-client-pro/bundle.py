@@ -21,7 +21,8 @@ def bundle():
         'features/auto_rift.txt',
         'features/optimization.txt',
         'features/ai_assistant.txt',
-        'features/auto_event.txt'
+        'features/auto_event.txt',
+        'features/pet_manager.txt'
     ]
 
     # Các file khác cần đóng gói vào modules
