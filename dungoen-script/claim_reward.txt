@@ -491,8 +491,72 @@ local DragDrop = {
     previewTargetIndex = nil
 }
 
+local ITEM_ICONS = {
+    -- Door Icons (Cửa)
+    ["Thẻ Chọn Lại"]     = "rbxassetid://87744905975972",
+    ["Phòng Hồi Sinh"]   = "rbxassetid://97568742355714",
+    ["Xu Shop"]          = "rbxassetid://113200215489277",
+    ["Đá Pet Xanh Dương"]= "rbxassetid://128699832318992",
+    ["Đá Pet Xanh Lá"]   = "rbxassetid://90131951298636",
+    ["Quả EXP"]          = "rbxassetid://109706574020670",
+    ["Xu Vàng"]          = "rbxassetid://112621630251036",
+    ["Đá Nguyên Tố"]     = "rbxassetid://113790583258911",
+    ["Phòng Boss"]       = "rbxassetid://113226220478841",
+
+    -- Buff Icons (Talents)
+    ["Emergency Bandage"] = "rbxassetid://97568742355714",
+    ["Stun Immunity"]     = "rbxassetid://120272995558220",
+    ["Reflect damage"]   = "rbxassetid://120272995558220",
+    ["HP Boost IV"]       = "rbxassetid://125443771467721",
+    ["HP Boost III"]      = "rbxassetid://125443771467721",
+    ["HP Boost II"]       = "rbxassetid://125443771467721",
+    ["HP Boost I"]        = "rbxassetid://125443771467721",
+    ["Shield Effect IV"]  = "rbxassetid://120272995558220",
+    ["Shield Effect III"] = "rbxassetid://120272995558220",
+    ["Shield Effect II"]  = "rbxassetid://120272995558220",
+    ["Shield Effect I"]   = "rbxassetid://120272995558220",
+    ["Attack V"]          = "rbxassetid://116400329533506",
+    ["Attack IV"]         = "rbxassetid://116400329533506",
+    ["Attack III"]        = "rbxassetid://116400329533506",
+    ["Attack II"]         = "rbxassetid://116400329533506",
+    ["Attack I"]          = "rbxassetid://116400329533506",
+    ["Critical Damage V"] = "rbxassetid://79262586510931",
+    ["Critical Damage IV"]= "rbxassetid://79262586510931",
+    ["Critical Damage III"]= "rbxassetid://79262586510931",
+    ["Critical Damage II"]= "rbxassetid://79262586510931",
+    ["Critical Damage I"] = "rbxassetid://79262586510931",
+    ["Critical V"]        = "rbxassetid://79262586510931",
+    ["Critical IV"]       = "rbxassetid://79262586510931",
+    ["Critical III"]      = "rbxassetid://79262586510931",
+    ["Critical II"]       = "rbxassetid://79262586510931",
+    ["Critical I"]        = "rbxassetid://79262586510931"
+}
+
+-- Tự động nạp bổ sung từ CfgAbyss nếu có (Dynamic fallback)
+pcall(function()
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local CfgAbyss = require(ReplicatedStorage.CommonConfig.Abyss.CfgAbyss)
+    if CfgAbyss and CfgAbyss.TalentTmpls then
+        for _, info in pairs(CfgAbyss.TalentTmpls) do
+            if info.Name and info.Icon and not ITEM_ICONS[info.Name] then
+                ITEM_ICONS[info.Name] = info.Icon
+            end
+        end
+    end
+end)
+
+local function GetItemIcon(name, isDoor)
+    if ITEM_ICONS[name] then return ITEM_ICONS[name] end
+    for k, v in pairs(ITEM_ICONS) do
+        if string.find(string.lower(name), string.lower(k)) or string.find(string.lower(k), string.lower(name)) then
+            return v
+        end
+    end
+    return nil
+end
+
 -- Tạo row cho danh sách
-local function CreateDragRow(index, name, isGhost, isHighlight)
+local function CreateDragRow(index, name, isGhost, isHighlight, isDoor)
     local row = Instance.new("Frame")
     row.Size = UDim2.new(1, -8, 0, 32)
     
@@ -512,7 +576,7 @@ local function CreateDragRow(index, name, isGhost, isHighlight)
     Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
     
     local dragHandle = Instance.new("TextButton")
-    dragHandle.Size = UDim2.new(0, 32, 1, 0)
+    dragHandle.Size = UDim2.new(0, 28, 1, 0)
     dragHandle.BackgroundColor3 = isGhost and Color3.fromRGB(60, 65, 80) or Color3.fromRGB(50, 55, 70)
     dragHandle.Text = "⋮⋮"
     dragHandle.TextColor3 = isGhost and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(180, 180, 200)
@@ -522,14 +586,33 @@ local function CreateDragRow(index, name, isGhost, isHighlight)
     dragHandle.Parent = row
     Instance.new("UICorner", dragHandle).CornerRadius = UDim.new(0, 6)
     
+    local iconAsset = GetItemIcon(name, isDoor)
+    local textOffset = 34
+    
+    if iconAsset then
+        local imgIcon = Instance.new("ImageLabel")
+        imgIcon.Size = UDim2.new(0, 22, 0, 22)
+        imgIcon.Position = UDim2.new(0, 32, 0, 5)
+        imgIcon.BackgroundTransparency = 1
+        imgIcon.Image = iconAsset
+        imgIcon.ImageTransparency = isGhost and 0.5 or 0
+        imgIcon.Parent = row
+        
+        local imgCorner = Instance.new("UICorner")
+        imgCorner.CornerRadius = UDim.new(0, 4)
+        imgCorner.Parent = imgIcon
+        
+        textOffset = 58
+    end
+    
     local txt = Instance.new("TextLabel")
-    txt.Size = UDim2.new(1, -40, 1, 0)
-    txt.Position = UDim2.new(0, 38, 0, 0)
+    txt.Size = UDim2.new(1, -(textOffset + 4), 1, 0)
+    txt.Position = UDim2.new(0, textOffset, 0, 0)
     txt.BackgroundTransparency = 1
     txt.Text = string.format("%d. %s", index, name)
     txt.TextColor3 = isGhost and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(220, 220, 220)
     txt.Font = Enum.Font.SourceSans
-    txt.TextSize = 11
+    txt.TextSize = 12
     txt.TextXAlignment = Enum.TextXAlignment.Left
     txt.TextTruncate = Enum.TextTruncate.AtEnd
     txt.Parent = row
@@ -549,7 +632,7 @@ local function RenderListBasic(scrollFrame, dataList, isDoor)
     end
     
     for i, name in ipairs(dataList) do
-        local row = CreateDragRow(i, name, false, false)
+        local row = CreateDragRow(i, name, false, false, isDoor)
         row:SetAttribute("Index", i)
         row.Parent = scrollFrame
         
@@ -571,7 +654,7 @@ local function RenderListBasic(scrollFrame, dataList, isDoor)
                 DragDrop.offset = Vector2.new(mousePos.X - rowPos.X, mousePos.Y - rowPos.Y)
                 
                 -- Tạo ghost
-                DragDrop.ghost = CreateDragRow(i, name, true, false)
+                DragDrop.ghost = CreateDragRow(i, name, true, false, isDoor)
                 DragDrop.ghost.Size = UDim2.new(0, row.AbsoluteSize.X, 0, 32)
                 DragDrop.ghost.ZIndex = 100
                 DragDrop.ghost.Position = UDim2.new(0, mousePos.X - DragDrop.offset.X, 0, mousePos.Y - DragDrop.offset.Y)
@@ -582,6 +665,8 @@ local function RenderListBasic(scrollFrame, dataList, isDoor)
                 for _, child in ipairs(row:GetDescendants()) do
                     if child:IsA("TextLabel") or child:IsA("TextButton") then
                         child.TextTransparency = 0.5
+                    elseif child:IsA("ImageLabel") then
+                        child.ImageTransparency = 0.5
                     end
                 end
             end)
