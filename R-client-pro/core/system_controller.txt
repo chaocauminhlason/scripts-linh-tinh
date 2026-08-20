@@ -59,14 +59,16 @@ function SystemController.RequestLock(taskName)
     
     if SystemController.ActiveTask == nil or SystemController.ActiveTask == taskName then
         SystemController.ActiveTask = taskName
+        SystemController.CurrentLock = taskName
         return true
     end
     return false -- Đang có Task khác chạy, bị từ chối
 end
 
 function SystemController.ReleaseLock(taskName)
-    if SystemController.ActiveTask == taskName then
+    if SystemController.ActiveTask == taskName or taskName == nil then
         SystemController.ActiveTask = nil
+        SystemController.CurrentLock = nil
     end
 end
 

@@ -424,13 +424,24 @@ function Utils.GetCurrentAreaId()
         local mainGui = playerGui:FindFirstChild("MainGui")
         local screenGui = mainGui and mainGui:FindFirstChild("ScreenGui")
         if screenGui then
-            local abyssView = screenGui:FindFirstChild("AbyssMainTopView")
-            if abyssView and abyssView.Visible then
+            -- 1. Ưu tiên nhận diện Abyss (Dungeon / Hầm Ngục)
+            local abyssTop = screenGui:FindFirstChild("AbyssMainTopView")
+            local abyssRight = screenGui:FindFirstChild("AbyssMainRightView")
+            local abyssLeft = screenGui:FindFirstChild("AbyssMainLeftView")
+            if (abyssTop and abyssTop.Visible) or (abyssRight and abyssRight.Visible) or (abyssLeft and abyssLeft.Visible) then
                 return "Abyss"
             end
             
-            local arenaView = screenGui:FindFirstChild("ArenaMainRightTopView")
-            if arenaView and arenaView.Visible then
+            -- Kiểm tra LabStage (text hiển thị tầng phụ bản 1/20, 2/20...)
+            local labStage = Utils.FindUIElementByName(playerGui, "LabStage")
+            if labStage and labStage.Text ~= "Unknown" and labStage.Text ~= "" then
+                return "Abyss"
+            end
+            
+            -- 2. Nhận diện Rift (Cổng Khe Nứt / Dynamic & Static Rift)
+            local arenaRight = screenGui:FindFirstChild("ArenaMainRightView")
+            local arenaTop = screenGui:FindFirstChild("ArenaMainRightTopView")
+            if (arenaRight and arenaRight.Visible) or (arenaTop and arenaTop.Visible) then
                 return "Rift"
             end
         end
@@ -1867,14 +1878,16 @@ function SystemController.RequestLock(taskName)
     
     if SystemController.ActiveTask == nil or SystemController.ActiveTask == taskName then
         SystemController.ActiveTask = taskName
+        SystemController.CurrentLock = taskName
         return true
     end
     return false -- Đang có Task khác chạy, bị từ chối
 end
 
 function SystemController.ReleaseLock(taskName)
-    if SystemController.ActiveTask == taskName then
+    if SystemController.ActiveTask == taskName or taskName == nil then
         SystemController.ActiveTask = nil
+        SystemController.CurrentLock = nil
     end
 end
 
@@ -7560,7 +7573,23 @@ return function(Window, Utils)
             if success and pos then return pos end
         end
         if obj:IsA("Model") and obj.PrimaryPart then return obj.PrimaryPart.Position end
-        return obj:GetPivot().Position 
+    local function IsInAbyss()
+        if Utils and type(Utils.GetCurrentAreaId) == "function" then
+            return Utils.GetCurrentAreaId() == "Abyss"
+        end
+        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+        local screenGui = playerGui and playerGui:FindFirstChild("MainGui") and playerGui.MainGui:FindFirstChild("ScreenGui")
+        if screenGui and (screenGui:FindFirstChild("AbyssMainTopView") or screenGui:FindFirstChild("AbyssMainRightView") or screenGui:FindFirstChild("AbyssMainLeftView")) then
+            return true
+        end
+        return false
+    end
+
+    local function IsInRift()
+        if Utils and type(Utils.GetCurrentAreaId) == "function" then
+            return Utils.GetCurrentAreaId() == "Rift"
+        end
+        return false
     end
 
     local function IsInOpenWorld()
@@ -7924,6 +7953,21 @@ return function(Window, Utils)
             local humanoid = char and char:FindFirstChild("Humanoid")
             if not (hrp and humanoid and humanoid.Health > 0) then continue end
 
+            -- [CHỐNG XUNG ĐỘT DUNGEON / ABYSS]: Nếu đang trong Dungeon hoặc AutoDungeon đang giữ Lock -> Dừng AutoRift hoàn toàn
+            if IsInAbyss() or (controller and (controller.ActiveTask == "AutoDungeon" or controller.CurrentLock == "AutoDungeon")) then
+                if riftState ~= "SCANNING" then
+                    riftState = "SCANNING"
+                    targetRiftId = nil
+                    targetRiftKey = nil
+                    riftEntryPosition = nil
+                    hasEncounteredMonsters = false
+                    combatStartTime = 0
+                end
+                RiftStatus:Set(Utils.t("dg_label_lobby_yield_boss") or "Nhường Hầm ngục...")
+                task.wait(1)
+                continue
+            end
+
             -- [Bám sát vị trí thực tế - Đồng bộ trạng thái logic]
             if IsInOpenWorld() then
                 if riftState == "COMBAT" or riftState == "EXITING" then
@@ -7935,8 +7979,8 @@ return function(Window, Utils)
                     hasEncounteredMonsters = false
                     combatStartTime = 0
                 end
-            else
-                -- Nếu nhân vật đang ở trong phó bản nhưng trạng thái logic vẫn là SCANNING -> Buộc chuyển sang COMBAT
+            elseif IsInRift() then
+                -- Nếu nhân vật đang ở trong Rift thực sự nhưng trạng thái logic vẫn là SCANNING -> Buộc chuyển sang COMBAT
                 if riftState == "SCANNING" then
                     print("[AutoRift] Phát hiện đang ở trong Rift. Tự động ép trạng thái sang COMBAT.")
                     riftState = "COMBAT"

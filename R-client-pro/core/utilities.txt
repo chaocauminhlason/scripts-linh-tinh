@@ -301,13 +301,24 @@ function Utils.GetCurrentAreaId()
         local mainGui = playerGui:FindFirstChild("MainGui")
         local screenGui = mainGui and mainGui:FindFirstChild("ScreenGui")
         if screenGui then
-            local abyssView = screenGui:FindFirstChild("AbyssMainTopView")
-            if abyssView and abyssView.Visible then
+            -- 1. Ưu tiên nhận diện Abyss (Dungeon / Hầm Ngục)
+            local abyssTop = screenGui:FindFirstChild("AbyssMainTopView")
+            local abyssRight = screenGui:FindFirstChild("AbyssMainRightView")
+            local abyssLeft = screenGui:FindFirstChild("AbyssMainLeftView")
+            if (abyssTop and abyssTop.Visible) or (abyssRight and abyssRight.Visible) or (abyssLeft and abyssLeft.Visible) then
                 return "Abyss"
             end
             
-            local arenaView = screenGui:FindFirstChild("ArenaMainRightTopView")
-            if arenaView and arenaView.Visible then
+            -- Kiểm tra LabStage (text hiển thị tầng phụ bản 1/20, 2/20...)
+            local labStage = Utils.FindUIElementByName(playerGui, "LabStage")
+            if labStage and labStage.Text ~= "Unknown" and labStage.Text ~= "" then
+                return "Abyss"
+            end
+            
+            -- 2. Nhận diện Rift (Cổng Khe Nứt / Dynamic & Static Rift)
+            local arenaRight = screenGui:FindFirstChild("ArenaMainRightView")
+            local arenaTop = screenGui:FindFirstChild("ArenaMainRightTopView")
+            if (arenaRight and arenaRight.Visible) or (arenaTop and arenaTop.Visible) then
                 return "Rift"
             end
         end
