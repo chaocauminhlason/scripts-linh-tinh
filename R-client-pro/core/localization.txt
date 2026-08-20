@@ -128,6 +128,10 @@ local Translations = {
     ["notify_lock_success"] = { en = "Successfully %s %d pets!", vi = "Đã %s thành công %d Pet!" },
     ["notify_fuse_success"] = { en = "Successfully fused %d ingredient pets!", vi = "Đã dung hợp thành công %d Pet phôi!" },
 
+    -- Auto Dungeon keys
+    ["dg_auto_replay"] = { en = "Auto Replay (Restart Key)", vi = "Tự Động Chơi Lại (Dùng Key)" },
+    ["dg_auto_replay_info"] = { en = "Automatically clicks the Replay button when the 20/20 Abyss Win dialog appears to use a key and restart immediately.", vi = "Tự động bấm nút Chơi Lại (Replay) khi xuất hiện bảng Abyss Win 20/20 để dùng chìa khóa đi tiếp ngay lập tức." },
+
     -- Server Manager keys
     ["server"] = { en = "Server Manager", vi = "Quản Lý Server" },
     ["sec_session_info"] = { en = "SESSION INFO", vi = "THÔNG TIN PHIÊN LÀM VIỆC" },

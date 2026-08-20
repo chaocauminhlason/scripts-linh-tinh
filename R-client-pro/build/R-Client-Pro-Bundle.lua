@@ -2310,6 +2310,10 @@ local Translations = {
     ["notify_lock_success"] = { en = "Successfully %s %d pets!", vi = "Đã %s thành công %d Pet!" },
     ["notify_fuse_success"] = { en = "Successfully fused %d ingredient pets!", vi = "Đã dung hợp thành công %d Pet phôi!" },
 
+    -- Auto Dungeon keys
+    ["dg_auto_replay"] = { en = "Auto Replay (Restart Key)", vi = "Tự Động Chơi Lại (Dùng Key)" },
+    ["dg_auto_replay_info"] = { en = "Automatically clicks the Replay button when the 20/20 Abyss Win dialog appears to use a key and restart immediately.", vi = "Tự động bấm nút Chơi Lại (Replay) khi xuất hiện bảng Abyss Win 20/20 để dùng chìa khóa đi tiếp ngay lập tức." },
+
     -- Server Manager keys
     ["server"] = { en = "Server Manager", vi = "Quản Lý Server" },
     ["sec_session_info"] = { en = "SESSION INFO", vi = "THÔNG TIN PHIÊN LÀM VIỆC" },
@@ -5897,6 +5901,7 @@ return function(Window, Utils, WebhookModule)
     -- Biến trạng thái hệ thống
     local masterSwitchEnabled = false
     local autoExitEnabled = false
+    local autoReplayEnabled = true
     local autoExitTriggered = false
     local stage20ClockStarted = false
     local autoAttackEnabled = false
@@ -6010,6 +6015,7 @@ return function(Window, Utils, WebhookModule)
 
     DungeonTab:CreateSection(" " .. Utils.t("sec_in_dungeon") .. " ")
     DungeonTab:CreateToggle({ Name = Utils.t("dg_auto_attack"), Info = Utils.t("dg_auto_attack_info"), CurrentValue = false, Flag = "AutoAttack_V2", Callback = function(Value) autoAttackEnabled = Value end })
+    DungeonTab:CreateToggle({ Name = Utils.t("dg_auto_replay"), Info = Utils.t("dg_auto_replay_info"), CurrentValue = true, Flag = "AutoReplayDungeon", Callback = function(Value) autoReplayEnabled = Value end })
     DungeonTab:CreateToggle({ Name = Utils.t("dg_auto_exit_20"), Info = Utils.t("dg_auto_exit_20_info"), CurrentValue = false, Flag = "AutoExitDungeon", Callback = function(Value) autoExitEnabled = Value if not Value then autoExitTriggered = false stage20ClockStarted = false waitingForHost = false end end })
     
     DungeonTab:CreateButton({
@@ -6182,20 +6188,29 @@ return function(Window, Utils, WebhookModule)
                     else dungeonStuckTimer = 0 SmartDismount() end
                 end
 
-                local shouldCheckCompletion = autoExitEnabled or autoCreateEnabled or autoJoinOthersEnabled
+                local shouldCheckCompletion = autoExitEnabled or autoCreateEnabled or autoJoinOthersEnabled or autoReplayEnabled
                 if shouldCheckCompletion and not autoExitTriggered then
                     local fmTimeFrame = nil
                     pcall(function() fmTimeFrame = playerGui.MainGui.ScreenGui.ArenaMainRightTopView.FmTime end)
                     local currentStage, maxStage = string.match(labStage.Text, "(%d+)/(%d+)")
                     
-                    -- Kiểm tra giao diện kết quả màn chơi (Thắng/Thua)
+                    -- Kiểm tra giao diện kết quả màn chơi (Thắng/Thua/WinResult)
                     local isSettled = false
+                    local winView = nil
                     pcall(function()
-                        local screenGui = playerGui.MainGui.ScreenGui
-                        for _, view in ipairs(screenGui:GetChildren()) do
-                            if view.Visible and (string.find(view.Name, "WinResultView") or string.find(view.Name, "FailResultView") or string.find(view.Name, "Settlement")) then
+                        local screenGui = playerGui:FindFirstChild("MainGui") and playerGui.MainGui:FindFirstChild("ScreenGui")
+                        if screenGui then
+                            winView = screenGui:FindFirstChild("AbyssWinResultView")
+                            if winView and winView.Visible then
                                 isSettled = true
-                                break
+                            else
+                                for _, view in ipairs(screenGui:GetChildren()) do
+                                    if view.Visible and (string.find(view.Name, "WinResultView") or string.find(view.Name, "FailResultView") or string.find(view.Name, "Settlement")) then
+                                        isSettled = true
+                                        winView = view
+                                        break
+                                    end
+                                end
                             end
                         end
                     end)
@@ -6253,8 +6268,8 @@ return function(Window, Utils, WebhookModule)
                                     end
                                 end
                             end
-                        elseif autoCreateEnabled then
-                            -- Bật Auto Create mà không bật Auto Join -> Dùng chìa khóa đi tiếp ngay tại đấy
+                        elseif autoReplayEnabled or autoCreateEnabled then
+                            -- Bật Auto Replay / Auto Create -> Tự động bấm nút Replay (BtRestart) và gửi remote
                             autoExitTriggered = true
                             DungeonStatus:Set(Utils.t("dg_label_boss_key"))
                             task.spawn(function()
@@ -6263,18 +6278,47 @@ return function(Window, Utils, WebhookModule)
                                 end
                             end)
                             
+                            -- 1. Tìm và click nút BtRestart trên UI AbyssWinResultView
+                            local btRestart = winView and winView:FindFirstChild("BtRestart", true)
+                            if not btRestart then
+                                local screenGui = playerGui:FindFirstChild("MainGui") and playerGui.MainGui:FindFirstChild("ScreenGui")
+                                if screenGui then
+                                    for _, v in ipairs(screenGui:GetDescendants()) do
+                                        if v:IsA("GuiButton") and v.Visible and (v.Name == "BtRestart" or v.Name == "BtnRestart" or v.Name == "BtReplay") then
+                                            btRestart = v
+                                            break
+                                        end
+                                    end
+                                end
+                            end
+                            
+                            if btRestart then
+                                if firesignal then
+                                    pcall(function() firesignal(btRestart.Activated) end)
+                                    pcall(function() firesignal(btRestart.MouseButton1Click) end)
+                                end
+                                if getconnections then
+                                    pcall(function()
+                                        for _, conn in ipairs(getconnections(btRestart.Activated)) do pcall(conn.Function) end
+                                        for _, conn in ipairs(getconnections(btRestart.MouseButton1Click)) do pcall(conn.Function) end
+                                    end)
+                                end
+                                pcall(function() Utils.ClickButtonExact(btRestart, "Nút Replay Dungeon") end)
+                            end
+
+                            -- 2. Gửi Remote Network trực tiếp
                             pcall(function()
                                 local args = { "AbyssRestartChannel" }
                                 game:GetService("ReplicatedStorage"):WaitForChild("CommonLibrary"):WaitForChild("Tool"):WaitForChild("RemoteManager"):WaitForChild("Funcs"):WaitForChild("DataPullFunc"):InvokeServer(unpack(args))
                             end)
                             
-                            task.wait(5) -- Đợi game dịch chuyển sang map mới
+                            task.wait(4) -- Đợi game dịch chuyển sang map mới
                             autoExitTriggered = false
                             stage20ClockStarted = false
                             waitingForHost = false
                             hostMissingTime = nil
                         else
-                            -- Không bật cả hai -> Thoát bình thường
+                            -- Không bật Replay/Create -> Thoát bình thường
                             autoExitTriggered = true 
                             DungeonStatus:Set(Utils.t("dg_label_boss_done_exit"))
                             task.spawn(function() if WebhookModule and WebhookModule.SendNotification then WebhookModule.SendNotification("**" .. LocalPlayer.Name .. "** vừa hoàn thành vòng Dungeon 20/20!") end end)
