@@ -575,46 +575,30 @@ local function CreateDragRow(index, name, isGhost, isHighlight, isDoor)
     row.ClipsDescendants = true
     Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
     
-    local dragHandle = Instance.new("ImageButton")
-    dragHandle.Name = "DragHandle"
-    dragHandle.Size = UDim2.new(0, 26, 1, 0)
-    dragHandle.BackgroundColor3 = isGhost and Color3.fromRGB(60, 65, 80) or Color3.fromRGB(50, 55, 70)
-    dragHandle.Image = "rbxassetid://10709769841" -- Lucide grip-vertical asset
-    dragHandle.ImageColor3 = isGhost and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(180, 180, 200)
-    dragHandle.ImageTransparency = isGhost and 0.5 or 0
-    dragHandle.ScaleType = Enum.ScaleType.Fit
-    dragHandle.AutoButtonColor = false
-    dragHandle.Parent = row
-    Instance.new("UICorner", dragHandle).CornerRadius = UDim.new(0, 6)
-    
-    local handlePadding = Instance.new("UIPadding")
-    handlePadding.PaddingTop = UDim.new(0, 7)
-    handlePadding.PaddingBottom = UDim.new(0, 7)
-    handlePadding.PaddingLeft = UDim.new(0, 5)
-    handlePadding.PaddingRight = UDim.new(0, 5)
-    handlePadding.Parent = dragHandle
-    
     local iconAsset = GetItemIcon(name, isDoor)
-    local textOffset = 32
+    local textOffset = 10
     
     if iconAsset then
         local imgIcon = Instance.new("ImageLabel")
+        imgIcon.Name = "ItemIcon"
         imgIcon.Size = UDim2.new(0, 22, 0, 22)
-        imgIcon.Position = UDim2.new(0, 30, 0, 5)
+        imgIcon.Position = UDim2.new(0, 8, 0, 5)
         imgIcon.BackgroundTransparency = 1
         imgIcon.Image = iconAsset
         imgIcon.ImageTransparency = isGhost and 0.5 or 0
+        imgIcon.ScaleType = Enum.ScaleType.Fit
         imgIcon.Parent = row
         
         local imgCorner = Instance.new("UICorner")
         imgCorner.CornerRadius = UDim.new(0, 4)
         imgCorner.Parent = imgIcon
         
-        textOffset = 56
+        textOffset = 36
     end
     
     local txt = Instance.new("TextLabel")
-    txt.Size = UDim2.new(1, -(textOffset + 4), 1, 0)
+    txt.Name = "ItemText"
+    txt.Size = UDim2.new(1, -(textOffset + 6), 1, 0)
     txt.Position = UDim2.new(0, textOffset, 0, 0)
     txt.BackgroundTransparency = 1
     txt.Text = string.format("%d. %s", index, name)
@@ -624,6 +608,17 @@ local function CreateDragRow(index, name, isGhost, isHighlight, isDoor)
     txt.TextXAlignment = Enum.TextXAlignment.Left
     txt.TextTruncate = Enum.TextTruncate.AtEnd
     txt.Parent = row
+    
+    -- Nút bấm tàng hình phủ toàn bộ thẻ để kéo thả mượt mà
+    local dragBtn = Instance.new("TextButton")
+    dragBtn.Name = "DragButton"
+    dragBtn.Size = UDim2.new(1, 0, 1, 0)
+    dragBtn.Position = UDim2.new(0, 0, 0, 0)
+    dragBtn.BackgroundTransparency = 1
+    dragBtn.Text = ""
+    dragBtn.AutoButtonColor = false
+    dragBtn.ZIndex = 5
+    dragBtn.Parent = row
     
     return row
 end
@@ -644,7 +639,7 @@ local function RenderListBasic(scrollFrame, dataList, isDoor)
         row:SetAttribute("Index", i)
         row.Parent = scrollFrame
         
-        local handle = row:FindFirstChildWhichIsA("GuiButton")
+        local handle = row:FindFirstChild("DragButton") or row:FindFirstChildWhichIsA("GuiButton")
         if handle then
             handle.MouseButton1Down:Connect(function()
                 if DragDrop.active then return end
@@ -673,7 +668,7 @@ local function RenderListBasic(scrollFrame, dataList, isDoor)
                 for _, child in ipairs(row:GetDescendants()) do
                     if child:IsA("TextLabel") then
                         child.TextTransparency = 0.5
-                    elseif child:IsA("ImageLabel") or child:IsA("ImageButton") then
+                    elseif child:IsA("ImageLabel") then
                         child.ImageTransparency = 0.5
                     end
                 end
