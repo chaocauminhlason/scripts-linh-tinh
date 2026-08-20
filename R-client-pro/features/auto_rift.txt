@@ -232,6 +232,9 @@ return function(Window, Utils)
             if success and pos then return pos end
         end
         if obj:IsA("Model") and obj.PrimaryPart then return obj.PrimaryPart.Position end
+        return obj:GetPivot().Position 
+    end
+
     local function IsInAbyss()
         if Utils and type(Utils.GetCurrentAreaId) == "function" then
             return Utils.GetCurrentAreaId() == "Abyss"
