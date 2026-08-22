@@ -369,7 +369,8 @@ local AreaMap = {
     [10] = "Mobius Circus",
     [11] = "Specter Shallows",
     [12] = "Nova Coast",
-    [13] = "Coilwork City"
+    [13] = "Splash Isle",
+    [14] = "Coilwork City"
 }
 
 -- ==========================================
@@ -1142,19 +1143,20 @@ end)
 
 -- BẢNG KHU VỰC MỞ RỘNG (Có thể thêm tùy ý)
 local AreaData = {
-    {id = 1, name = "Starter Island", category = "Cơ Bản"},
-    {id = 2, name = "Volcano", category = "Săn Boss"},
-    {id = 3, name = "Frost Isle", category = "Săn Boss"},
-    {id = 4, name = "Neverland", category = "Săn Boss"},
-    {id = 5, name = "Duneveil Isle", category = "Săn Boss"},
-    {id = 6, name = "Tideland", category = "Săn Boss"},
-    {id = 7, name = "Spirit Grove", category = "Săn Boss"},
-    {id = 8, name = "Dragon's Breath", category = "Săn Boss"},
-    {id = 9, name = "Blossom Haven", category = "Săn Boss"},
-    {id = 10, name = "Mobius Circus", category = "Săn Boss"},
-    {id = 11, name = "Specter Shallows", category = "Săn Boss"},
-    {id = 12, name = "Nova Coast", category = "Săn Boss"},
-    {id=13, name= "Splash Isle", category = "Săn Boss"}
+    {id = 1,  name = "Starter Island"},
+    {id = 2,  name = "Volcano"},
+    {id = 3,  name = "Frost Isle"},
+    {id = 4,  name = "Neverland"},
+    {id = 5,  name = "Duneveil Isle"},
+    {id = 6,  name = "Tideland"},
+    {id = 7,  name = "Spirit Grove"},
+    {id = 8,  name = "Dragon's Breath"},
+    {id = 9,  name = "Blossom Haven"},
+    {id = 10, name = "Mobius Circus"},
+    {id = 11, name = "Specter Shallows"},
+    {id = 12, name = "Nova Coast"},
+    {id = 13, name = "Splash Isle"},
+    {id = 14, name = "Coilwork City"}
 }
 -- ==========================================
 -- ==========================================
@@ -1320,23 +1322,10 @@ function Utils.GetAreaNamesByIds(areaIds)
 end
 
 -- ==========================================
--- 4. LẤY DANH SÁCH TẤT CẢ KHU VỰC (CÓ CATEGORY)
+-- 4. LẤY DANH SÁCH TẤT CẢ KHU VỰC
 -- ==========================================
 function Utils.GetAllAreas()
     return AreaData
-end
-
--- ==========================================
--- 5. LẤY DANH SÁCH KHU VỰC THEO CATEGORY
--- ==========================================
-function Utils.GetAreasByCategory(category)
-    local result = {}
-    for _, area in ipairs(AreaData) do
-        if area.category == category then
-            table.insert(result, area)
-        end
-    end
-    return result
 end
 
 -- ==========================================
@@ -1458,9 +1447,8 @@ end
 -- ==========================================
 -- 9. THÊM KHU VỰC MỚI VÀO HỆ THỐNG
 -- ==========================================
-function Utils.AddArea(id, name, category)
-    category = category or "Khác"
-    table.insert(AreaData, {id = id, name = name, category = category})
+function Utils.AddArea(id, name)
+    table.insert(AreaData, {id = id, name = name})
     AreaMap[id] = name
     print("[Utils] ✅ Đã thêm khu vực: " .. name .. " (ID: " .. id .. ")")
 end
@@ -4787,7 +4775,8 @@ local SPECIAL_BOSS_MAPPING = {
     [10] = { "Stellar Sentinel" },
     [11] = { "Bull Lord" },
     [12] = { "Capshark", "Crabblaze" },
-    [13] = { "Venofrog" }
+    [13] = { "Venofrog" },
+    [14] = { "Plaguecannon" }
 }
 
 local WORLD_BOSS_MAPPING = {
