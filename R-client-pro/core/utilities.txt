@@ -246,7 +246,8 @@ local AreaMap = {
     [10] = "Mobius Circus",
     [11] = "Specter Shallows",
     [12] = "Nova Coast",
-    [13] = "Coilwork City"
+    [13] = "Splash Isle",
+    [14] = "Coilwork City"
 }
 
 -- ==========================================
