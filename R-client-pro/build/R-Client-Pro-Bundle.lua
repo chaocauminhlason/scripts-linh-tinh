@@ -4791,7 +4791,8 @@ local WORLD_BOSS_MAPPING = {
     [10] = { "Lampyr" },
     [11] = { "Scareaper" },
     [12] = { "Beatopus" },
-    [13] = { "Rainimp" }
+    [13] = { "Rainimp" },
+    [14] = { "Turretor"}
 }
 
 local SP_HUNT_TIMEOUT_SECS  = 180
