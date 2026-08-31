@@ -566,17 +566,18 @@ end
 -- ==========================================
 function Utils.SafeTeleport(targetCFrame, offsetY)
     offsetY = offsetY or 5
-    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if not hrp then return false end
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not (char and hrp) then return false end
     
     local targetPos = targetCFrame.Position + Vector3.new(0, offsetY, 0)
     
     -- Raycast kiểm tra mặt đất
-    local rayOrigin = targetPos + Vector3.new(0, 10, 0)
-    local rayDirection = Vector3.new(0, -20, 0)
+    local rayOrigin = targetPos + Vector3.new(0, 15, 0)
+    local rayDirection = Vector3.new(0, -30, 0)
     local raycastParams = RaycastParams.new()
-    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
-    raycastParams.FilterDescendantsInstances = {LocalPlayer.Character}
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+    raycastParams.FilterDescendantsInstances = {char}
     
     local rayResult = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
     
@@ -585,7 +586,11 @@ function Utils.SafeTeleport(targetCFrame, offsetY)
         targetPos = Vector3.new(targetPos.X, groundY + 3, targetPos.Z)
     end
     
-    hrp.CFrame = CFrame.new(targetPos)
+    if typeof(char.PivotTo) == "function" then
+        char:PivotTo(CFrame.new(targetPos))
+    else
+        hrp.CFrame = CFrame.new(targetPos)
+    end
     return true
 end
 
@@ -815,9 +820,29 @@ end
 
 -- 3. Gửi lệnh tấn công quái
 function Utils.AttackMonster(monsterId)
-    local remote = GetDataPullFunc()
-    if remote then
-        pcall(function() remote:InvokeServer("MonsterAttackChannel", monsterId) end)
+    if not monsterId then return end
+    local mId = tonumber(monsterId) or monsterId
+    
+    -- Ưu tiên 1: Gọi qua MonsterSystem trên Client để kích hoạt Pet AI mượt mà
+    local success = false
+    pcall(function()
+        local rs = game:GetService("ReplicatedStorage")
+        local ms = rs:FindFirstChild("CommonLogic") and rs.CommonLogic:FindFirstChild("Monster") and rs.CommonLogic.Monster:FindFirstChild("MonsterSystem")
+        if ms then
+            local monsterSys = require(ms)
+            if monsterSys and type(monsterSys.ClientAttackMonster) == "function" then
+                monsterSys.ClientAttackMonster(mId)
+                success = true
+            end
+        end
+    end)
+    
+    -- Ưu tiên 2 (Fallback): Gửi Remote trực tiếp
+    if not success then
+        local remote = GetDataPullFunc()
+        if remote then
+            pcall(function() remote:InvokeServer("MonsterAttackChannel", mId) end)
+        end
     end
 end
 
@@ -4805,7 +4830,7 @@ local WB_WAVE_TIMER_FILE    = "RClient_BossGlobalTimer.json"
 local WB_WAVE_DURATION_SECS = 300
 local WB_SCAN_TIMEOUT_TICKS = 15
 local WB_WAVE_COOLDOWN_SECS = 60
-local WB_ATTACK_INTERVAL    = 1
+local WB_ATTACK_INTERVAL    = 0.5
 local SHARED_TELEPORT_WAIT  = 3
 
 return function(Window, Utils)
@@ -4896,17 +4921,34 @@ return function(Window, Utils)
         end)
     end
 
-    local function LookupMonsterNameFromConfig(uid)
-        EnsureMonsterTableLoaded()
-        if not (internalMonsterTable and type(internalMonsterTable) == "table") then return nil end
-        local rawData = internalMonsterTable[uid]
-        if type(rawData) ~= "table" then return nil end
-        local tmplId = rawData.TmplId or rawData.tmplId or rawData.cfgId
+    local function LookupMonsterNameFromConfig(uid, monsterObj)
+        -- Ưu tiên 1: Lấy TmplId trực tiếp từ Attributes của monsterObj
+        local tmplId = monsterObj and (monsterObj:GetAttribute("TmplId") or monsterObj:GetAttribute("tmplId") or monsterObj:GetAttribute("cfgId"))
+        
+        -- Ưu tiên 2: Tìm counterpart trong workspace.Monsters nếu monsterObj là Model thuộc ClientMonsters
+        if not tmplId and monsterObj then
+            local counterpart = workspace:FindFirstChild("Monsters") and workspace.Monsters:FindFirstChild(monsterObj.Name)
+            if counterpart then
+                tmplId = counterpart:GetAttribute("TmplId") or counterpart:GetAttribute("tmplId")
+            end
+        end
+
+        -- Ưu tiên 3: Tìm trong internalMonsterTable từ MgrMonsterClient
+        if not tmplId and uid then
+            EnsureMonsterTableLoaded()
+            if internalMonsterTable and type(internalMonsterTable) == "table" then
+                local rawData = internalMonsterTable[uid] or internalMonsterTable[tostring(uid)]
+                if type(rawData) == "table" then
+                    tmplId = rawData.TmplId or rawData.tmplId or rawData.cfgId
+                end
+            end
+        end
+
         if not tmplId then return nil end
 
         local ok, result = pcall(function()
-            local pathTool = getrenv()._G.PathTool
-            if not (pathTool.CfgMonster and pathTool.CfgMonster.Tmpls) then return nil end
+            local pathTool = getrenv and getrenv()._G and getrenv()._G.PathTool
+            if not (pathTool and pathTool.CfgMonster and pathTool.CfgMonster.Tmpls) then return nil end
             local cfg = pathTool.CfgMonster.Tmpls[tostring(tmplId)] or pathTool.CfgMonster.Tmpls[tonumber(tmplId)]
             return cfg and (cfg.Name or cfg.name or cfg.Title)
         end)
@@ -4916,12 +4958,12 @@ return function(Window, Utils)
     local function GetMonsterDisplayName(monsterObj)
         if not monsterObj then return "Unknown" end
         local uidStr = string.match(monsterObj.Name, "Monster_(%d+)")
-        if not uidStr then return monsterObj.Name end
-        local uid = tonumber(uidStr)
-        if monsterNameCache[uid] then return monsterNameCache[uid] end
-        local resolved = LookupMonsterNameFromConfig(uid)
+        local uid = uidStr and tonumber(uidStr) or nil
+        if uid and monsterNameCache[uid] then return monsterNameCache[uid] end
+        
+        local resolved = LookupMonsterNameFromConfig(uid, monsterObj)
         if resolved then
-            monsterNameCache[uid] = resolved
+            if uid then monsterNameCache[uid] = resolved end
             return resolved
         end
         return monsterObj.Name
@@ -4937,9 +4979,10 @@ return function(Window, Utils)
     end
 
     local function SharedTeleportToBoss(hrp, bossPosition)
+        if not (hrp and bossPosition) then return end
         Utils.ToggleMount(true)
-        task.wait(0.5)
-        hrp.CFrame = CFrame.new(bossPosition + Vector3.new(0, 8, 0))
+        task.wait(0.3)
+        Utils.SafeTeleport(CFrame.new(bossPosition), 3)
     end
 
     local function SaveWbWaveEndTime()
@@ -5073,6 +5116,7 @@ return function(Window, Utils)
 
     local function ScanBossesList(targetMapping)
         local targets = {}
+        local seenIds = {}
         local folders = {"Monsters", "ClientMonsters"}
         for _, fName in ipairs(folders) do
             local folder = workspace:FindFirstChild(fName)
@@ -5085,11 +5129,15 @@ return function(Window, Utils)
                         for _, kw in ipairs(targetMapping) do
                             if string.find(lowerName, string.lower(kw), 1, true) then
                                 local uidStr = string.match(obj.Name, "Monster_(%d+)")
-                                table.insert(targets, {
-                                    Id = uidStr and tonumber(uidStr) or obj.Name,
-                                    Name = displayName,
-                                    Position = root.Position,
-                                })
+                                local bossId = uidStr and tonumber(uidStr) or obj.Name
+                                if not seenIds[bossId] then
+                                    seenIds[bossId] = true
+                                    table.insert(targets, {
+                                        Id = bossId,
+                                        Name = displayName,
+                                        Position = root.Position,
+                                    })
+                                end
                                 break
                             end
                         end
@@ -5211,10 +5259,8 @@ return function(Window, Utils)
             end
 
             local targets = ScanBossesList({string.lower(spHuntState.targetBoss)})
-            local ok, remote = pcall(function() return game.ReplicatedStorage:FindFirstChild("CommonLibrary").Tool.RemoteManager.Funcs:FindFirstChild("DataPullFunc") end)
-            remote = ok and remote or nil
 
-            if #targets > 0 and remote then
+            if #targets > 0 then
                 local boss = targets[1]
                 if not spHuntState.engaged then
                     print("🎯 [SPECIAL] Thấy Boss '" .. boss.Name .. "'! Vào việc...")
@@ -5225,11 +5271,11 @@ return function(Window, Utils)
                 local hrp = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
                 if hrp and boss.Position and (hrp.Position - boss.Position).Magnitude > MAX_ATTACK_DISTANCE then
                     SharedTeleportToBoss(hrp, boss.Position)
-                    task.wait(0.5)
+                    task.wait(0.3)
                 end
 
                 task.wait(SP_ATTACK_WAIT)
-                pcall(function() remote:InvokeServer("MonsterAttackChannel", boss.Id) end)
+                Utils.AttackMonster(boss.Id)
                 Utils.SmartDismount()
 
                 spHuntState.timeoutAt = os.time() + SP_ATTACK_EXTEND_SECS
@@ -5313,15 +5359,16 @@ return function(Window, Utils)
                         continue
                     end
                     SharedTeleportToBoss(hrp, boss.Position)
-                    task.wait(0.5)
+                    task.wait(0.3)
                 end
 
                 if spHuntState.isActive then
                     wbStatusLabel:Set(Utils.t("wb_yield_sp"))
                     continue
                 end
-                task.wait(0.8)
+                
                 Utils.AttackMonster(boss.Id)
+                Utils.SmartDismount()
                 task.wait(WB_ATTACK_INTERVAL)
                 wbHuntState.scanAttempts = 0
             else

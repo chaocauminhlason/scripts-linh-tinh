@@ -443,17 +443,18 @@ end
 -- ==========================================
 function Utils.SafeTeleport(targetCFrame, offsetY)
     offsetY = offsetY or 5
-    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if not hrp then return false end
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not (char and hrp) then return false end
     
     local targetPos = targetCFrame.Position + Vector3.new(0, offsetY, 0)
     
     -- Raycast kiểm tra mặt đất
-    local rayOrigin = targetPos + Vector3.new(0, 10, 0)
-    local rayDirection = Vector3.new(0, -20, 0)
+    local rayOrigin = targetPos + Vector3.new(0, 15, 0)
+    local rayDirection = Vector3.new(0, -30, 0)
     local raycastParams = RaycastParams.new()
-    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
-    raycastParams.FilterDescendantsInstances = {LocalPlayer.Character}
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+    raycastParams.FilterDescendantsInstances = {char}
     
     local rayResult = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
     
@@ -462,7 +463,11 @@ function Utils.SafeTeleport(targetCFrame, offsetY)
         targetPos = Vector3.new(targetPos.X, groundY + 3, targetPos.Z)
     end
     
-    hrp.CFrame = CFrame.new(targetPos)
+    if typeof(char.PivotTo) == "function" then
+        char:PivotTo(CFrame.new(targetPos))
+    else
+        hrp.CFrame = CFrame.new(targetPos)
+    end
     return true
 end
 
@@ -692,9 +697,29 @@ end
 
 -- 3. Gửi lệnh tấn công quái
 function Utils.AttackMonster(monsterId)
-    local remote = GetDataPullFunc()
-    if remote then
-        pcall(function() remote:InvokeServer("MonsterAttackChannel", monsterId) end)
+    if not monsterId then return end
+    local mId = tonumber(monsterId) or monsterId
+    
+    -- Ưu tiên 1: Gọi qua MonsterSystem trên Client để kích hoạt Pet AI mượt mà
+    local success = false
+    pcall(function()
+        local rs = game:GetService("ReplicatedStorage")
+        local ms = rs:FindFirstChild("CommonLogic") and rs.CommonLogic:FindFirstChild("Monster") and rs.CommonLogic.Monster:FindFirstChild("MonsterSystem")
+        if ms then
+            local monsterSys = require(ms)
+            if monsterSys and type(monsterSys.ClientAttackMonster) == "function" then
+                monsterSys.ClientAttackMonster(mId)
+                success = true
+            end
+        end
+    end)
+    
+    -- Ưu tiên 2 (Fallback): Gửi Remote trực tiếp
+    if not success then
+        local remote = GetDataPullFunc()
+        if remote then
+            pcall(function() remote:InvokeServer("MonsterAttackChannel", mId) end)
+        end
     end
 end
 
