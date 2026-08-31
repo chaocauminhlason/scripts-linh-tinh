@@ -843,9 +843,6 @@ function Utils.AttackMonster(monsterId)
         if remote then
             pcall(function() remote:InvokeServer("MonsterAttackChannel", mId) end)
         end
-    end
-end
-
 -- 4. Gửi lệnh ném bóng bắt quái
 function Utils.CatchMonster(monsterId)
     local remote = GetDataPullFunc()
@@ -881,34 +878,52 @@ function Utils.ResolveMonsterName(monsterObj)
         return monsterNameCache[uidNum]
     end
     
-    -- Cách 1: Giải mã qua CfgMonster từ game env
-    if uidNum then
-        local env = getrenv and getrenv()._G and getrenv()._G.PathTool
-        if env and env.MgrMonsterClient and env.CfgMonster then
-            local success, info = pcall(function() return env.MgrMonsterClient:GetMonsterInfo(uidNum) end)
-            if success and info then
-                local tmplId = info.tmplId or info.TmplId or info.id
-                local cfgData = env.CfgMonster.Tmpls[tostring(tmplId)] or env.CfgMonster.Tmpls[tonumber(tmplId)]
-                if cfgData then
-                    local name = cfgData.Name or cfgData.name or cfgData.Title
-                    if name then 
-                        monsterNameCache[uidNum] = name
-                        return name 
-                    end
+    local env = getrenv and getrenv()._G and getrenv()._G.PathTool
+    
+    -- Ưu tiên 1: Tra TmplId từ attributes của monsterObj hoặc counterpart trong workspace.Monsters
+    local tmplId = monsterObj:GetAttribute("TmplId") or monsterObj:GetAttribute("tmplId")
+    if not tmplId then
+        local counterpart = workspace:FindFirstChild("Monsters") and workspace.Monsters:FindFirstChild(originalName)
+        if counterpart then
+            tmplId = counterpart:GetAttribute("TmplId") or counterpart:GetAttribute("tmplId")
+        end
+    end
+    
+    if tmplId and env and env.CfgMonster and env.CfgMonster.Tmpls then
+        local cfgData = env.CfgMonster.Tmpls[tostring(tmplId)] or env.CfgMonster.Tmpls[tonumber(tmplId)]
+        if cfgData then
+            local name = cfgData.Name or cfgData.name or cfgData.Title
+            if name then
+                if uidNum then monsterNameCache[uidNum] = name end
+                return name
+            end
+        end
+    end
+    
+    -- Ưu tiên 2: Giải mã qua MgrMonsterClient từ game env
+    if uidNum and env and env.MgrMonsterClient and env.CfgMonster then
+        local success, info = pcall(function() return env.MgrMonsterClient:GetMonsterInfo(uidNum) end)
+        if success and info then
+            local tId = info.tmplId or info.TmplId or info.id
+            local cfgData = env.CfgMonster.Tmpls[tostring(tId)] or env.CfgMonster.Tmpls[tonumber(tId)]
+            if cfgData then
+                local name = cfgData.Name or cfgData.name or cfgData.Title
+                if name then 
+                    monsterNameCache[uidNum] = name
+                    return name 
                 end
             end
         end
     end
 
-    -- Cách 2: Tìm BillboardGui chứa tên hiển thị (UI Name) của quái
+    -- Ưu tiên 3: Tìm BillboardGui chứa tên hiển thị (UI Name) của quái
     for _, child in ipairs(monsterObj:GetDescendants()) do
         if child:IsA("TextLabel") and child.Visible then
             local text = child.Text
             if text and text ~= "" and not string.find(text, "/") and not string.find(text, "HP") then
-                -- Xóa phần lv hiển thị (ví dụ: "Walrusk Lv.100" -> "Walrusk")
                 local cleaned = string.gsub(text, "%s*Lv%.%s*%d+", "")
                 cleaned = string.gsub(cleaned, "%s*%[%s*Lv%.%s*%d+%s*%]", "")
-                cleaned = string.gsub(cleaned, "^%s*(.-)%s*$", "%1") -- Trim space
+                cleaned = string.gsub(cleaned, "^%s*(.-)%s*$", "%1")
                 if cleaned ~= "" and not tonumber(cleaned) then
                     if uidNum then monsterNameCache[uidNum] = cleaned end
                     return cleaned
@@ -917,7 +932,7 @@ function Utils.ResolveMonsterName(monsterObj)
         end
     end
 
-    -- Cách 3: Lấy Humanoid DisplayName
+    -- Ưu tiên 4: Lấy Humanoid DisplayName
     local hum = monsterObj:FindFirstChildOfClass("Humanoid")
     if hum and hum.DisplayName and hum.DisplayName ~= "" then
         local cleaned = string.gsub(hum.DisplayName, "%s*Lv%.%s*%d+", "")
@@ -929,7 +944,7 @@ function Utils.ResolveMonsterName(monsterObj)
         end
     end
 
-    -- Cách 4: Cắt bỏ tiền tố "Monster_" nếu có
+    -- Ưu tiên 5: Cắt bỏ tiền tố "Monster_" nếu có
     if uidStr then
         local cleanName = string.gsub(originalName, "Monster_%d+", "")
         if cleanName ~= "" then
@@ -942,64 +957,6 @@ function Utils.ResolveMonsterName(monsterObj)
     return originalName
 end
 
--- 6. HỆ THỐNG RADAR: Quét, phân loại và tìm quái vật gần nhất
-function Utils.ScanMonsters(monstersFolder, hrp)
-    local hasAlive = false
-    local deadList = {}
-    local bestTarget = nil
-    local closestDist2D = math.huge
-
-    if monstersFolder then
-        for _, m in pairs(monstersFolder:GetChildren()) do
-            if m:IsA("Model") or m:IsA("BasePart") then
-                local hum = m:FindFirstChildOfClass("Humanoid")
-                if hum then
-                    if hum.Health <= 0 then
-                        table.insert(deadList, m)
-                    else
-                        hasAlive = true
-                        local pos = m:IsA("Model") and m.PrimaryPart and m.PrimaryPart.Position or m.Position
-                        local dist2D = math.sqrt((hrp.Position.X - pos.X)^2 + (hrp.Position.Z - pos.Z)^2)
-                        if dist2D < closestDist2D then 
-                            closestDist2D = dist2D
-                            bestTarget = m 
-                        end
-                    end
-                else
-                    hasAlive = true
-                    local pos = m:IsA("Model") and m.PrimaryPart and m.PrimaryPart.Position or m.Position
-                    local dist2D = math.sqrt((hrp.Position.X - pos.X)^2 + (hrp.Position.Z - pos.Z)^2)
-                    if dist2D < closestDist2D then 
-                        closestDist2D = dist2D
-                        bestTarget = m 
-                    end
-                end
-            end
-        end
-    end
-
-    return hasAlive, deadList, bestTarget, closestDist2D
-end
-
-    -- ==========================================
-    -- WRAPPER HỖ TRỢ TƯƠNG THÍCH NGƯỢC (SCANMONSTERS)
-    -- ==========================================
-    function Utils.ScanMonsters(keywords)
-        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if not hrp then return {} end
-        local rawTargets = Utils.SmartScanMonsters(hrp.Position, 999999, "Attack", keywords)
-        local targets = {}
-        for _, t in ipairs(rawTargets) do
-            table.insert(targets, {
-                Id = t.Id,
-                Name = Utils.ResolveMonsterName(t.Object),
-                Position = t.Position,
-                RootPart = t.RootPart
-            })
-        end
-        return targets
-    end
-
     -- ==========================================
     -- HÀM LÕI: QUÉT & LỌC QUÁI THÔNG MINH
     -- ==========================================
@@ -1007,7 +964,6 @@ end
         -- scanMode: "Attack" (Đánh quái) hoặc "Catch" (Bắt quái)
         local validMonsters = {}
         local playerId = LocalPlayer.UserId
-        local foldersToScan = {"ClientMonsters", "Monsters"}
         local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if not hrp then return validMonsters end
 
@@ -1025,17 +981,19 @@ end
             end
         end
 
+        local seenIds = {}
+        -- Ưu tiên quét ClientMonsters (Models đầy đủ cho Tele Farm), sau đó mới quét Monsters (Parts)
+        local foldersToScan = {"ClientMonsters", "Monsters"}
         for _, folderName in ipairs(foldersToScan) do
             local monstersFolder = Workspace:FindFirstChild(folderName)
             if monstersFolder then
                 for _, monster in pairs(monstersFolder:GetChildren()) do
                     if monster:IsA("Model") or monster:IsA("BasePart") then
+                        local idStr = monster.Name:match("Monster_(%d+)")
+                        local idNum = idStr and tonumber(idStr) or monster.Name
                         
-                        -- Bỏ qua các model rác hoặc quái đã chết bị xóa hết attribute (không có TmplId)
-                        if not monster:GetAttribute("TmplId") then continue end
-
-                        -- Lọc theo tên UI
-                        if finalFilter and not finalFilter(monster) then continue end
+                        -- Khử trùng lặp giữa ClientMonsters và Monsters
+                        if seenIds[idNum] then continue end
 
                         -- Tìm Root
                         local root = nil
@@ -1045,6 +1003,9 @@ end
                             root = monster
                         end
                         if not (root and root:IsA("BasePart")) then continue end
+
+                        -- Lọc theo tên UI
+                        if finalFilter and not finalFilter(monster) then continue end
 
                         local isValid = false
 
@@ -1066,7 +1027,7 @@ end
                         if isValid then
                             local distFromCenter = (root.Position - centerPos).Magnitude
                             if distFromCenter <= maxRadius then
-                                local idStr = monster.Name:match("Monster_(%d+)")
+                                seenIds[idNum] = true
                                 table.insert(validMonsters, {
                                     Object = monster,
                                     Id = idStr and tonumber(idStr) or nil,
@@ -1087,12 +1048,7 @@ end
 -- HÀM KIỂM TRA MÁU QUÁI (HỖ TRỢ BIGNUM & THẬP PHÂN)
 -- ==========================================
 function Utils.IsMonsterAlive(monsterObj)
-    if not monsterObj then return false end
-    
-    -- Nếu quái đã bị dọn dẹp các attribute (ví dụ mất TmplId) thì coi như đã chết
-    if not monsterObj:GetAttribute("TmplId") then
-        return false
-    end
+    if not monsterObj or not monsterObj.Parent then return false end
     
     -- Nếu quái đang trong trạng thái chờ bắt (đã bị hạ gục), coi như đã chết đối với Attack
     local root = monsterObj:FindFirstChild("HumanoidRootPart") or monsterObj:FindFirstChild("Root") or monsterObj
@@ -1100,17 +1056,27 @@ function Utils.IsMonsterAlive(monsterObj)
         return false
     end
     
-    -- 1. Ưu tiên kiểm tra Humanoid (Quái thường)
+    -- 1. Ưu tiên kiểm tra Humanoid (Quái thường trên Model)
     local hum = monsterObj:FindFirstChildOfClass("Humanoid")
     if hum then
         return hum.Health >= 1
     end
     
-    -- 2. Kiểm tra qua StringValue (Quái máu to / Boss)
+    -- 2. Nếu monsterObj là BasePart (từ workspace.Monsters), kiểm tra counterpart trong ClientMonsters
+    if monsterObj:IsA("BasePart") then
+        local cm = workspace:FindFirstChild("ClientMonsters") and workspace.ClientMonsters:FindFirstChild(monsterObj.Name)
+        if cm then
+            local cmHum = cm:FindFirstChildOfClass("Humanoid")
+            if cmHum then
+                return cmHum.Health >= 1
+            end
+        end
+    end
+    
+    -- 3. Kiểm tra qua StringValue (Quái máu to / Boss)
     local hpVal = monsterObj:FindFirstChild("Health")
     if hpVal and hpVal:IsA("StringValue") then
         local rawStr = hpVal.Value
-        local hpNum = nil
 
         -- Định dạng BigNum tiêu chuẩn của game: "base,exp" (Ví dụ: "6693500,-2" hoặc "0,-1")
         local parts = string.split(rawStr, ",")
