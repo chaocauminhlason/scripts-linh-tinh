@@ -843,6 +843,9 @@ function Utils.AttackMonster(monsterId)
         if remote then
             pcall(function() remote:InvokeServer("MonsterAttackChannel", mId) end)
         end
+    end
+end
+
 -- 4. Gửi lệnh ném bóng bắt quái
 function Utils.CatchMonster(monsterId)
     local remote = GetDataPullFunc()
