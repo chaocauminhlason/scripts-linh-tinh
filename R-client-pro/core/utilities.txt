@@ -247,7 +247,8 @@ local AreaMap = {
     [11] = "Specter Shallows",
     [12] = "Nova Coast",
     [13] = "Splash Isle",
-    [14] = "Coilwork City"
+    [14] = "Coilwork City",
+    [15] = "Shroomvale"
 }
 
 -- ==========================================
@@ -374,6 +375,8 @@ function Utils.GetCurrentAreaId()
                                 :gsub(" shallows", "")
                                 :gsub(" coast", "")
                                 :gsub(" haven", "")
+                                :gsub(" city", "")
+                                :gsub(" vale", "")
                             if string.find(folderNameLower, cleanName) or string.find(cleanName, folderNameLower) then
                                 matchedId = id
                                 break
@@ -1027,7 +1030,8 @@ local AreaData = {
     {id = 11, name = "Specter Shallows"},
     {id = 12, name = "Nova Coast"},
     {id = 13, name = "Splash Isle"},
-    {id = 14, name = "Coilwork City"}
+    {id = 14, name = "Coilwork City"},
+    {id = 15, name = "Shroomvale"}
 }
 -- ==========================================
 -- ==========================================
